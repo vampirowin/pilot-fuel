@@ -62,7 +62,7 @@
                 <td>{{ v.owner or '—' }}</td>
                 <td>{{ v.location or '—' }}</td>
                 {% if is_admin %}
-                <td><button class="btn btn-sm btn-danger" hx-post="/api/vehicles/{{ v.id }}/toggle-sensor" hx-target="#v-{{ v.id }}" hx-swap="outerHTML">Нет датчика</button></td>
+                <td><button class="btn btn-sm btn-danger" hx-post="/api/vehicles/{{ v.id }}/toggle-sensor" hx-target="#v-{{ v.id }}" hx-swap="outerHTML" hx-confirm="Пометить «{{ v.plate_number or v.id }}» как ТС без датчика топлива?">Нет датчика</button></td>
                 {% endif %}
               </tr>
               {% endfor %}

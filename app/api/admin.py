@@ -50,7 +50,7 @@ def render_no_sensor_partial(vehicles: list) -> str:
               <td style="color: var(--text-dim);">{idx}</td>
               <td><strong>{v.get("plate_number") or "—"}</strong></td>
               <td style="font-family:monospace;font-size:12px">{v.get("imei") or "—"}</td>
-              <td><button class="btn btn-sm btn-primary" hx-post="/api/vehicles/{v["id"]}/toggle-sensor" hx-target="#v-{v["id"]}" hx-swap="outerHTML">Вернуть</button></td>
+              <td><button class="btn btn-sm btn-primary" hx-post="/api/vehicles/{v['id']}/toggle-sensor" hx-target="#v-{v['id']}" hx-swap="outerHTML" hx-confirm="Вернуть &laquo;{v.get('plate_number') or v['id']}&raquo; в список ТС с датчиками?">Вернуть</button></td>
             </tr>'''
         html += '</tbody></table></div></div></div>'
     return html

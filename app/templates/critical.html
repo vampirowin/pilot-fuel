@@ -5,6 +5,7 @@
   <h1>Критические события</h1>
   <div class="page-header-actions">
     <button class="btn btn-primary" hx-get="/api/refuels/add-form" hx-target="#modal-container" hx-swap="innerHTML">+ Добавить заправку</button>
+    <a href="/refuels" class="btn btn-secondary">Все заправки</a>
   </div>
 </div>
 
@@ -16,8 +17,10 @@
         <tr>
           <th>Дата</th>
           <th>ТС</th>
+          <th>Pilot (л)</th>
           <th>Чек (л)</th>
-          <th>Номер чека</th>
+          <th>Разница</th>
+          <th>Погрешность</th>
           <th>Статус</th>
           <th>Действия</th>
         </tr>
@@ -25,12 +28,16 @@
       <tbody>
         {% for e in entries %}
         {% set v = vehicles.get(e.vehicle_id) %}
+        {% set class_map = {'normal': 'status-normal', 'small_deviation': 'status-small-deviation', 'unacceptable': 'status-unacceptable', 'pilot_missing': 'status-pilot-missing', 'false_reading': 'status-false-reading'} %}
+        {% set label_map = {'normal': 'Норма', 'small_deviation': 'Расхождение', 'unacceptable': 'Недопустимо', 'pilot_missing': 'Нет в Pilot', 'false_reading': 'Ложная'} %}
         <tr>
           <td>{{ e.event_date.strftime('%d.%m.%Y %H:%M') }}</td>
           <td><strong>{{ v.plate_number if v else '—' }}</strong></td>
-          <td>{{ '%.1f'|format(e.actual_amount) if e.actual_amount else '—' }}</td>
-          <td>{{ e.receipt_number or '—' }}</td>
-          <td><span class="status-badge status-pilot-missing">Нет в Pilot 🚨</span></td>
+          <td>{{ '%.1f'|format(e.pilot_amount) if e.pilot_amount is not none else '—' }}</td>
+          <td>{{ '%.1f'|format(e.actual_amount) if e.actual_amount is not none else '—' }}</td>
+          <td>{{ '%.1f'|format(e.difference) if e.difference is not none else '—' }}</td>
+          <td>{{ '%.1f'|format(e.error_percent) + '%' if e.error_percent is not none else '—' }}</td>
+          <td><span class="status-badge {{ class_map.get(e.comparison_status, '') }}">{{ label_map.get(e.comparison_status, e.comparison_status or '—') }}</span></td>
           <td>
             <button class="btn btn-sm btn-secondary" hx-get="/api/refuels/{{ e.id }}/edit" hx-target="#modal-container" hx-swap="innerHTML">Правка</button>
           </td>
@@ -45,7 +52,7 @@
   <div class="empty-state">
     <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
     <h3>Критических событий нет</h3>
-    <p>Все заправки имеют данные из Pilot.</p>
+    <p>Все заправки имеют данные из Pilot или находятся в пределах нормы.</p>
   </div>
 </div>
 {% endif %}

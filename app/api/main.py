@@ -26,14 +26,7 @@ async def dashboard(
         select(func.count(RefuelEntry.id)).where(
             RefuelEntry.is_deleted == False,
             RefuelEntry.is_false == False,
-            RefuelEntry.comparison_status == "pilot_missing",
-        )
-    )).scalar() or 0
-    unacceptable_count = (await db.execute(
-        select(func.count(RefuelEntry.id)).where(
-            RefuelEntry.is_deleted == False,
-            RefuelEntry.is_false == False,
-            RefuelEntry.comparison_status == "unacceptable",
+            RefuelEntry.comparison_status.in_(["pilot_missing", "unacceptable"]),
         )
     )).scalar() or 0
 
@@ -41,9 +34,7 @@ async def dashboard(
         "total_vehicles": total_vehicles,
         "total_refuels": total_refuels,
         "critical_count": critical_count,
-        "unacceptable_count": unacceptable_count,
     })
-
 
 @router.get("/critical", response_class=HTMLResponse)
 async def critical_page(
@@ -53,7 +44,7 @@ async def critical_page(
 ):
     query = select(RefuelEntry).where(
         RefuelEntry.is_deleted == False,
-        RefuelEntry.comparison_status == "pilot_missing",
+        RefuelEntry.comparison_status.in_(["pilot_missing", "unacceptable"]),
     ).order_by(RefuelEntry.event_date.desc()).limit(100)
     entries = (await db.execute(query)).scalars().all()
 
@@ -76,7 +67,7 @@ async def critical_count(
         select(func.count(RefuelEntry.id)).where(
             RefuelEntry.is_deleted == False,
             RefuelEntry.is_false == False,
-            RefuelEntry.comparison_status == "pilot_missing",
+            RefuelEntry.comparison_status.in_(["pilot_missing", "unacceptable"]),
         )
     )).scalar() or 0
     return HTMLResponse(str(count))

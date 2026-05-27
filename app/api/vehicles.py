@@ -71,7 +71,7 @@ def render_table_partial(vehicles: list, is_admin: bool = False) -> str:
               <td>{v.get("owner") or "—"}</td>
               <td>{v.get("location") or "—"}</td>'''
             if is_admin:
-                html += f'''<td><button class="btn btn-sm btn-danger" hx-post="/api/vehicles/{v["id"]}/toggle-sensor" hx-target="#v-{v["id"]}" hx-swap="outerHTML">Нет датчика</button></td>'''
+                html += f'''<td><button class="btn btn-sm btn-danger" hx-post="/api/vehicles/{v["id"]}/toggle-sensor" hx-target="#v-{v["id"]}" hx-swap="outerHTML" hx-confirm="Пометить «{v.get("plate_number") or v["id"]}» как ТС без датчика топлива?">Нет датчика</button></td>'''
             html += '</tr>'
         html += '</tbody></table></div></div></div>'
     return html

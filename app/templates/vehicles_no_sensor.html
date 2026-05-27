@@ -49,7 +49,7 @@
                 <td style="color: var(--text-dim);">{{ loop.index }}</td>
                 <td><strong>{{ v.plate_number or '—' }}</strong></td>
                 <td style="font-family: monospace; font-size: 12px;">{{ v.imei or '—' }}</td>
-                <td><button class="btn btn-sm btn-primary" hx-post="/api/vehicles/{{ v.id }}/toggle-sensor" hx-target="#v-{{ v.id }}" hx-swap="outerHTML">Вернуть</button></td>
+                <td><button class="btn btn-sm btn-primary" hx-post="/api/vehicles/{{ v.id }}/toggle-sensor" hx-target="#v-{{ v.id }}" hx-swap="outerHTML" hx-confirm="Вернуть «{{ v.plate_number or v.id }}» в список ТС с датчиками?">Вернуть</button></td>
               </tr>
               {% endfor %}
             </tbody>
