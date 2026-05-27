@@ -767,6 +767,14 @@ tr:hover td {
   border-radius: 10px;
 }
 
+/* False reading row */
+tr.row-false {
+  opacity: 0.5;
+}
+tr.row-false td:first-child {
+  text-decoration: line-through;
+}
+
 /* Pagination */
 .pagination {
   display: flex;

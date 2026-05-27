@@ -1,4 +1,5 @@
 import asyncio
+import json
 import math
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Request, Depends, HTTPException, Query, Form, Path
@@ -20,19 +21,32 @@ templates = Jinja2Templates(directory="app/templates")
 PER_PAGE = 10
 
 
-def _render_vehicle_group(vehicle_id: int, entries: list, vmap: dict) -> str:
+def _render_vehicle_group(vehicle_id: int, entries: list, vmap: dict, page: int = 1, date_from: str = "", date_to: str = "", is_admin: bool = False) -> str:
     plate = vmap.get(vehicle_id, {}).get("plate_number", "—")
     add_btn = f'<button class="btn btn-sm btn-secondary" hx-get="/api/refuels/add-form?vehicle_id={vehicle_id}" hx-target="#modal-container" hx-swap="innerHTML">+ Добавить</button>'
     h = f'<div class="card vehicle-group"><h3 class="vehicle-group-title"><span>{plate} <span class="vehicle-group-count">{len(entries)}</span></span>{add_btn}</h3><div class="table-container"><table><thead><tr><th>Дата</th><th>Pilot (л)</th><th>Чек (л)</th><th>Разница</th><th>Погрешность</th><th>Статус</th><th>Действия</th></tr></thead><tbody>'
     for e in entries:
-        sc = STATUS_MAP.get(e.comparison_status, "")
-        sl = STATUS_LABELS.get(e.comparison_status, e.comparison_status or "—")
+        rc = ' class="row-false"' if e.is_false else ""
+        if e.is_false:
+            sc = "status-false-reading"
+            sl = "Ложная"
+        else:
+            sc = STATUS_MAP.get(e.comparison_status, "")
+            sl = STATUS_LABELS.get(e.comparison_status, e.comparison_status or "—")
         pa = f"{e.pilot_amount:.1f}" if e.pilot_amount is not None else "—"
         aa = f"{e.actual_amount:.1f}" if e.actual_amount is not None else "—"
         df = f"{e.difference:.1f}" if e.difference is not None else "—"
         er = f"{e.error_percent:.1f}%" if e.error_percent is not None else "—"
         ds = e.event_date.strftime("%d.%m.%Y %H:%M") if e.event_date else "—"
-        h += f"<tr><td>{ds}</td><td>{pa}</td><td>{aa}</td><td>{df}</td><td>{er}</td><td><span class=\"status-badge {sc}\">{sl}</span></td><td><button class=\"btn btn-sm btn-secondary\" hx-get=\"/api/refuels/{e.id}/edit\" hx-target=\"#modal-container\" hx-swap=\"innerHTML\">Правка</button></td></tr>"
+        actions = f'<button class="btn btn-sm btn-secondary" hx-get="/api/refuels/{e.id}/edit" hx-target="#modal-container" hx-swap="innerHTML">Правка</button>'
+        vals = json.dumps({"page": page, "date_from": date_from, "date_to": date_to})
+        if e.is_false:
+            actions += f'<button class="btn btn-sm btn-secondary" hx-vals=\'{vals}\' hx-post="/api/refuels/{e.id}/unmark-false" hx-target="#refuels-list" hx-swap="innerHTML" hx-confirm="Снять отметку «Ложная»?">✓ Ложная</button>'
+        else:
+            actions += f'<button class="btn btn-sm btn-secondary" hx-get="/api/refuels/{e.id}/mark-false-form?page={page}&date_from={date_from}&date_to={date_to}" hx-target="#modal-container" hx-swap="innerHTML">Ложная</button>'
+        if is_admin or e.source == "manual":
+            actions += f'<button class="btn btn-sm btn-danger" hx-vals=\'{vals}\' hx-post="/api/refuels/{e.id}/delete" hx-target="#refuels-list" hx-swap="innerHTML" hx-confirm="Удалить запись из БД?">Удалить</button>'
+        h += f"<tr{rc}><td>{ds}</td><td>{pa}</td><td>{aa}</td><td>{df}</td><td>{er}</td><td><span class=\"status-badge {sc}\">{sl}</span></td><td><div style=\"display:flex;gap:4px\">{actions}</div></td></tr>"
     h += "</tbody></table></div></div>"
     return h
 
@@ -48,13 +62,13 @@ def _pagination_html(page: int, total: int, qs: str) -> str:
     return f"""<div class="pagination"><button class="chip {prev_d}" hx-get="{prev_url}" hx-target="#refuels-list" hx-push-url="true" {prev_d}>← Назад</button><span>стр. {page} из {total}</span><button class="chip {next_d}" hx-get="{next_url}" hx-target="#refuels-list" hx-push-url="true" {next_d}>Вперед →</button></div>"""
 
 
-def _list_html(grouped: list, vmap: dict, page: int, total: int, qs: str) -> str:
+def _list_html(grouped: list, vmap: dict, page: int, total: int, qs: str, date_from: str = "", date_to: str = "", is_admin: bool = False) -> str:
     if not grouped:
         return '<div class="card"><div class="empty-state"><p>Нет заправок.</p></div></div>'
     start = (page - 1) * PER_PAGE
     h = ""
     for vid, entries in grouped[start:start + PER_PAGE]:
-        h += _render_vehicle_group(vid, entries, vmap)
+        h += _render_vehicle_group(vid, entries, vmap, page, date_from, date_to, is_admin)
     h += _pagination_html(page, total, qs)
     return h
 
@@ -114,7 +128,8 @@ async def refuels_page(
         qparts["status"] = status_filter
     qs = "&".join(f"{k}={v}" for k, v in qparts.items())
 
-    rendered = _list_html(grouped, vmap, page, total_pages, qs)
+    is_admin = request.session.get("is_admin", False)
+    rendered = _list_html(grouped, vmap, page, total_pages, qs, df_str, dt_str, is_admin)
 
     is_hx = request.headers.get("hx-request") == "true"
     if is_hx:
@@ -319,11 +334,14 @@ async def sync_refuels(
 
     grouped = _group_by_vehicle(entries)
     total_pages = max(1, math.ceil(len(grouped) / PER_PAGE))
-    qparts = {"date_from": date_from or df.strftime("%Y-%m-%d"), "date_to": date_to or dt.strftime("%Y-%m-%d")}
+    qf = date_from or df.strftime("%Y-%m-%d")
+    qt = date_to or dt.strftime("%Y-%m-%d")
+    qparts = {"date_from": qf, "date_to": qt}
     if vehicle_id:
         qparts["vehicle_id"] = vehicle_id
     qs = "&".join(f"{k}={v}" for k, v in qparts.items())
-    html = _list_html(grouped, vmap, 1, total_pages, qs)
+    is_admin = request.session.get("is_admin", False)
+    html = _list_html(grouped, vmap, 1, total_pages, qs, qf, qt, is_admin)
 
     if total_new:
         html += f'<div class="toast toast-success">Загружено {total_new} заправок</div>'
@@ -461,7 +479,8 @@ async def add_refuel(
     total_pages = max(1, math.ceil(len(grouped) / PER_PAGE))
     qparts = {"date_from": month_start, "date_to": today}
     qs = "&".join(f"{k}={v}" for k, v in qparts.items())
-    html = _list_html(grouped, vmap, 1, total_pages, qs)
+    is_admin = request.session.get("is_admin", False)
+    html = _list_html(grouped, vmap, 1, total_pages, qs, month_start, today, is_admin)
     html += '<div class="toast toast-success">Заправка добавлена</div>'
     return HTMLResponse(html)
 
@@ -547,8 +566,161 @@ async def edit_refuel(
     total_pages = max(1, math.ceil(len(grouped) / PER_PAGE))
     qparts = {"date_from": month_start, "date_to": today}
     qs = "&".join(f"{k}={v}" for k, v in qparts.items())
-    html = _list_html(grouped, vmap, 1, total_pages, qs)
+    is_admin = request.session.get("is_admin", False)
+    html = _list_html(grouped, vmap, 1, total_pages, qs, month_start, today, is_admin)
     html += '<div class="toast toast-success">Заправка обновлена</div>'
+    return HTMLResponse(html)
+
+
+@router.get("/api/refuels/{entry_id}/mark-false-form", response_class=HTMLResponse)
+async def mark_false_form(
+    request: Request,
+    _=Depends(get_current_username),
+    db: AsyncSession = Depends(get_db),
+    entry_id: int = Path(...),
+    page: int = Query(default=1),
+    date_from: str = Query(default=""),
+    date_to: str = Query(default=""),
+):
+    entry = await db.get(RefuelEntry, entry_id)
+    if not entry or entry.is_deleted:
+        raise HTTPException(404, "Запись не найдена")
+    return templates.TemplateResponse(request, "mark_false_modal.html", {
+        "entry_id": entry_id,
+        "page": page,
+        "date_from": date_from,
+        "date_to": date_to,
+    })
+
+
+@router.post("/api/refuels/{entry_id}/mark-false", response_class=HTMLResponse)
+async def mark_false(
+    request: Request,
+    _=Depends(get_current_username),
+    db: AsyncSession = Depends(get_db),
+    entry_id: int = Path(...),
+    reason: str = Form(...),
+    page: int = Form(default=1),
+    date_from: str = Form(default=""),
+    date_to: str = Form(default=""),
+):
+    entry = await db.get(RefuelEntry, entry_id)
+    if not entry or entry.is_deleted:
+        raise HTTPException(404, "Запись не найдена")
+    entry.is_false = True
+    entry.false_reason = reason
+    entry.false_marked_by = request.session.get("username")
+    entry.false_marked_at = datetime.now()
+    log = SyncLog(
+        sync_type="mark_false",
+        status="completed",
+        records_affected=1,
+        details=f"marked false: {reason[:200]}",
+        created_by=request.session.get("username"),
+    )
+    db.add(log)
+    await db.commit()
+
+    return await _refresh_list(request, db, page, date_from, date_to)
+
+
+@router.post("/api/refuels/{entry_id}/unmark-false", response_class=HTMLResponse)
+async def unmark_false(
+    request: Request,
+    _=Depends(get_current_username),
+    db: AsyncSession = Depends(get_db),
+    entry_id: int = Path(...),
+    page: int = Form(default=1),
+    date_from: str = Form(default=""),
+    date_to: str = Form(default=""),
+):
+    entry = await db.get(RefuelEntry, entry_id)
+    if not entry or entry.is_deleted:
+        raise HTTPException(404, "Запись не найдена")
+    entry.is_false = False
+    entry.false_reason = None
+    entry.false_marked_by = None
+    entry.false_marked_at = None
+    log = SyncLog(
+        sync_type="unmark_false",
+        status="completed",
+        records_affected=1,
+        details="unmarked false",
+        created_by=request.session.get("username"),
+    )
+    db.add(log)
+    await db.commit()
+
+    return await _refresh_list(request, db, page, date_from, date_to)
+
+
+@router.post("/api/refuels/{entry_id}/delete", response_class=HTMLResponse)
+async def delete_refuel(
+    request: Request,
+    _=Depends(get_current_username),
+    db: AsyncSession = Depends(get_db),
+    entry_id: int = Path(...),
+    page: int = Form(default=1),
+    date_from: str = Form(default=""),
+    date_to: str = Form(default=""),
+):
+    entry = await db.get(RefuelEntry, entry_id)
+    if not entry or entry.is_deleted:
+        raise HTTPException(404, "Запись не найдена")
+    username = request.session.get("username")
+    is_admin = request.session.get("is_admin", False)
+    if not is_admin and entry.source != "manual":
+        raise HTTPException(403, "Только админ может удалять синхронизированные записи")
+    await db.delete(entry)
+    log = SyncLog(
+        sync_type="delete",
+        status="completed",
+        records_affected=1,
+        details=f"deleted entry {entry_id} by {username}",
+        created_by=username,
+    )
+    db.add(log)
+    await db.commit()
+
+    return await _refresh_list(request, db, page, date_from, date_to)
+
+
+async def _refresh_list(request: Request, db: AsyncSession, page: int, date_from: str, date_to: str) -> HTMLResponse:
+    today = datetime.now().strftime("%Y-%m-%d")
+    month_start = datetime.now().replace(day=1).strftime("%Y-%m-%d")
+    df_str = date_from or month_start
+    dt_str = date_to or today
+
+    q = select(RefuelEntry).where(RefuelEntry.is_deleted == False)
+    try:
+        df = datetime.strptime(df_str, "%Y-%m-%d")
+        q = q.where(RefuelEntry.event_date >= df)
+    except ValueError:
+        pass
+    try:
+        dt = datetime.strptime(dt_str, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+        q = q.where(RefuelEntry.event_date <= dt)
+    except ValueError:
+        pass
+    q = q.order_by(desc(RefuelEntry.event_date))
+    entries = (await db.execute(q)).scalars().all()
+
+    all_v = (await db.execute(
+        select(Vehicle).where(Vehicle.is_active == True, Vehicle.has_fuel_sensor == True)
+    )).scalars().all()
+    vmap = {v.id: {"plate_number": v.plate_number, "name": v.name} for v in all_v}
+    grouped = _group_by_vehicle(entries)
+    total_pages = max(1, math.ceil(len(grouped) / PER_PAGE))
+    if page > total_pages:
+        page = total_pages
+
+    qparts = {}
+    if df_str != month_start or dt_str != today:
+        qparts["date_from"] = df_str
+        qparts["date_to"] = dt_str
+    qs = "&".join(f"{k}={v}" for k, v in qparts.items())
+    is_admin = request.session.get("is_admin", False)
+    html = _list_html(grouped, vmap, page, total_pages, qs, df_str, dt_str, is_admin)
     return HTMLResponse(html)
 
 

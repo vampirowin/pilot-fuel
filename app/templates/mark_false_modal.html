@@ -1,0 +1,24 @@
+<div class="modal-overlay" onclick="if(event.target===this)this.remove()">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Отметить как ложную</h2>
+      <button type="button" class="modal-close" onclick="this.closest('.modal-overlay').remove()">&times;</button>
+    </div>
+    <form hx-post="/api/refuels/{{ entry_id }}/mark-false" hx-target="#refuels-list" hx-swap="innerHTML"
+          hx-on::after-request="if(event.detail.successful) this.closest('.modal-overlay').remove()">
+      <input type="hidden" name="page" value="{{ page }}">
+      <input type="hidden" name="date_from" value="{{ date_from }}">
+      <input type="hidden" name="date_to" value="{{ date_to }}">
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Причина</label>
+          <textarea name="reason" class="form-input" rows="3" placeholder="Укажите причину..." required></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Отмена</button>
+        <button type="submit" class="btn btn-danger">Отметить как ложную</button>
+      </div>
+    </form>
+  </div>
+</div>
