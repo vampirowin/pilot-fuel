@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import httpx
 
 PILOT_AUTH_URL = "/api/v3/auth/token"
@@ -17,16 +19,19 @@ class PilotService:
         settings = get_settings()
         self.base_url = (base_url or settings.pilot_api_base_url).rstrip("/")
 
-    async def _request(self, method: str, path: str, token: str | None = None, node_id: int = 0, **kwargs) -> dict:
+    async def _request(self, method: str, path: str, token: str | None = None, node_id: int = 0, cookies: dict | None = None, **kwargs) -> dict:
         headers = kwargs.pop("headers", {})
         if token:
             headers["Authorization"] = f"Bearer {token}"
         if node_id:
             headers["X-Node-Id"] = str(node_id)
         headers.setdefault("Content-Type", "application/json")
+        headers.setdefault("X-Requested-With", "XMLHttpRequest")
 
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await client.request(method, f"{self.base_url}{path}", headers=headers, **kwargs)
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            resp = await client.request(method, f"{self.base_url}{path}", headers=headers, cookies=cookies, **kwargs)
+            with open("sync_debug.log", "a") as lf:
+                lf.write(f"[{datetime.now().strftime('%d.%m %H:%M:%S')}] [request] {method} {path} -> {resp.status_code} ({len(resp.content)} bytes)\n")
             data = resp.json()
 
         if data.get("code") != 0 and not data.get("success"):
@@ -79,9 +84,10 @@ class PilotService:
         pre_start = start.strftime("%d.%m.%Y")
         pre_stop = stop.strftime("%d.%m.%Y")
 
+        cookies = {"PILOTID": token, "node": str(node_id)}
         data = await self._request(
             "POST", PILOT_REPORTS_URL,
-            token=token, node_id=node_id,
+            token=None, node_id=0, cookies=cookies,
             headers={"Content-Type": "application/x-www-form-urlencoded"},
             data={
                 "download": "0",
@@ -144,8 +150,14 @@ class PilotService:
         events = []
         raw_data = raw.get("data", {})
         if not isinstance(raw_data, dict):
+            with open("sync_debug.log", "a") as lf:
+                lf.write(f"[{datetime.now().strftime('%d.%m %H:%M:%S')}] [parse] data не словарь, а {type(raw_data).__name__}\n")
             return events
+        with open("sync_debug.log", "a") as lf:
+            lf.write(f"[{datetime.now().strftime('%d.%m %H:%M:%S')}] [parse] date_groups={len(raw_data)}\n")
         for date_group, entries in raw_data.items():
+            with open("sync_debug.log", "a") as lf:
+                lf.write(f"[{datetime.now().strftime('%d.%m %H:%M:%S')}] [parse] группа '{date_group[:50]}...': {'словарь' if isinstance(entries, dict) else 'не словарь'}, ключей={len(entries) if isinstance(entries, dict) else 'N/A'}\n")
             for ts_key, entry in entries.items():
                 if not isinstance(entry, list) or len(entry) < 6:
                     continue

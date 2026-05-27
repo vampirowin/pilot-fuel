@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     pilot_api_base_url: str = "https://blade.pilot-gps.com"
     secret_key: str = "change-me"
     session_lifetime_hours: int = 48
-    app_port: int = 9000
+    app_port: int = 9001
     app_host: str = "0.0.0.0"
 
     # Default fuel sensor semantic IDs (Pilot system)

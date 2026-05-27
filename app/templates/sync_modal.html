@@ -1,0 +1,51 @@
+<div class="modal-overlay" onclick="if(event.target===this)this.remove()">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Синхронизация из Pilot</h2>
+      <button type="button" class="modal-close" onclick="this.closest('.modal-overlay').remove()">&times;</button>
+    </div>
+    <form hx-post="/api/refuels/sync" hx-target="#refuels-list" hx-swap="innerHTML"
+          hx-on::after-request="if(event.detail.successful) this.closest('.modal-overlay').remove()">
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Транспорт</label>
+          <input type="text" class="form-input" placeholder="Поиск..." oninput="filterSyncVehicles(this.value)" style="margin-bottom:6px">
+          <select name="vehicle_id" id="sync-vehicle-select" size="6" style="height:auto">
+            <option value="">Все ТС</option>
+            {% for v in all_vehicles %}
+            <option value="{{ v.id }}">{{ v.plate_number or v.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+<script>
+function filterSyncVehicles(q){
+  var sel = document.getElementById('sync-vehicle-select');
+  q = q.toLowerCase();
+  for(var i=0;i<sel.options.length;i++){
+    sel.options[i].style.display = sel.options[i].text.toLowerCase().includes(q) ? '' : 'none';
+  }
+}
+</script>
+        <div class="form-group">
+          <label>Период</label>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+            <button type="button" class="chip" onclick="setSyncRange(0,0)">Сегодня</button>
+            <button type="button" class="chip" onclick="setSyncRange(1,0)">Вчера</button>
+            <button type="button" class="chip" onclick="setSyncRange(6,0)">7 дней</button>
+            <button type="button" class="chip" onclick="setSyncRange(13,0)">14 дней</button>
+            <button type="button" class="chip" onclick="setSyncRange(29,0)">30 дней</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <input type="date" name="date_from" id="sync-date-from" value="{{ default_from }}" style="flex:1">
+            <span style="color:var(--text-dim)">—</span>
+            <input type="date" name="date_to" id="sync-date-to" value="{{ default_to }}" style="flex:1">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Отмена</button>
+        <button type="submit" class="btn btn-primary">Синхронизировать</button>
+      </div>
+    </form>
+  </div>
+</div>

@@ -1,5 +1,6 @@
+import asyncio
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Request, Depends, HTTPException, Query
+from fastapi import APIRouter, Request, Depends, HTTPException, Query, Form
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select, desc
@@ -57,6 +58,7 @@ async def refuels_page(
     )).scalars().all()
 
     vehicles_map = {v.id: {"plate_number": v.plate_number, "name": v.name} for v in all_vehicles}
+    grouped_entries = _group_by_vehicle(entries)
 
     today_str = today
     days7_str = seven_ago
@@ -65,7 +67,7 @@ async def refuels_page(
     days1_str = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
 
     return templates.TemplateResponse(request, "refuels.html", {
-        "entries": entries,
+        "grouped_entries": grouped_entries,
         "all_vehicles": all_vehicles,
         "vehicles_map": vehicles_map,
         "selected_vehicle_id": int(vehicle_id) if vehicle_id else None,
@@ -80,15 +82,33 @@ async def refuels_page(
     })
 
 
+@router.get("/api/refuels/sync-modal", response_class=HTMLResponse)
+async def sync_modal(
+    request: Request,
+    _=Depends(get_current_username),
+    db: AsyncSession = Depends(get_db),
+):
+    all_vehicles = (await db.execute(
+        select(Vehicle).where(Vehicle.is_active == True, Vehicle.has_fuel_sensor == True).order_by(Vehicle.plate_number)
+    )).scalars().all()
+    today = datetime.now().strftime("%Y-%m-%d")
+    seven_ago = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+    return templates.TemplateResponse(request, "sync_modal.html", {
+        "all_vehicles": all_vehicles,
+        "default_from": seven_ago,
+        "default_to": today,
+    })
+
+
 @router.post("/api/refuels/sync", response_class=HTMLResponse)
 async def sync_refuels(
     request: Request,
     _=Depends(get_current_username),
     db: AsyncSession = Depends(get_db),
     days: int = Query(default=7),
-    date_from: str = Query(default=None),
-    date_to: str = Query(default=None),
-    vehicle_id: int = Query(default=None),
+    date_from: str = Form(default=None),
+    date_to: str = Form(default=None),
+    vehicle_id: str | None = Form(default=None),
 ):
     token = request.session.get("token")
     node_id = request.session.get("node_id", 0)
@@ -113,7 +133,7 @@ async def sync_refuels(
 
     q = select(Vehicle).where(Vehicle.is_active == True, Vehicle.has_fuel_sensor == True)
     if vehicle_id:
-        q = q.where(Vehicle.id == vehicle_id)
+        q = q.where(Vehicle.id == int(vehicle_id))
     vehicles = (await db.execute(q)).scalars().all()
     if not vehicles:
         return HTMLResponse('<div class="card"><div class="empty-state"><p>Нет ТС для синхронизации.</p></div></div>')
@@ -122,10 +142,34 @@ async def sync_refuels(
     if not veh_ids:
         return HTMLResponse('<div class="card"><div class="empty-state"><p>Нет ТС с agent_id.</p></div></div>')
 
+    ts = datetime.now().strftime('%d.%m %H:%M:%S')
+    with open("sync_debug.log", "a") as lf:
+        lf.write(f"[{ts}] veh_ids={veh_ids}, start={start_str}, stop={stop_str}\n")
+        lf.write(f"[{ts}] vehicle_id param received: '{vehicle_id}' (type={type(vehicle_id).__name__})\n")
+    BATCH_SIZE = 20
+    all_events = []
     try:
-        raw_events = await pilot.get_refuel_report(token, node_id, veh_ids, start_str, stop_str)
+        for i in range(0, len(veh_ids), BATCH_SIZE):
+            batch = veh_ids[i:i + BATCH_SIZE]
+            for attempt in range(3):
+                try:
+                    batch_events = await pilot.get_refuel_report(token, node_id, batch, start_str, stop_str)
+                    break
+                except Exception:
+                    if attempt == 2:
+                        raise
+                    await asyncio.sleep(1)
+            all_events.extend(batch_events)
+            await asyncio.sleep(0.5)
     except Exception as e:
+        with open("sync_debug.log", "a") as lf:
+            lf.write(f"[{datetime.now().strftime('%d.%m %H:%M:%S')}] Pilot API error: {e}\n")
         return HTMLResponse(f'<div class="card"><div class="empty-state"><p>Ошибка Pilot API: {str(e)[:200]}</p></div></div>')
+    raw_events = all_events
+    with open("sync_debug.log", "a") as lf:
+        lf.write(f"[{datetime.now().strftime('%d.%m %H:%M:%S')}] raw_events count={len(raw_events)}\n")
+        if raw_events:
+            lf.write(f"[{datetime.now().strftime('%d.%m %H:%M:%S')}] first event: {raw_events[0]}\n")
 
     total_new = 0
     errors = []
@@ -144,6 +188,8 @@ async def sync_refuels(
         ev_ts = _parse_timestamp(ev.get("ts"))
         if not ev_ts:
             continue
+        if ev_ts.tzinfo is not None:
+            ev_ts = ev_ts.replace(tzinfo=None)
 
         amount = ev.get("refuel_amount")
         if not amount or amount <= 0:
@@ -210,27 +256,28 @@ async def sync_refuels(
     if not entries:
         html = '<div class="card"><div class="empty-state"><p>Нет заправок.</p></div></div>'
     else:
-        html = '<div class="card"><div class="table-container"><table><thead><tr><th>Дата</th><th>ТС</th><th>Pilot (л)</th><th>Чек (л)</th><th>Разница</th><th>Погрешность</th><th>Статус</th><th>Действия</th></tr></thead><tbody>'
-        for e in entries:
-            plate = vehicles_map.get(e.vehicle_id, {}).get("plate_number", "—")
-            status_class = STATUS_MAP.get(e.comparison_status, "")
-            status_label = STATUS_LABELS.get(e.comparison_status, e.comparison_status or "—")
-            pilot_amt = f"{e.pilot_amount:.1f}" if e.pilot_amount is not None else "—"
-            actual_amt = f"{e.actual_amount:.1f}" if e.actual_amount is not None else "—"
-            diff = f"{e.difference:.1f}" if e.difference is not None else "—"
-            err = f"{e.error_percent:.1f}%" if e.error_percent is not None else "—"
-            date_str = e.event_date.strftime("%d.%m.%Y %H:%M") if e.event_date else "—"
-            html += f"""<tr>
-                <td>{date_str}</td>
-                <td><strong>{plate}</strong></td>
-                <td>{pilot_amt}</td>
-                <td>{actual_amt}</td>
-                <td>{diff}</td>
-                <td>{err}</td>
-                <td><span class="status-badge {status_class}">{status_label}</span></td>
-                <td><button class="btn btn-sm btn-secondary" hx-get="/api/refuels/{e.id}/edit" hx-target="#modal-container" hx-swap="innerHTML">Правка</button></td>
-            </tr>"""
-        html += "</tbody></table></div></div>"
+        grouped = _group_by_vehicle(entries)
+        for vehicle_id, vehicle_entries in grouped:
+            plate = vehicles_map.get(vehicle_id, {}).get("plate_number", "—")
+            html += f'<div class="card vehicle-group"><h3 class="vehicle-group-title">{plate} <span class="vehicle-group-count">{len(vehicle_entries)}</span></h3><div class="table-container"><table><thead><tr><th>Дата</th><th>Pilot (л)</th><th>Чек (л)</th><th>Разница</th><th>Погрешность</th><th>Статус</th><th>Действия</th></tr></thead><tbody>'
+            for e in vehicle_entries:
+                status_class = STATUS_MAP.get(e.comparison_status, "")
+                status_label = STATUS_LABELS.get(e.comparison_status, e.comparison_status or "—")
+                pilot_amt = f"{e.pilot_amount:.1f}" if e.pilot_amount is not None else "—"
+                actual_amt = f"{e.actual_amount:.1f}" if e.actual_amount is not None else "—"
+                diff = f"{e.difference:.1f}" if e.difference is not None else "—"
+                err = f"{e.error_percent:.1f}%" if e.error_percent is not None else "—"
+                date_str = e.event_date.strftime("%d.%m.%Y %H:%M") if e.event_date else "—"
+                html += f"""<tr>
+                    <td>{date_str}</td>
+                    <td>{pilot_amt}</td>
+                    <td>{actual_amt}</td>
+                    <td>{diff}</td>
+                    <td>{err}</td>
+                    <td><span class="status-badge {status_class}">{status_label}</span></td>
+                    <td><button class="btn btn-sm btn-secondary" hx-get="/api/refuels/{e.id}/edit" hx-target="#modal-container" hx-swap="innerHTML">Правка</button></td>
+                </tr>"""
+            html += "</tbody></table></div></div>"
 
     if total_new:
         html += f'<div class="toast toast-success">Загружено {total_new} заправок</div>'
@@ -264,6 +311,13 @@ def _parse_float(val) -> float | None:
         return float(val)
     except (ValueError, TypeError):
         return None
+
+
+def _group_by_vehicle(entries: list) -> list:
+    seen = {}
+    for e in entries:
+        seen.setdefault(e.vehicle_id, []).append(e)
+    return sorted(seen.items())
 
 
 STATUS_MAP = {

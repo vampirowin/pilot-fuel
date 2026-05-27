@@ -28,6 +28,15 @@ function todayStr() { return new Date().toISOString().split('T')[0]; }
 
 function showCustom() { document.getElementById('custom-range').style.display = 'flex'; }
 
+function setSyncRange(backFrom, backTo) {
+  var d = new Date();
+  var to = d.toISOString().split('T')[0];
+  if (backFrom > 0) { d.setDate(d.getDate() - backFrom); }
+  var from = d.toISOString().split('T')[0];
+  document.getElementById('sync-date-from').value = from;
+  document.getElementById('sync-date-to').value = to;
+}
+
 document.addEventListener('DOMContentLoaded', function () {
   var df = '{{ date_from }}';
   var dt = '{{ date_to }}';
@@ -52,39 +61,32 @@ document.addEventListener('DOMContentLoaded', function () {
 <div class="page-header">
   <h1>Заправки</h1>
   <div class="page-header-actions">
+    <button class="btn btn-secondary" hx-get="/api/refuels/sync-modal" hx-target="#modal-container" hx-swap="innerHTML">Синхр. из Pilot</button>
     <button class="btn btn-primary" hx-get="/api/refuels/add-form" hx-target="#modal-container" hx-swap="innerHTML">+ Добавить заправку</button>
   </div>
 </div>
 
-<form hx-post="/api/refuels/sync" hx-target="#refuels-list" hx-swap="innerHTML" hx-include="#filter-vehicle" class="sync-form">
-  <input type="hidden" name="date_from" value="{{ date_from }}">
-  <input type="hidden" name="date_to" value="{{ date_to }}">
-  <div class="period-selector">
-    <div class="period-chips">
-      <button type="button" class="chip{% if date_from == date_to and date_from == today_str %} active{% endif %}" onclick="goDate(todayStr(), todayStr())">Сегодня</button>
-      <button type="button" class="chip{% if date_from == date_to and date_from == days1_str %} active{% endif %}" onclick="goDate(daysAgo(1), daysAgo(1))">Вчера</button>
-      <button type="button" class="chip{% if date_from == days7_str and date_to == today_str %} active{% endif %}" onclick="goDate(daysAgo(7), todayStr())">7 дней</button>
-      <button type="button" class="chip{% if date_from == days14_str and date_to == today_str %} active{% endif %}" onclick="goDate(daysAgo(14), todayStr())">14 дней</button>
-      <button type="button" class="chip{% if date_from == days30_str and date_to == today_str %} active{% endif %}" onclick="goDate(daysAgo(30), todayStr())">30 дней</button>
-      <button type="button" class="chip chip-custom" onclick="showCustom()">Свой</button>
-    </div>
-    <div class="custom-date-range" id="custom-range" style="display:none">
-      <input type="date" id="period-date-from" value="{{ date_from }}">
-      <span style="color:var(--text-dim);padding:0 4px;">—</span>
-      <input type="date" id="period-date-to" value="{{ date_to }}">
-      <button type="button" class="btn btn-sm btn-primary" onclick="goCustom()">Применить</button>
-    </div>
-    <button type="submit" class="btn btn-secondary sync-btn">
-      <span class="btn-text">Синхр. из Pilot</span>
-      <span class="btn-loading">Загрузка...</span>
-    </button>
+<div class="period-selector">
+  <div class="period-chips">
+    <button type="button" class="chip{% if date_from == date_to and date_from == today_str %} active{% endif %}" onclick="goDate(todayStr(), todayStr())">Сегодня</button>
+    <button type="button" class="chip{% if date_from == date_to and date_from == days1_str %} active{% endif %}" onclick="goDate(daysAgo(1), daysAgo(1))">Вчера</button>
+    <button type="button" class="chip{% if date_from == days7_str and date_to == today_str %} active{% endif %}" onclick="goDate(daysAgo(7), todayStr())">7 дней</button>
+    <button type="button" class="chip{% if date_from == days14_str and date_to == today_str %} active{% endif %}" onclick="goDate(daysAgo(14), todayStr())">14 дней</button>
+    <button type="button" class="chip{% if date_from == days30_str and date_to == today_str %} active{% endif %}" onclick="goDate(daysAgo(30), todayStr())">30 дней</button>
+    <button type="button" class="chip chip-custom" onclick="showCustom()">Свой</button>
   </div>
-</form>
+  <div class="custom-date-range" id="custom-range" style="display:none">
+    <input type="date" id="period-date-from" value="{{ date_from }}">
+    <span style="color:var(--text-dim);padding:0 4px;">—</span>
+    <input type="date" id="period-date-to" value="{{ date_to }}">
+    <button type="button" class="btn btn-sm btn-primary" onclick="goCustom()">Применить</button>
+  </div>
+</div>
 
 <div class="filters-bar">
   <div class="form-group">
     <label>Транспорт</label>
-    <select id="filter-vehicle" onchange="window.location=qs({vehicle_id: this.value, status: document.getElementById('filter-status').value})">
+    <select id="filter-vehicle" name="vehicle_id" onchange="window.location=qs({vehicle_id: this.value, status: document.getElementById('filter-status').value})">
       <option value="">Все ТС</option>
       {% for v in all_vehicles %}
       <option value="{{ v.id }}" {% if selected_vehicle_id == v.id %}selected{% endif %}>{{ v.plate_number or v.name }}</option>
@@ -105,37 +107,39 @@ document.addEventListener('DOMContentLoaded', function () {
 </div>
 
 <div id="refuels-list">
-  {% if entries %}
-  <div class="card">
-    <div class="table-container">
-      <table>
-        <thead>
-          <tr>
-            <th>Дата</th><th>ТС</th><th>Pilot (л)</th><th>Чек (л)</th><th>Разница</th><th>Погрешность</th><th>Статус</th><th>Действия</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for e in entries %}
-          {% set plate = vehicles_map.get(e.vehicle_id, {}).get('plate_number', '—') %}
-          {% set status_class = {'normal': 'status-normal', 'small_deviation': 'status-small-deviation', 'unacceptable': 'status-unacceptable', 'pilot_missing': 'status-pilot-missing', 'false_reading': 'status-false-reading'}.get(e.comparison_status, '') %}
-          {% set status_label = {'normal': 'Норма', 'small_deviation': 'Расхождение', 'unacceptable': 'Недопустимо', 'pilot_missing': 'Нет в Pilot', 'false_reading': 'Ложная'}.get(e.comparison_status, e.comparison_status or '—') %}
-          <tr>
-            <td>{{ e.event_date.strftime('%d.%m.%Y %H:%M') if e.event_date else '—' }}</td>
-            <td><strong>{{ plate }}</strong></td>
-            <td>{{ '%.1f'|format(e.pilot_amount) if e.pilot_amount is not none else '—' }}</td>
-            <td>{{ '%.1f'|format(e.actual_amount) if e.actual_amount is not none else '—' }}</td>
-            <td>{{ '%.1f'|format(e.difference) if e.difference is not none else '—' }}</td>
-            <td>{{ '%.1f'|format(e.error_percent) + '%' if e.error_percent is not none else '—' }}</td>
-            <td><span class="status-badge {{ status_class }}">{{ status_label }}</span></td>
-            <td>
-              <button class="btn btn-sm btn-secondary" hx-get="/api/refuels/{{ e.id }}/edit" hx-target="#modal-container" hx-swap="innerHTML">Правка</button>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+  {% if grouped_entries %}
+    {% for vehicle_id, vehicle_entries in grouped_entries %}
+    {% set vehicle_name = vehicles_map.get(vehicle_id, {}).get('plate_number', '—') %}
+    <div class="card vehicle-group">
+      <h3 class="vehicle-group-title">{{ vehicle_name }} <span class="vehicle-group-count">{{ vehicle_entries|length }}</span></h3>
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Дата</th><th>Pilot (л)</th><th>Чек (л)</th><th>Разница</th><th>Погрешность</th><th>Статус</th><th>Действия</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for e in vehicle_entries %}
+            {% set status_class = {'normal': 'status-normal', 'small_deviation': 'status-small-deviation', 'unacceptable': 'status-unacceptable', 'pilot_missing': 'status-pilot-missing', 'false_reading': 'status-false-reading'}.get(e.comparison_status, '') %}
+            {% set status_label = {'normal': 'Норма', 'small_deviation': 'Расхождение', 'unacceptable': 'Недопустимо', 'pilot_missing': 'Нет в Pilot', 'false_reading': 'Ложная'}.get(e.comparison_status, e.comparison_status or '—') %}
+            <tr>
+              <td>{{ e.event_date.strftime('%d.%m.%Y %H:%M') if e.event_date else '—' }}</td>
+              <td>{{ '%.1f'|format(e.pilot_amount) if e.pilot_amount is not none else '—' }}</td>
+              <td>{{ '%.1f'|format(e.actual_amount) if e.actual_amount is not none else '—' }}</td>
+              <td>{{ '%.1f'|format(e.difference) if e.difference is not none else '—' }}</td>
+              <td>{{ '%.1f'|format(e.error_percent) + '%' if e.error_percent is not none else '—' }}</td>
+              <td><span class="status-badge {{ status_class }}">{{ status_label }}</span></td>
+              <td>
+                <button class="btn btn-sm btn-secondary" hx-get="/api/refuels/{{ e.id }}/edit" hx-target="#modal-container" hx-swap="innerHTML">Правка</button>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     </div>
-  </div>
+    {% endfor %}
   {% else %}
   <div class="card">
     <div class="empty-state">

@@ -736,3 +736,32 @@ tr:hover td {
 ::-webkit-scrollbar-track { background: var(--bg-primary); }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--border-light); }
+
+/* Vehicle group */
+.vehicle-group {
+  margin-bottom: 16px;
+}
+
+.vehicle-group:last-child {
+  margin-bottom: 0;
+}
+
+.vehicle-group-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 20px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--accent-light);
+  border-bottom: 1px solid var(--border);
+}
+
+.vehicle-group-count {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: var(--bg-primary);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
