@@ -1,6 +1,6 @@
 import math
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Request, Depends, HTTPException
+from fastapi import APIRouter, Request, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select, desc
@@ -35,7 +35,7 @@ async def refuels_page(
 
     entries = (await db.execute(query)).scalars().all()
     all_vehicles = (await db.execute(
-        select(Vehicle).where(Vehicle.is_active == True).order_by(Vehicle.plate_number)
+        select(Vehicle).where(Vehicle.is_active == True, Vehicle.has_fuel_sensor == True).order_by(Vehicle.plate_number)
     )).scalars().all()
 
     vehicles_map = {v.id: {"plate_number": v.plate_number, "name": v.name} for v in all_vehicles}
@@ -54,6 +54,9 @@ async def sync_refuels(
     request: Request,
     _=Depends(get_current_username),
     db: AsyncSession = Depends(get_db),
+    days: int = Query(default=7),
+    date_from: str = Query(default=None),
+    date_to: str = Query(default=None),
 ):
     token = request.session.get("token")
     node_id = request.session.get("node_id", 0)
@@ -62,8 +65,18 @@ async def sync_refuels(
 
     pilot = PilotService()
     now = datetime.now(timezone.utc)
-    ts_to = int(now.timestamp())
-    ts_from = int((now - timedelta(days=90)).timestamp())
+    if date_from and date_to:
+        try:
+            df = datetime.strptime(date_from, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            dt = datetime.strptime(date_to, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=timezone.utc)
+            ts_from = int(df.timestamp())
+            ts_to = int(dt.timestamp())
+        except ValueError:
+            ts_to = int(now.timestamp())
+            ts_from = int((now - timedelta(days=days)).timestamp())
+    else:
+        ts_to = int(now.timestamp())
+        ts_from = int((now - timedelta(days=days)).timestamp())
 
     vehicles = (await db.execute(
         select(Vehicle).where(

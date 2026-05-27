@@ -1,16 +1,69 @@
 {% extends "base.html" %}
 {% block title %}pilot-fuel — Заправки{% endblock %}
+{% block head %}
+<script>
+function selectPeriod(chip, days) {
+  document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+  chip.classList.add('active');
+  document.getElementById('period-days').disabled = false;
+  document.getElementById('period-days').value = days;
+  document.getElementById('period-date-from').disabled = true;
+  document.getElementById('period-date-to').disabled = true;
+  document.getElementById('custom-range').style.display = 'none';
+}
+
+function selectCustom(chip) {
+  document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+  chip.classList.add('active');
+  document.getElementById('period-days').disabled = true;
+  document.getElementById('period-date-from').disabled = false;
+  document.getElementById('period-date-to').disabled = false;
+  document.getElementById('custom-range').style.display = 'flex';
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+  var today = new Date();
+  var sevenAgo = new Date(today);
+  sevenAgo.setDate(today.getDate() - 7);
+  if (!document.getElementById('period-date-from').value) {
+    document.getElementById('period-date-from').value = sevenAgo.toISOString().split('T')[0];
+  }
+  if (!document.getElementById('period-date-to').value) {
+    document.getElementById('period-date-to').value = today.toISOString().split('T')[0];
+  }
+});
+</script>
+{% endblock %}
 {% block content %}
 <div class="page-header">
   <h1>Заправки</h1>
   <div class="page-header-actions">
     <button class="btn btn-primary" hx-get="/api/refuels/add-form" hx-target="#modal-container" hx-swap="innerHTML">+ Добавить заправку</button>
-    <button class="btn btn-secondary" hx-post="/api/refuels/sync" hx-target="#refuels-list" hx-swap="innerHTML">
+  </div>
+</div>
+
+<form hx-post="/api/refuels/sync" hx-target="#refuels-list" hx-swap="innerHTML" class="sync-form">
+  <input type="hidden" id="period-days" name="days" value="7">
+  <div class="period-selector">
+    <div class="period-chips">
+      <button type="button" class="chip" onclick="selectPeriod(this, 0)">Сегодня</button>
+      <button type="button" class="chip" onclick="selectPeriod(this, 1)">Вчера</button>
+      <button type="button" class="chip active" onclick="selectPeriod(this, 7)">7 дней</button>
+      <button type="button" class="chip" onclick="selectPeriod(this, 14)">14 дней</button>
+      <button type="button" class="chip" onclick="selectPeriod(this, 30)">30 дней</button>
+      <button type="button" class="chip chip-custom" onclick="selectCustom(this)">Свой</button>
+    </div>
+    <div class="custom-date-range" id="custom-range">
+      <input type="date" id="period-date-from" name="date_from" disabled>
+      <span style="color:var(--text-dim);padding:0 4px;">—</span>
+      <input type="date" id="period-date-to" name="date_to" disabled>
+    </div>
+    <button type="submit" class="btn btn-secondary sync-btn">
       <span class="btn-text">Синхр. из Pilot</span>
       <span class="btn-loading">Загрузка...</span>
     </button>
   </div>
-</div>
+</form>
 
 <div class="filters-bar">
   <div class="form-group">
@@ -72,7 +125,7 @@
     <div class="empty-state">
       <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><path d="M3 22V8l7-5v14l-7 5zM10 3l7 5v14l-7-5V3zM17 8l4 2v12l-4-2V8z"/></svg>
       <h3>Нет заправок</h3>
-      <p>Нажмите «Синхр. из Pilot», чтобы загрузить данные заправок.</p>
+      <p>Выберите период и нажмите «Синхр. из Pilot», чтобы загрузить данные.</p>
     </div>
   </div>
   {% endif %}

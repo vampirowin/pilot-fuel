@@ -636,6 +636,77 @@ tr:hover td {
   margin-bottom: 8px;
 }
 
+/* Period selector */
+.sync-form {
+  margin-bottom: 20px;
+}
+
+.period-selector {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.period-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.chip {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.chip:hover {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.chip.active {
+  background: var(--accent);
+  color: #000;
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.chip-custom {
+  border-style: dashed;
+}
+
+.custom-date-range {
+  display: none;
+  align-items: center;
+  gap: 4px;
+}
+
+.custom-date-range input[type="date"] {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.custom-date-range input[type="date"]:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.sync-btn {
+  margin-left: auto;
+}
+
 /* Tooltip */
 .tooltip {
   position: relative;
