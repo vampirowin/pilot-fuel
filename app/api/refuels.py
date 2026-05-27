@@ -28,9 +28,9 @@ async def refuels_page(
     date_from_str = request.query_params.get("date_from")
     date_to_str = request.query_params.get("date_to")
     today = datetime.now().strftime("%Y-%m-%d")
-    seven_ago = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+    month_start = datetime.now().replace(day=1).strftime("%Y-%m-%d")
 
-    df_str = date_from_str or seven_ago
+    df_str = date_from_str or month_start
     dt_str = date_to_str or today
 
     query = select(RefuelEntry).where(RefuelEntry.is_deleted == False)
@@ -61,7 +61,8 @@ async def refuels_page(
     grouped_entries = _group_by_vehicle(entries)
 
     today_str = today
-    days7_str = seven_ago
+    month_start_str = month_start
+    days7_str = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
     days14_str = (datetime.now() - timedelta(days=14)).strftime("%Y-%m-%d")
     days30_str = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
     days1_str = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
@@ -75,6 +76,7 @@ async def refuels_page(
         "date_from": df_str,
         "date_to": dt_str,
         "today_str": today_str,
+        "month_start_str": month_start_str,
         "days1_str": days1_str,
         "days7_str": days7_str,
         "days14_str": days14_str,
@@ -242,10 +244,12 @@ async def sync_refuels(
     db.add(log)
     await db.commit()
 
-    entries = (await db.execute(
-        select(RefuelEntry).where(RefuelEntry.is_deleted == False)
-        .order_by(desc(RefuelEntry.event_date)).limit(100)
-    )).scalars().all()
+    query = select(RefuelEntry).where(RefuelEntry.is_deleted == False)
+    query = query.where(RefuelEntry.event_date >= df, RefuelEntry.event_date <= dt.replace(hour=23, minute=59, second=59))
+    if vehicle_id:
+        query = query.where(RefuelEntry.vehicle_id == int(vehicle_id))
+    query = query.order_by(desc(RefuelEntry.event_date)).limit(500)
+    entries = (await db.execute(query)).scalars().all()
 
     vehicles_result = (await db.execute(
         select(Vehicle).where(Vehicle.is_active == True)

@@ -45,6 +45,7 @@ document.addEventListener('DOMContentLoaded', function () {
   var presets = [
     df + ',' + dt + ':' + 'today_str',
     df + ',' + dt + ':' + 'days1_str',
+    '{{ month_start_str }},{{ today_str }}',
     '{{ days7_str }},{{ today_str }}',
     '{{ days14_str }},{{ today_str }}',
     '{{ days30_str }},{{ today_str }}',
@@ -70,6 +71,7 @@ document.addEventListener('DOMContentLoaded', function () {
   <div class="period-chips">
     <button type="button" class="chip{% if date_from == date_to and date_from == today_str %} active{% endif %}" onclick="goDate(todayStr(), todayStr())">Сегодня</button>
     <button type="button" class="chip{% if date_from == date_to and date_from == days1_str %} active{% endif %}" onclick="goDate(daysAgo(1), daysAgo(1))">Вчера</button>
+    <button type="button" class="chip{% if date_from == month_start_str and date_to == today_str %} active{% endif %}" onclick="goDate('{{ month_start_str }}', todayStr())">Месяц</button>
     <button type="button" class="chip{% if date_from == days7_str and date_to == today_str %} active{% endif %}" onclick="goDate(daysAgo(7), todayStr())">7 дней</button>
     <button type="button" class="chip{% if date_from == days14_str and date_to == today_str %} active{% endif %}" onclick="goDate(daysAgo(14), todayStr())">14 дней</button>
     <button type="button" class="chip{% if date_from == days30_str and date_to == today_str %} active{% endif %}" onclick="goDate(daysAgo(30), todayStr())">30 дней</button>
