@@ -44,6 +44,8 @@ sync_log           — id, vehicle_id, sync_type, status, records_affected, deta
 - **Ручные заправки без данных Pilot**: статус `pilot_missing` — критическое событие
 - **Fuel level readings**: on-demand из Pilot API, не храним в БД
 - **График датчика**: Chart.js, данные из `sensors/dip`
+- **Кнопки действий в модалке правки**: false/delete вынесены в edit-модалку, в таблице только «Правка» — меньше визуального шума
+- **Репозиторий**: `https://github.com/vampirowin/pilot-fuel` (публичный)
 
 ## Existing Projects (not to interfere)
 
@@ -69,32 +71,39 @@ sync_log           — id, vehicle_id, sync_type, status, records_affected, deta
 - ✅ Vehicles page (list + sync from Pilot API)
 - ✅ Refuels page (list with filters)
 - ✅ Default settings seeded (normal_threshold=3%, warning_threshold=10%)
-- ✅ Port: 9000
+- ✅ Port: 9001 (временно; 9000 занят zombie PID 32440)
 
-### Phase 2 — Vehicles & Sensors
+### Phase 2 ✅ — Vehicles & Sensors
 - ✅ Sync vehicles from Pilot (`GET /api/v3/vehicles`)
+- ✅ Vehicle search / folder grouping
+- ✅ Admin: toggle sensor, vehicles without sensor
 - ⬜ Get fuel sensors from Pilot
 - ⬜ Sensors page / display per vehicle
 
-### Phase 3 — Refuels from Pilot
-- ⬜ Get fuel report (`GET /api/v3/vehicles/fuel`)
-- ⬜ Auto-create refuel_entries
-- ⬜ Refuels data table with comparison
+### Phase 3 ✅ — Refuels from Pilot
+- ✅ Batch sync from Pilot (`GET /api/v3/vehicles/fuel`, batch 20, 3 retries)
+- ✅ Auto-create refuel_entries
+- ✅ Refuels data table with comparison (diff, error%, thresholds)
+- ✅ Cookie auth for reports.php (PILOTID + node)
+- ✅ Pagination (10 vehicle groups, HTMX, chip-style)
 
-### Phase 4 — Receipt input + Comparison
-- ⬜ HTMX form for receipt entry
-- ⬜ Auto-match with Pilot refuel
-- ⬜ Calculate diff + error%
-- ⬜ Categorize by thresholds
+### Phase 4 ✅ — Receipt input + Comparison
+- ✅ HTMX form for receipt entry (add/edit modals)
+- ✅ Auto-match with Pilot refuel (±1h)
+- ✅ Calculate diff + error%
+- ✅ Categorize by thresholds (normal, small_deviation, unacceptable, pilot_missing)
+- ✅ Per-vehicle "Add" button on card header
 
-### Phase 5 — Manual entries + Critical events
-- ⬜ "Add manually" button + form
-- ⬜ Status `pilot_missing` 🚨
-- ⬜ Critical events dashboard
+### Phase 5 ✅ — Manual entries + Critical events
+- ✅ "Add manually" button + form
+- ✅ Status `pilot_missing`
+- ✅ Critical events dashboard + counter endpoint
 
-### Phase 6 — Admin
-- ⬜ Threshold settings UI
-- ⬜ Mark as false / soft delete / restore / hard delete
+### Phase 6 ✅ — Admin (partial)
+- ✅ Threshold settings UI (admin/settings)
+- ✅ Mark as false / unmark / hard delete
+- ✅ Actions moved into edit modal (cleaner UI)
+- ⬜ Restore deleted entries
 - ⬜ Re-sync (overwrite)
 - ⬜ sync_log view
 
@@ -104,6 +113,8 @@ sync_log           — id, vehicle_id, sync_type, status, records_affected, deta
 - ⬜ Chart.js fuel level graph
 
 ### Phase 8 — Polish
+- ✅ GitHub repo created + pushed (vampirowin/pilot-fuel)
+- ✅ README.md with full docs
 - ⬜ PWA
 - ⬜ Docker
 - ⬜ Excel export
@@ -143,8 +154,15 @@ pilot-fuel/
 │   │   ├── login.html
 │   │   ├── vehicles.html
 │   │   ├── refuels.html
+│   │   ├── critical.html
+│   │   ├── sync_modal.html
+│   │   ├── add_refuel_modal.html
+│   │   ├── edit_refuel_modal.html
+│   │   ├── mark_false_modal.html
+│   │   ├── vehicle_graph.html
 │   │   └── admin/
-│   │       └── settings.html
+│   │       ├── settings.html
+│   │       └── vehicles_no_sensor.html
 │   └── static/
 │       ├── css/
 │       │   └── style.css
@@ -161,5 +179,5 @@ pilot-fuel/
 ```
 
 ## Ports
-- pilot-fuel: **9000** (free)
+- pilot-fuel: **9001** (временно; 9000 занят zombie PID 32440)
 - PostgreSQL: 5432 (shared)
