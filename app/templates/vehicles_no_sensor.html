@@ -1,49 +1,93 @@
 {% extends "base.html" %}
 {% block title %}pilot-fuel — ТС без датчиков{% endblock %}
+{% block head %}
+<style>
+.collapsible-header { cursor: pointer; user-select: none; }
+.collapsible-header:hover { background: var(--bg-card-hover); }
+.collapsible-header .arrow { transition: transform 0.2s; display: inline-block; margin-right: 8px; font-size: 12px; }
+.collapsible-header.collapsed .arrow { transform: rotate(-90deg); }
+.collapsible-body { overflow: hidden; transition: max-height 0.3s ease; }
+.collapsible-body.collapsed { max-height: 0 !important; }
+</style>
+{% endblock %}
 {% block content %}
 <div class="page-header">
   <h1>ТС без датчиков топлива</h1>
   <div class="page-header-actions">
-    <span style="color: var(--text-dim); font-size: 14px;">{{ vehicles|length }} шт.</span>
+    <span style="color: var(--text-dim); font-size: 14px;">{{ total_count }} шт.</span>
   </div>
 </div>
 
+{% set search_url = '/api/admin/vehicles-no-sensor/search' %}
+{% set search_target = '#no-sensor-table' %}
+{% set clear_url = '/admin/vehicles-no-sensor' %}
+{% include "vehicles_search.html" %}
+
 <div id="no-sensor-table">
-  {% if vehicles %}
-  <div class="card">
-    <div class="table-container">
-      <table>
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>Госномер</th>
-            <th>IMEI</th>
-            <th>Папка</th>
-            <th>Действия</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for v in vehicles %}
-          <tr id="v-{{ v.id }}">
-            <td style="color: var(--text-dim);">{{ loop.index }}</td>
-            <td><strong>{{ v.plate_number or '—' }}</strong></td>
-            <td style="font-family: monospace; font-size: 12px;">{{ v.imei or '—' }}</td>
-            <td>{{ v.folder or '—' }}</td>
-            <td><button class="btn btn-sm btn-primary" hx-post="/api/vehicles/{{ v.id }}/toggle-sensor" hx-target="#v-{{ v.id }}" hx-swap="outerHTML">Вернуть</button></td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+  {% if groups %}
+    {% for group_name, vehicles in groups %}
+    {% set group_id = "ns-" + loop.index|string %}
+    <div class="card" style="margin-top: 16px;">
+      <div class="card-header collapsible-header" style="padding: 12px 20px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted);" onclick="toggleGroup('{{ group_id }}')">
+        <span class="arrow">&#9660;</span>
+        {{ group_name }} <span style="font-weight: 400; color: var(--text-dim);">({{ vehicles|length }})</span>
+      </div>
+      <div class="collapsible-body" id="{{ group_id }}">
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Госномер</th>
+                <th>IMEI</th>
+                <th>Действия</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for v in vehicles %}
+              <tr id="v-{{ v.id }}">
+                <td style="color: var(--text-dim);">{{ loop.index }}</td>
+                <td><strong>{{ v.plate_number or '—' }}</strong></td>
+                <td style="font-family: monospace; font-size: 12px;">{{ v.imei or '—' }}</td>
+                <td><button class="btn btn-sm btn-primary" hx-post="/api/vehicles/{{ v.id }}/toggle-sensor" hx-target="#v-{{ v.id }}" hx-swap="outerHTML">Вернуть</button></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
-  </div>
+    {% endfor %}
   {% else %}
   <div class="card">
     <div class="empty-state">
       <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
       <h3>Нет исключённых ТС</h3>
-      <p>Все транспортные средства имеют датчики топлива.</p>
+      <p>{% if plate or imei %}Ничего не найдено по заданным фильтрам.{% else %}Все транспортные средства имеют датчики топлива.{% endif %}</p>
     </div>
   </div>
   {% endif %}
 </div>
+
+<script>
+function toggleGroup(id) {
+  const body = document.getElementById(id);
+  const header = body.previousElementSibling;
+  if (!body || !header) return;
+  const isCollapsed = body.classList.toggle('collapsed');
+  header.classList.toggle('collapsed');
+  try { localStorage.setItem('folder:' + id, isCollapsed ? '1' : '0'); } catch(e) {}
+}
+(function() {
+  document.querySelectorAll('.collapsible-body').forEach(function(el) {
+    try {
+      var val = localStorage.getItem('folder:' + el.id);
+      if (val === '1') {
+        el.classList.add('collapsed');
+        if (el.previousElementSibling) el.previousElementSibling.classList.add('collapsed');
+      }
+    } catch(e) {}
+  });
+})();
+</script>
 {% endblock %}

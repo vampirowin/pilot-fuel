@@ -44,14 +44,19 @@ def render_table_partial(vehicles: list, is_admin: bool = False) -> str:
 
     groups = group_by_folder(vehicles)
     html = ""
+    gidx = 0
     for group_name, group_vehicles in groups:
+        gidx += 1
+        gid = f"g-{gidx}"
         html += f'''<div class="card" style="margin-top: 16px;">
-          <div class="card-header" style="padding: 12px 20px; background: var(--bg-card-hover); border-bottom: 1px solid var(--border); font-weight: 600; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted);">
+          <div class="card-header collapsible-header" style="padding: 12px 20px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted);" onclick="toggleGroup('{gid}')">
+            <span class="arrow">&#9660;</span>
             {group_name} <span style="font-weight: 400; color: var(--text-dim);">({len(group_vehicles)})</span>
           </div>
-          <div class="table-container"><table>
-            <thead><tr>
-              <th>#</th><th>Госномер</th><th>IMEI</th><th>Датчики</th><th>Заправки</th><th>Собственник</th><th>Площадка</th>'''
+          <div class="collapsible-body" id="{gid}">
+            <div class="table-container"><table>
+              <thead><tr>
+                <th>#</th><th>Госномер</th><th>IMEI</th><th>Датчики</th><th>Заправки</th><th>Собственник</th><th>Площадка</th>'''
         if is_admin:
             html += '<th style="width: 80px;">Действия</th>'
         html += '</tr></thead><tbody>'
@@ -68,7 +73,7 @@ def render_table_partial(vehicles: list, is_admin: bool = False) -> str:
             if is_admin:
                 html += f'''<td><button class="btn btn-sm btn-danger" hx-post="/api/vehicles/{v["id"]}/toggle-sensor" hx-target="#v-{v["id"]}" hx-swap="outerHTML">Нет датчика</button></td>'''
             html += '</tr>'
-        html += '</tbody></table></div></div>'
+        html += '</tbody></table></div></div></div>'
     return html
 
 
