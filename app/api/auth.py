@@ -45,7 +45,8 @@ async def login(
     request.session["username"] = username
     request.session["token"] = token
     request.session["node_id"] = node_id
-    request.session["is_admin"] = False
+    is_admin = username == "admin@milkom.milkom"
+    request.session["is_admin"] = is_admin
 
     stmt = select(User).where(User.username == username)
     user = (await db.execute(stmt)).scalar_one_or_none()
@@ -53,12 +54,15 @@ async def login(
         user.pilot_token = token
         user.pilot_node_id = node_id
         user.last_login = datetime.now()
+        if is_admin:
+            user.is_admin = True
     else:
         user = User(
             username=username,
             pilot_token=token,
             pilot_node_id=node_id,
             last_login=datetime.now(),
+            is_admin=is_admin,
         )
         db.add(user)
     await db.commit()

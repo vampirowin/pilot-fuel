@@ -24,10 +24,12 @@ def create_app() -> FastAPI:
     from app.api.main import router as main_router
     from app.api.vehicles import router as vehicles_router
     from app.api.refuels import router as refuels_router
+    from app.api.admin import router as admin_router
 
     app.include_router(auth_router)
     app.include_router(main_router)
     app.include_router(vehicles_router)
     app.include_router(refuels_router)
+    app.include_router(admin_router)
 
     return app

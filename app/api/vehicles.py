@@ -22,12 +22,25 @@ def group_by_folder(vehicles: list) -> list:
     return [(f, groups[f]) for f in sorted_folders]
 
 
-def render_table_partial(vehicles: list, q: str = "") -> str:
+def build_vehicle_dict(v: Vehicle) -> dict:
+    return {
+        "id": v.id,
+        "plate_number": v.plate_number,
+        "imei": v.imei,
+        "folder": v.folder,
+        "sensor_count": v.sensor_count,
+        "owner": v.owner,
+        "location": v.location,
+    }
+
+
+def render_table_partial(vehicles: list, is_admin: bool = False) -> str:
     if not vehicles:
-        empty_msg = f'<p>Ничего не найдено по запросу «{q}».</p>' if q else '<p>Нажмите «Синхронизировать», чтобы загрузить список ТС из Pilot.</p>'
-        return f'''<div class="card"><div class="empty-state">
+        return '''<div class="card"><div class="empty-state">
           <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
-          <h3>Нет транспортных средств</h3>{empty_msg}</div></div>'''
+          <h3>Нет транспортных средств</h3>
+          <p>Нажмите «Синхронизировать», чтобы загрузить список ТС из Pilot.</p>
+        </div></div>'''
 
     groups = group_by_folder(vehicles)
     html = ""
@@ -38,59 +51,54 @@ def render_table_partial(vehicles: list, q: str = "") -> str:
           </div>
           <div class="table-container"><table>
             <thead><tr>
-              <th>#</th><th>Госномер</th><th>IMEI</th><th>Датчики</th><th>Заправки</th><th>Собственник</th><th>Площадка</th>
-            </tr></thead>
-            <tbody>'''
+              <th>#</th><th>Госномер</th><th>IMEI</th><th>Датчики</th><th>Заправки</th><th>Собственник</th><th>Площадка</th>'''
+        if is_admin:
+            html += '<th style="width: 80px;">Действия</th>'
+        html += '</tr></thead><tbody>'
         for idx, v in enumerate(group_vehicles, 1):
-            sensor_badge_class = "status-normal" if v.get("sensor_count", 0) > 0 else "status-false-reading"
-            html += f'''<tr>
+            badge = "status-normal" if v.get("sensor_count", 0) > 0 else "status-false-reading"
+            html += f'''<tr id="v-{v["id"]}">
               <td style="color: var(--text-dim);">{idx}</td>
               <td><strong>{v.get("plate_number") or "—"}</strong></td>
               <td style="font-family:monospace;font-size:12px">{v.get("imei") or "—"}</td>
-              <td><span class="status-badge {sensor_badge_class}">{v.get("sensor_count", 0)} датч.</span></td>
+              <td><span class="status-badge {badge}">{v.get("sensor_count", 0)} датч.</span></td>
               <td><a href="/refuels?vehicle_id={v["id"]}" class="btn btn-sm btn-secondary">Заправки</a></td>
               <td>{v.get("owner") or "—"}</td>
-              <td>{v.get("location") or "—"}</td>
-            </tr>'''
-        html += "</tbody></table></div></div>"
+              <td>{v.get("location") or "—"}</td>'''
+            if is_admin:
+                html += f'''<td><button class="btn btn-sm btn-danger" hx-post="/api/vehicles/{v["id"]}/toggle-sensor" hx-target="#v-{v["id"]}" hx-swap="outerHTML">Нет датчика</button></td>'''
+            html += '</tr>'
+        html += '</tbody></table></div></div>'
     return html
 
 
 @router.get("/vehicles", response_class=HTMLResponse)
 async def vehicles_page(
     request: Request,
-    q: str = "",
+    plate: str = "",
+    imei: str = "",
     _=Depends(get_current_username),
     db: AsyncSession = Depends(get_db),
 ):
-    query = select(Vehicle).where(Vehicle.is_active == True)
-    if q:
-        like = f"%{q}%"
-        query = query.where(
-            or_(Vehicle.plate_number.ilike(like), Vehicle.imei.ilike(like))
-        )
+    query = select(Vehicle).where(Vehicle.is_active == True, Vehicle.has_fuel_sensor == True)
+    filters = []
+    if plate:
+        filters.append(Vehicle.plate_number.ilike(f"%{plate}%"))
+    if imei:
+        filters.append(Vehicle.imei.ilike(f"%{imei}%"))
+    if filters:
+        query = query.where(or_(*filters))
     query = query.order_by(Vehicle.folder, Vehicle.plate_number)
     result = await db.execute(query)
     db_vehicles = result.scalars().all()
 
-    out = []
-    for v in db_vehicles:
-        sensors_res = await db.execute(
-            select(FuelSensor).where(FuelSensor.vehicle_id == v.id, FuelSensor.is_active == True)
-        )
-        sensors = sensors_res.scalars().all()
-        out.append({
-            "id": v.id,
-            "plate_number": v.plate_number,
-            "imei": v.imei,
-            "folder": v.folder,
-            "sensor_count": len(sensors) if sensors else v.sensor_count,
-            "owner": v.owner,
-            "location": v.location,
-        })
+    out = [build_vehicle_dict(v) for v in db_vehicles]
+    is_admin = request.session.get("is_admin", False)
 
     return templates.TemplateResponse(request, "vehicles.html", {
-        "q": q,
+        "plate": plate,
+        "imei": imei,
+        "is_admin": is_admin,
         "groups": group_by_folder(out) if out else [],
     })
 
@@ -98,37 +106,44 @@ async def vehicles_page(
 @router.get("/api/vehicles/search", response_class=HTMLResponse)
 async def search_vehicles(
     request: Request,
-    q: str = "",
+    plate: str = "",
+    imei: str = "",
     _=Depends(get_current_username),
     db: AsyncSession = Depends(get_db),
 ):
-    query = select(Vehicle).where(Vehicle.is_active == True)
-    if q:
-        like = f"%{q}%"
-        query = query.where(
-            or_(Vehicle.plate_number.ilike(like), Vehicle.imei.ilike(like))
-        )
+    query = select(Vehicle).where(Vehicle.is_active == True, Vehicle.has_fuel_sensor == True)
+    filters = []
+    if plate:
+        filters.append(Vehicle.plate_number.ilike(f"%{plate}%"))
+    if imei:
+        filters.append(Vehicle.imei.ilike(f"%{imei}%"))
+    if filters:
+        query = query.where(or_(*filters))
     query = query.order_by(Vehicle.folder, Vehicle.plate_number)
     result = await db.execute(query)
     db_vehicles = result.scalars().all()
 
-    out = []
-    for v in db_vehicles:
-        sensors_res = await db.execute(
-            select(FuelSensor).where(FuelSensor.vehicle_id == v.id, FuelSensor.is_active == True)
-        )
-        sensors = sensors_res.scalars().all()
-        out.append({
-            "id": v.id,
-            "plate_number": v.plate_number,
-            "imei": v.imei,
-            "folder": v.folder,
-            "sensor_count": len(sensors) if sensors else v.sensor_count,
-            "owner": v.owner,
-            "location": v.location,
-        })
+    out = [build_vehicle_dict(v) for v in db_vehicles]
+    is_admin = request.session.get("is_admin", False)
+    return HTMLResponse(render_table_partial(out, is_admin))
 
-    return HTMLResponse(render_table_partial(out, q))
+
+@router.post("/api/vehicles/{vehicle_id}/toggle-sensor", response_class=HTMLResponse)
+async def toggle_fuel_sensor(
+    request: Request,
+    vehicle_id: int,
+    _=Depends(get_current_username),
+    db: AsyncSession = Depends(get_db),
+):
+    if not request.session.get("is_admin"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    result = await db.execute(select(Vehicle).where(Vehicle.id == vehicle_id))
+    v = result.scalar_one_or_none()
+    if not v:
+        raise HTTPException(status_code=404, detail="Vehicle not found")
+    v.has_fuel_sensor = not v.has_fuel_sensor
+    await db.commit()
+    return HTMLResponse("")
 
 
 @router.post("/api/vehicles/sync", response_class=HTMLResponse)
@@ -195,4 +210,5 @@ async def sync_vehicles(
         })
 
     await db.commit()
-    return HTMLResponse(render_table_partial(out))
+    is_admin = request.session.get("is_admin", False)
+    return HTMLResponse(render_table_partial(out, is_admin))

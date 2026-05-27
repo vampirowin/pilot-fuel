@@ -31,11 +31,12 @@
               <th>Заправки</th>
               <th>Собственник</th>
               <th>Площадка</th>
+              {% if is_admin %}<th style="width: 80px;">Действия</th>{% endif %}
             </tr>
           </thead>
           <tbody>
             {% for v in vehicles %}
-            <tr>
+            <tr id="v-{{ v.id }}">
               <td style="color: var(--text-dim);">{{ loop.index }}</td>
               <td><strong>{{ v.plate_number or '—' }}</strong></td>
               <td style="font-family: monospace; font-size: 12px;">{{ v.imei or '—' }}</td>
@@ -47,6 +48,9 @@
               <td><a href="/refuels?vehicle_id={{ v.id }}" class="btn btn-sm btn-secondary">Заправки</a></td>
               <td>{{ v.owner or '—' }}</td>
               <td>{{ v.location or '—' }}</td>
+              {% if is_admin %}
+              <td><button class="btn btn-sm btn-danger" hx-post="/api/vehicles/{{ v.id }}/toggle-sensor" hx-target="#v-{{ v.id }}" hx-swap="outerHTML">Нет датчика</button></td>
+              {% endif %}
             </tr>
             {% endfor %}
           </tbody>
@@ -59,7 +63,7 @@
     <div class="empty-state">
       <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
       <h3>Нет транспортных средств</h3>
-      <p>{% if q %}Ничего не найдено по запросу «{{ q }}».{% else %}Нажмите «Синхронизировать», чтобы загрузить список ТС из Pilot.{% endif %}</p>
+      <p>{% if plate or imei %}Ничего не найдено по заданным фильтрам.{% else %}Нажмите «Синхронизировать», чтобы загрузить список ТС из Pilot.{% endif %}</p>
     </div>
   </div>
   {% endif %}

@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}pilot-fuel — ТС без датчиков{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>ТС без датчиков топлива</h1>
+  <div class="page-header-actions">
+    <span style="color: var(--text-dim); font-size: 14px;">{{ vehicles|length }} шт.</span>
+  </div>
+</div>
+
+<div id="no-sensor-table">
+  {% if vehicles %}
+  <div class="card">
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Госномер</th>
+            <th>IMEI</th>
+            <th>Папка</th>
+            <th>Действия</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for v in vehicles %}
+          <tr id="v-{{ v.id }}">
+            <td style="color: var(--text-dim);">{{ loop.index }}</td>
+            <td><strong>{{ v.plate_number or '—' }}</strong></td>
+            <td style="font-family: monospace; font-size: 12px;">{{ v.imei or '—' }}</td>
+            <td>{{ v.folder or '—' }}</td>
+            <td><button class="btn btn-sm btn-primary" hx-post="/api/vehicles/{{ v.id }}/toggle-sensor" hx-target="#v-{{ v.id }}" hx-swap="outerHTML">Вернуть</button></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% else %}
+  <div class="card">
+    <div class="empty-state">
+      <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+      <h3>Нет исключённых ТС</h3>
+      <p>Все транспортные средства имеют датчики топлива.</p>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

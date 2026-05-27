@@ -17,6 +17,7 @@ class Vehicle(Base):
     owner: Mapped[str | None] = mapped_column(String(200), nullable=True)
     location: Mapped[str | None] = mapped_column(String(200), nullable=True)
     sensor_count: Mapped[int] = mapped_column(Integer, default=0)
+    has_fuel_sensor: Mapped[bool] = mapped_column(Boolean, default=True, server_default='t')
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     synced_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
