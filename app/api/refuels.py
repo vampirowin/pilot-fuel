@@ -1,4 +1,5 @@
 import asyncio
+import math
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Request, Depends, HTTPException, Query, Form
 from fastapi.responses import HTMLResponse
@@ -15,6 +16,45 @@ from app.services.pilot_service import PilotService
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
+PER_PAGE = 10
+
+
+def _render_vehicle_group(vehicle_id: int, entries: list, vmap: dict) -> str:
+    plate = vmap.get(vehicle_id, {}).get("plate_number", "—")
+    h = f'<div class="card vehicle-group"><h3 class="vehicle-group-title">{plate} <span class="vehicle-group-count">{len(entries)}</span></h3><div class="table-container"><table><thead><tr><th>Дата</th><th>Pilot (л)</th><th>Чек (л)</th><th>Разница</th><th>Погрешность</th><th>Статус</th><th>Действия</th></tr></thead><tbody>'
+    for e in entries:
+        sc = STATUS_MAP.get(e.comparison_status, "")
+        sl = STATUS_LABELS.get(e.comparison_status, e.comparison_status or "—")
+        pa = f"{e.pilot_amount:.1f}" if e.pilot_amount is not None else "—"
+        aa = f"{e.actual_amount:.1f}" if e.actual_amount is not None else "—"
+        df = f"{e.difference:.1f}" if e.difference is not None else "—"
+        er = f"{e.error_percent:.1f}%" if e.error_percent is not None else "—"
+        ds = e.event_date.strftime("%d.%m.%Y %H:%M") if e.event_date else "—"
+        h += f"<tr><td>{ds}</td><td>{pa}</td><td>{aa}</td><td>{df}</td><td>{er}</td><td><span class=\"status-badge {sc}\">{sl}</span></td><td><button class=\"btn btn-sm btn-secondary\" hx-get=\"/api/refuels/{e.id}/edit\" hx-target=\"#modal-container\" hx-swap=\"innerHTML\">Правка</button></td></tr>"
+    h += "</tbody></table></div></div>"
+    return h
+
+
+def _pagination_html(page: int, total: int, qs: str) -> str:
+    if total <= 1:
+        return ""
+    prev_d = "disabled" if page <= 1 else ""
+    next_d = "disabled" if page >= total else ""
+    qs_part = f"&{qs}" if qs else ""
+    prev_url = f"/refuels?page={page-1}{qs_part}" if page > 1 else "#"
+    next_url = f"/refuels?page={page+1}{qs_part}" if page < total else "#"
+    return f"""<div class="pagination"><button class="btn btn-sm {prev_d}" hx-get="{prev_url}" hx-target="#refuels-list" hx-push-url="true" {prev_d}>← Назад</button><span>стр. {page} из {total}</span><button class="btn btn-sm {next_d}" hx-get="{next_url}" hx-target="#refuels-list" hx-push-url="true" {next_d}>Вперед →</button></div>"""
+
+
+def _list_html(grouped: list, vmap: dict, page: int, total: int, qs: str) -> str:
+    if not grouped:
+        return '<div class="card"><div class="empty-state"><p>Нет заправок.</p></div></div>'
+    start = (page - 1) * PER_PAGE
+    h = ""
+    for vid, entries in grouped[start:start + PER_PAGE]:
+        h += _render_vehicle_group(vid, entries, vmap)
+    h += _pagination_html(page, total, qs)
+    return h
 
 
 @router.get("/refuels", response_class=HTMLResponse)
@@ -22,19 +62,19 @@ async def refuels_page(
     request: Request,
     _=Depends(get_current_username),
     db: AsyncSession = Depends(get_db),
+    page: int = Query(default=1, ge=1),
 ):
     vehicle_id = request.query_params.get("vehicle_id")
     status_filter = request.query_params.get("status")
     date_from_str = request.query_params.get("date_from")
     date_to_str = request.query_params.get("date_to")
+
     today = datetime.now().strftime("%Y-%m-%d")
     month_start = datetime.now().replace(day=1).strftime("%Y-%m-%d")
-
     df_str = date_from_str or month_start
     dt_str = date_to_str or today
 
     query = select(RefuelEntry).where(RefuelEntry.is_deleted == False)
-
     try:
         df = datetime.strptime(df_str, "%Y-%m-%d")
         query = query.where(RefuelEntry.event_date >= df)
@@ -45,20 +85,38 @@ async def refuels_page(
         query = query.where(RefuelEntry.event_date <= dt)
     except ValueError:
         pass
-
     if vehicle_id:
         query = query.where(RefuelEntry.vehicle_id == int(vehicle_id))
     if status_filter:
         query = query.where(RefuelEntry.comparison_status == status_filter)
-    query = query.order_by(desc(RefuelEntry.event_date)).limit(100)
+    query = query.order_by(desc(RefuelEntry.event_date))
 
     entries = (await db.execute(query)).scalars().all()
     all_vehicles = (await db.execute(
         select(Vehicle).where(Vehicle.is_active == True, Vehicle.has_fuel_sensor == True).order_by(Vehicle.plate_number)
     )).scalars().all()
 
-    vehicles_map = {v.id: {"plate_number": v.plate_number, "name": v.name} for v in all_vehicles}
-    grouped_entries = _group_by_vehicle(entries)
+    vmap = {v.id: {"plate_number": v.plate_number, "name": v.name} for v in all_vehicles}
+    grouped = _group_by_vehicle(entries)
+    total_pages = max(1, math.ceil(len(grouped) / PER_PAGE))
+    if page > total_pages:
+        page = total_pages
+
+    qparts = {}
+    if df_str != month_start or dt_str != today:
+        qparts["date_from"] = df_str
+        qparts["date_to"] = dt_str
+    if vehicle_id:
+        qparts["vehicle_id"] = vehicle_id
+    if status_filter:
+        qparts["status"] = status_filter
+    qs = "&".join(f"{k}={v}" for k, v in qparts.items())
+
+    rendered = _list_html(grouped, vmap, page, total_pages, qs)
+
+    is_hx = request.headers.get("hx-request") == "true"
+    if is_hx:
+        return HTMLResponse(rendered)
 
     today_str = today
     month_start_str = month_start
@@ -68,9 +126,8 @@ async def refuels_page(
     days1_str = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
 
     return templates.TemplateResponse(request, "refuels.html", {
-        "grouped_entries": grouped_entries,
+        "list_html": rendered,
         "all_vehicles": all_vehicles,
-        "vehicles_map": vehicles_map,
         "selected_vehicle_id": int(vehicle_id) if vehicle_id else None,
         "selected_status": status_filter or "",
         "date_from": df_str,
@@ -81,6 +138,8 @@ async def refuels_page(
         "days7_str": days7_str,
         "days14_str": days14_str,
         "days30_str": days30_str,
+        "page": page,
+        "total_pages": total_pages,
     })
 
 
@@ -248,40 +307,21 @@ async def sync_refuels(
     query = query.where(RefuelEntry.event_date >= df, RefuelEntry.event_date <= dt.replace(hour=23, minute=59, second=59))
     if vehicle_id:
         query = query.where(RefuelEntry.vehicle_id == int(vehicle_id))
-    query = query.order_by(desc(RefuelEntry.event_date)).limit(500)
+    query = query.order_by(desc(RefuelEntry.event_date))
     entries = (await db.execute(query)).scalars().all()
 
     vehicles_result = (await db.execute(
         select(Vehicle).where(Vehicle.is_active == True)
     )).scalars().all()
-    vehicles_map = {v.id: {"plate_number": v.plate_number, "name": v.name} for v in vehicles_result}
+    vmap = {v.id: {"plate_number": v.plate_number, "name": v.name} for v in vehicles_result}
 
-    html = ""
-    if not entries:
-        html = '<div class="card"><div class="empty-state"><p>Нет заправок.</p></div></div>'
-    else:
-        grouped = _group_by_vehicle(entries)
-        for vehicle_id, vehicle_entries in grouped:
-            plate = vehicles_map.get(vehicle_id, {}).get("plate_number", "—")
-            html += f'<div class="card vehicle-group"><h3 class="vehicle-group-title">{plate} <span class="vehicle-group-count">{len(vehicle_entries)}</span></h3><div class="table-container"><table><thead><tr><th>Дата</th><th>Pilot (л)</th><th>Чек (л)</th><th>Разница</th><th>Погрешность</th><th>Статус</th><th>Действия</th></tr></thead><tbody>'
-            for e in vehicle_entries:
-                status_class = STATUS_MAP.get(e.comparison_status, "")
-                status_label = STATUS_LABELS.get(e.comparison_status, e.comparison_status or "—")
-                pilot_amt = f"{e.pilot_amount:.1f}" if e.pilot_amount is not None else "—"
-                actual_amt = f"{e.actual_amount:.1f}" if e.actual_amount is not None else "—"
-                diff = f"{e.difference:.1f}" if e.difference is not None else "—"
-                err = f"{e.error_percent:.1f}%" if e.error_percent is not None else "—"
-                date_str = e.event_date.strftime("%d.%m.%Y %H:%M") if e.event_date else "—"
-                html += f"""<tr>
-                    <td>{date_str}</td>
-                    <td>{pilot_amt}</td>
-                    <td>{actual_amt}</td>
-                    <td>{diff}</td>
-                    <td>{err}</td>
-                    <td><span class="status-badge {status_class}">{status_label}</span></td>
-                    <td><button class="btn btn-sm btn-secondary" hx-get="/api/refuels/{e.id}/edit" hx-target="#modal-container" hx-swap="innerHTML">Правка</button></td>
-                </tr>"""
-            html += "</tbody></table></div></div>"
+    grouped = _group_by_vehicle(entries)
+    total_pages = max(1, math.ceil(len(grouped) / PER_PAGE))
+    qparts = {"date_from": date_from or df.strftime("%Y-%m-%d"), "date_to": date_to or dt.strftime("%Y-%m-%d")}
+    if vehicle_id:
+        qparts["vehicle_id"] = vehicle_id
+    qs = "&".join(f"{k}={v}" for k, v in qparts.items())
+    html = _list_html(grouped, vmap, 1, total_pages, qs)
 
     if total_new:
         html += f'<div class="toast toast-success">Загружено {total_new} заправок</div>'
