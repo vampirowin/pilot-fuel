@@ -88,6 +88,7 @@ async def sync_refuels(
     days: int = Query(default=7),
     date_from: str = Query(default=None),
     date_to: str = Query(default=None),
+    vehicle_id: int = Query(default=None),
 ):
     token = request.session.get("token")
     node_id = request.session.get("node_id", 0)
@@ -110,12 +111,10 @@ async def sync_refuels(
     start_str = df.strftime("%d.%m.%Y 00:00")
     stop_str = dt.strftime("%d.%m.%Y 23:59")
 
-    vehicles = (await db.execute(
-        select(Vehicle).where(
-            Vehicle.is_active == True,
-            Vehicle.has_fuel_sensor == True,
-        )
-    )).scalars().all()
+    q = select(Vehicle).where(Vehicle.is_active == True, Vehicle.has_fuel_sensor == True)
+    if vehicle_id:
+        q = q.where(Vehicle.id == vehicle_id)
+    vehicles = (await db.execute(q)).scalars().all()
     if not vehicles:
         return HTMLResponse('<div class="card"><div class="empty-state"><p>Нет ТС для синхронизации.</p></div></div>')
 
@@ -128,21 +127,16 @@ async def sync_refuels(
     except Exception as e:
         return HTMLResponse(f'<div class="card"><div class="empty-state"><p>Ошибка Pilot API: {str(e)[:200]}</p></div></div>')
 
-    name_map = {}
-    for v in vehicles:
-        key = (v.plate_number or "").strip().lower()
-        if key:
-            name_map[key] = v
-        name_key = (v.name or "").strip().lower()
-        if name_key and name_key != key:
-            name_map[name_key] = v
-
     total_new = 0
     errors = []
 
     for ev in raw_events:
-        ev_name = (ev.get("name") or "").strip().lower()
-        v = name_map.get(ev_name)
+        ev_name_lower = (ev.get("name") or "").strip().lower()
+        v = None
+        for db_v in vehicles:
+            if db_v.plate_number and db_v.plate_number.strip().lower() in ev_name_lower:
+                v = db_v
+                break
         if not v:
             errors.append(f"ТС не найден: {ev.get('name', '?')}")
             continue
@@ -242,6 +236,11 @@ async def sync_refuels(
         html += f'<div class="toast toast-success">Загружено {total_new} заправок</div>'
     if errors:
         html += f'<div class="toast toast-warning">Ошибки: {"; ".join(errors[:3])}</div>'
+    if not total_new and raw_events:
+        names = "; ".join(e.get("name", "?")[:40] for e in raw_events[:5])
+        html += f'<div class="toast toast-warning">Pilot: {len(raw_events)} событий, ни одно не совпало. Имена: {names}</div>'
+    if raw_events:
+        html += f'<div class="toast toast-info">Всего от Pilot: {len(raw_events)} событий</div>'
 
     return HTMLResponse(html)
 
