@@ -11,50 +11,55 @@
   </div>
 </div>
 
+{% include "vehicles_search.html" %}
+
 <div id="vehicles-table">
-  {% if vehicles %}
-  <div class="card">
-    <div class="table-container">
-      <table>
-        <thead>
-          <tr>
-            <th>Госномер</th>
-            <th>Название</th>
-            <th>IMEI</th>
-            <th>Папка</th>
-            <th>Тип</th>
-            <th>Датчики</th>
-            <th>Действия</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for v in vehicles %}
-          <tr>
-            <td><strong>{{ v.plate_number or '—' }}</strong></td>
-            <td>{{ v.name or '—' }}</td>
-            <td style="font-family: monospace; font-size: 12px;">{{ v.imei or '—' }}</td>
-            <td>{{ v.folder or '—' }}</td>
-            <td>{{ v.vehicle_type or '—' }}</td>
-            <td>
-              <span class="status-badge {% if v.sensor_count > 0 %}status-normal{% else %}status-false-reading{% endif %}">
-                {{ v.sensor_count }} датч.
-              </span>
-            </td>
-            <td>
-              <a href="/refuels?vehicle_id={{ v.id }}" class="btn btn-sm btn-secondary">Заправки</a>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+  {% if groups %}
+    {% for group_name, vehicles in groups %}
+    <div class="card" style="margin-top: 16px;">
+      <div class="card-header" style="padding: 12px 20px; background: var(--bg-card-hover); border-bottom: 1px solid var(--border); font-weight: 600; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted);">
+        {{ group_name }} <span style="font-weight: 400; color: var(--text-dim);">({{ vehicles|length }})</span>
+      </div>
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Госномер</th>
+              <th>IMEI</th>
+              <th>Датчики</th>
+              <th>Заправки</th>
+              <th>Собственник</th>
+              <th>Площадка</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for v in vehicles %}
+            <tr>
+              <td style="color: var(--text-dim);">{{ loop.index }}</td>
+              <td><strong>{{ v.plate_number or '—' }}</strong></td>
+              <td style="font-family: monospace; font-size: 12px;">{{ v.imei or '—' }}</td>
+              <td>
+                <span class="status-badge {% if v.sensor_count > 0 %}status-normal{% else %}status-false-reading{% endif %}">
+                  {{ v.sensor_count }} датч.
+                </span>
+              </td>
+              <td><a href="/refuels?vehicle_id={{ v.id }}" class="btn btn-sm btn-secondary">Заправки</a></td>
+              <td>{{ v.owner or '—' }}</td>
+              <td>{{ v.location or '—' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     </div>
-  </div>
+    {% endfor %}
   {% else %}
   <div class="card">
     <div class="empty-state">
       <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
       <h3>Нет транспортных средств</h3>
-      <p>Нажмите «Синхронизировать», чтобы загрузить список ТС из Pilot.</p>
+      <p>{% if q %}Ничего не найдено по запросу «{{ q }}».{% else %}Нажмите «Синхронизировать», чтобы загрузить список ТС из Pilot.{% endif %}</p>
     </div>
   </div>
   {% endif %}

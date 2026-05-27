@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Request, Depends, HTTPException
 from fastapi.responses import HTMLResponse
-from sqlalchemy import select
+from fastapi.templating import Jinja2Templates
+from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.vehicle import Vehicle
@@ -9,50 +10,67 @@ from app.services.pilot_service import PilotService
 from app.dependencies import get_current_username
 
 router = APIRouter()
+templates = Jinja2Templates(directory="app/templates")
 
 
-def render_vehicles_table(vehicles: list) -> str:
-    if not vehicles:
-        return """<div class="card"><div class="empty-state">
-          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
-          <h3>Нет транспортных средств</h3>
-          <p>Нажмите «Синхронизировать», чтобы загрузить список ТС из Pilot.</p>
-        </div></div>"""
-
-    rows = ""
+def group_by_folder(vehicles: list) -> list:
+    groups = {}
     for v in vehicles:
-        plate = v.get("plate_number") or "—"
-        name = v.get("name") or "—"
-        imei = v.get("imei") or "—"
-        folder = v.get("folder") or "—"
-        vtype = v.get("vehicle_type") or "—"
-        s_count = len(v.get("sensors", []))
-        badge_class = "status-normal" if s_count > 0 else "status-false-reading"
-        rows += f"""<tr>
-            <td><strong>{plate}</strong></td>
-            <td>{name}</td>
-            <td style="font-family:monospace;font-size:12px">{imei}</td>
-            <td>{folder}</td>
-            <td>{vtype}</td>
-            <td><span class="status-badge {badge_class}">{s_count} датч.</span></td>
-            <td><a href="/refuels?vehicle_id={v["id"]}" class="btn btn-sm btn-secondary">Заправки</a></td>
-        </tr>"""
+        folder = v.get("folder") or "Без папки"
+        groups.setdefault(folder, []).append(v)
+    sorted_folders = sorted(groups.keys(), key=lambda x: (x == "Без папки", x))
+    return [(f, groups[f]) for f in sorted_folders]
 
-    return f"""<div class="card"><div class="table-container"><table>
-        <thead><tr>
-            <th>Госномер</th><th>Название</th><th>IMEI</th><th>Папка</th><th>Тип</th><th>Датчики</th><th>Действия</th>
-        </tr></thead>
-        <tbody>{rows}</tbody>
-    </table></div></div>"""
+
+def render_table_partial(vehicles: list, q: str = "") -> str:
+    if not vehicles:
+        empty_msg = f'<p>Ничего не найдено по запросу «{q}».</p>' if q else '<p>Нажмите «Синхронизировать», чтобы загрузить список ТС из Pilot.</p>'
+        return f'''<div class="card"><div class="empty-state">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+          <h3>Нет транспортных средств</h3>{empty_msg}</div></div>'''
+
+    groups = group_by_folder(vehicles)
+    html = ""
+    for group_name, group_vehicles in groups:
+        html += f'''<div class="card" style="margin-top: 16px;">
+          <div class="card-header" style="padding: 12px 20px; background: var(--bg-card-hover); border-bottom: 1px solid var(--border); font-weight: 600; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted);">
+            {group_name} <span style="font-weight: 400; color: var(--text-dim);">({len(group_vehicles)})</span>
+          </div>
+          <div class="table-container"><table>
+            <thead><tr>
+              <th>#</th><th>Госномер</th><th>IMEI</th><th>Датчики</th><th>Заправки</th><th>Собственник</th><th>Площадка</th>
+            </tr></thead>
+            <tbody>'''
+        for idx, v in enumerate(group_vehicles, 1):
+            sensor_badge_class = "status-normal" if v.get("sensor_count", 0) > 0 else "status-false-reading"
+            html += f'''<tr>
+              <td style="color: var(--text-dim);">{idx}</td>
+              <td><strong>{v.get("plate_number") or "—"}</strong></td>
+              <td style="font-family:monospace;font-size:12px">{v.get("imei") or "—"}</td>
+              <td><span class="status-badge {sensor_badge_class}">{v.get("sensor_count", 0)} датч.</span></td>
+              <td><a href="/refuels?vehicle_id={v["id"]}" class="btn btn-sm btn-secondary">Заправки</a></td>
+              <td>{v.get("owner") or "—"}</td>
+              <td>{v.get("location") or "—"}</td>
+            </tr>'''
+        html += "</tbody></table></div></div>"
+    return html
 
 
 @router.get("/vehicles", response_class=HTMLResponse)
 async def vehicles_page(
     request: Request,
+    q: str = "",
     _=Depends(get_current_username),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(select(Vehicle).where(Vehicle.is_active == True).order_by(Vehicle.plate_number))
+    query = select(Vehicle).where(Vehicle.is_active == True)
+    if q:
+        like = f"%{q}%"
+        query = query.where(
+            or_(Vehicle.plate_number.ilike(like), Vehicle.imei.ilike(like))
+        )
+    query = query.order_by(Vehicle.folder, Vehicle.plate_number)
+    result = await db.execute(query)
     db_vehicles = result.scalars().all()
 
     out = []
@@ -64,60 +82,53 @@ async def vehicles_page(
         out.append({
             "id": v.id,
             "plate_number": v.plate_number,
-            "name": v.name,
             "imei": v.imei,
             "folder": v.folder,
-            "vehicle_type": v.vehicle_type,
-            "sensor_count": len(sensors),
+            "sensor_count": len(sensors) if sensors else v.sensor_count,
+            "owner": v.owner,
+            "location": v.location,
         })
 
-    username = request.session.get("username", "")
-    return HTMLResponse(TABLE_PAGE.format(table=render_vehicles_table(out), username=username))
+    return templates.TemplateResponse(request, "vehicles.html", {
+        "q": q,
+        "groups": group_by_folder(out) if out else [],
+    })
 
-TABLE_PAGE = """<!DOCTYPE html>
-<html lang="ru">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>pilot-fuel — Транспорт</title>
-<script src="https://unpkg.com/htmx.org@2.0.4"></script>
-<link rel="stylesheet" href="/static/css/style.css">
-</head>
-<body>
-<div class="app-layout">
-  <aside class="sidebar">
-    <div class="sidebar-header">
-      <svg class="sidebar-logo" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 22V8l7-5v14l-7 5zM10 3l7 5v14l-7-5V3zM17 8l4 2v12l-4-2V8z"/></svg>
-      <span class="sidebar-title">pilot-fuel</span>
-    </div>
-    <nav class="sidebar-nav">
-      <a href="/" class="nav-item"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg><span>Главная</span></a>
-      <a href="/vehicles" class="nav-item active"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg><span>Транспорт</span></a>
-      <a href="/refuels" class="nav-item"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 22V8l7-5v14l-7 5zM10 3l7 5v14l-7-5V3zM17 8l4 2v12l-4-2V8z"/></svg><span>Заправки</span></a>
-      <a href="/critical" class="nav-item nav-item-warning"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><span>Критические</span></a>
-    </nav>
-    <div class="sidebar-footer">
-      <div class="sidebar-user">
-        <span>{username}</span>
-        <a href="/logout" class="nav-item logout-btn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg><span>Выйти</span></a>
-      </div>
-    </div>
-  </aside>
-  <main class="main-content">
-    <div class="page-header">
-      <h1>Транспортные средства</h1>
-      <div class="page-header-actions">
-        <button class="btn btn-primary" hx-post="/api/vehicles/sync" hx-target="#vehicles-table" hx-swap="innerHTML" hx-indicator="#sync-spinner">
-          <span class="btn-text">Синхронизировать</span>
-          <span class="btn-loading">Синхронизация...</span>
-        </button>
-      </div>
-    </div>
-    <div id="vehicles-table">{table}</div>
-  </main>
-</div>
-</body>
-</html>"""
+
+@router.get("/api/vehicles/search", response_class=HTMLResponse)
+async def search_vehicles(
+    request: Request,
+    q: str = "",
+    _=Depends(get_current_username),
+    db: AsyncSession = Depends(get_db),
+):
+    query = select(Vehicle).where(Vehicle.is_active == True)
+    if q:
+        like = f"%{q}%"
+        query = query.where(
+            or_(Vehicle.plate_number.ilike(like), Vehicle.imei.ilike(like))
+        )
+    query = query.order_by(Vehicle.folder, Vehicle.plate_number)
+    result = await db.execute(query)
+    db_vehicles = result.scalars().all()
+
+    out = []
+    for v in db_vehicles:
+        sensors_res = await db.execute(
+            select(FuelSensor).where(FuelSensor.vehicle_id == v.id, FuelSensor.is_active == True)
+        )
+        sensors = sensors_res.scalars().all()
+        out.append({
+            "id": v.id,
+            "plate_number": v.plate_number,
+            "imei": v.imei,
+            "folder": v.folder,
+            "sensor_count": len(sensors) if sensors else v.sensor_count,
+            "owner": v.owner,
+            "location": v.location,
+        })
+
+    return HTMLResponse(render_table_partial(out, q))
 
 
 @router.post("/api/vehicles/sync", response_class=HTMLResponse)
@@ -141,7 +152,10 @@ async def sync_vehicles(
         plate = pv.get("vehiclenumber", "")
         name = pv.get("name", "")
         folder = pv.get("folder", "")
-        vtype = pv.get("type", "")
+        owner = pv.get("vv_sobstv", "") or pv.get("owner", "")
+        location = pv.get("vv_ploshadka", "") or pv.get("location", "")
+        sensors = pv.get("sensors", {})
+        sensor_count = len(sensors) if isinstance(sensors, dict) else 0
 
         stmt = select(Vehicle).where(Vehicle.pilot_agent_id == agent_id)
         existing = (await db.execute(stmt)).scalar_one_or_none()
@@ -150,7 +164,9 @@ async def sync_vehicles(
             existing.plate_number = plate
             existing.name = name
             existing.folder = folder
-            existing.vehicle_type = vtype
+            existing.owner = owner
+            existing.location = location
+            existing.sensor_count = sensor_count
             existing.is_active = True
             vid = existing.id
         else:
@@ -160,7 +176,9 @@ async def sync_vehicles(
                 plate_number=plate,
                 name=name,
                 folder=folder,
-                vehicle_type=vtype,
+                owner=owner,
+                location=location,
+                sensor_count=sensor_count,
             )
             db.add(vehicle)
             await db.flush()
@@ -169,12 +187,12 @@ async def sync_vehicles(
         out.append({
             "id": vid,
             "plate_number": plate,
-            "name": name,
             "imei": imei,
             "folder": folder,
-            "vehicle_type": vtype,
-            "sensors": [],
+            "sensor_count": sensor_count,
+            "owner": owner,
+            "location": location,
         })
 
     await db.commit()
-    return HTMLResponse(render_vehicles_table(out))
+    return HTMLResponse(render_table_partial(out))
