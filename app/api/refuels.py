@@ -24,8 +24,27 @@ async def refuels_page(
 ):
     vehicle_id = request.query_params.get("vehicle_id")
     status_filter = request.query_params.get("status")
+    date_from_str = request.query_params.get("date_from")
+    date_to_str = request.query_params.get("date_to")
+    today = datetime.now().strftime("%Y-%m-%d")
+    seven_ago = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+
+    df_str = date_from_str or seven_ago
+    dt_str = date_to_str or today
 
     query = select(RefuelEntry).where(RefuelEntry.is_deleted == False)
+
+    try:
+        df = datetime.strptime(df_str, "%Y-%m-%d")
+        query = query.where(RefuelEntry.event_date >= df)
+    except ValueError:
+        pass
+    try:
+        dt = datetime.strptime(dt_str, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+        query = query.where(RefuelEntry.event_date <= dt)
+    except ValueError:
+        pass
+
     if vehicle_id:
         query = query.where(RefuelEntry.vehicle_id == int(vehicle_id))
     if status_filter:
@@ -39,12 +58,25 @@ async def refuels_page(
 
     vehicles_map = {v.id: {"plate_number": v.plate_number, "name": v.name} for v in all_vehicles}
 
+    today_str = today
+    days7_str = seven_ago
+    days14_str = (datetime.now() - timedelta(days=14)).strftime("%Y-%m-%d")
+    days30_str = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+    days1_str = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+
     return templates.TemplateResponse(request, "refuels.html", {
         "entries": entries,
         "all_vehicles": all_vehicles,
         "vehicles_map": vehicles_map,
         "selected_vehicle_id": int(vehicle_id) if vehicle_id else None,
         "selected_status": status_filter or "",
+        "date_from": df_str,
+        "date_to": dt_str,
+        "today_str": today_str,
+        "days1_str": days1_str,
+        "days7_str": days7_str,
+        "days14_str": days14_str,
+        "days30_str": days30_str,
     })
 
 

@@ -143,6 +143,8 @@ class PilotService:
     def _parse_refuel_report(self, raw: dict) -> list[dict]:
         events = []
         raw_data = raw.get("data", {})
+        if not isinstance(raw_data, dict):
+            return events
         for date_group, entries in raw_data.items():
             for ts_key, entry in entries.items():
                 if not isinstance(entry, list) or len(entry) < 6:

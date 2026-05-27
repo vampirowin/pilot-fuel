@@ -2,35 +2,49 @@
 {% block title %}pilot-fuel — Заправки{% endblock %}
 {% block head %}
 <script>
-function selectPeriod(chip, days) {
-  document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
-  chip.classList.add('active');
-  document.getElementById('period-days').disabled = false;
-  document.getElementById('period-days').value = days;
-  document.getElementById('period-date-from').disabled = true;
-  document.getElementById('period-date-to').disabled = true;
-  document.getElementById('custom-range').style.display = 'none';
+function qs(params) {
+  var p = new URLSearchParams(window.location.search);
+  for (var k in params) { p.set(k, params[k]); }
+  return '?' + p.toString();
 }
 
-function selectCustom(chip) {
-  document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
-  chip.classList.add('active');
-  document.getElementById('period-days').disabled = true;
-  document.getElementById('period-date-from').disabled = false;
-  document.getElementById('period-date-to').disabled = false;
-  document.getElementById('custom-range').style.display = 'flex';
+function goDate(from, to) {
+  window.location = qs({date_from: from, date_to: to});
 }
+
+function goCustom() {
+  var from = document.getElementById('period-date-from').value;
+  var to = document.getElementById('period-date-to').value;
+  if (from && to) { window.location = qs({date_from: from, date_to: to}); }
+}
+
+function daysAgo(n) {
+  var d = new Date();
+  d.setDate(d.getDate() - n);
+  return d.toISOString().split('T')[0];
+}
+
+function todayStr() { return new Date().toISOString().split('T')[0]; }
+
+function showCustom() { document.getElementById('custom-range').style.display = 'flex'; }
 
 document.addEventListener('DOMContentLoaded', function () {
-  var today = new Date();
-  var sevenAgo = new Date(today);
-  sevenAgo.setDate(today.getDate() - 7);
-  if (!document.getElementById('period-date-from').value) {
-    document.getElementById('period-date-from').value = sevenAgo.toISOString().split('T')[0];
-  }
-  if (!document.getElementById('period-date-to').value) {
-    document.getElementById('period-date-to').value = today.toISOString().split('T')[0];
-  }
+  var df = '{{ date_from }}';
+  var dt = '{{ date_to }}';
+  document.getElementById('period-date-from').value = df;
+  document.getElementById('period-date-to').value = dt;
+  var presets = [
+    df + ',' + dt + ':' + 'today_str',
+    df + ',' + dt + ':' + 'days1_str',
+    '{{ days7_str }},{{ today_str }}',
+    '{{ days14_str }},{{ today_str }}',
+    '{{ days30_str }},{{ today_str }}',
+  ];
+  var isPreset = presets.some(function(p) {
+    var parts = p.split(',');
+    return parts[0] === df && parts[1] === dt;
+  });
+  if (!isPreset) { showCustom(); }
 });
 </script>
 {% endblock %}
@@ -43,20 +57,22 @@ document.addEventListener('DOMContentLoaded', function () {
 </div>
 
 <form hx-post="/api/refuels/sync" hx-target="#refuels-list" hx-swap="innerHTML" class="sync-form">
-  <input type="hidden" id="period-days" name="days" value="7">
+  <input type="hidden" name="date_from" value="{{ date_from }}">
+  <input type="hidden" name="date_to" value="{{ date_to }}">
   <div class="period-selector">
     <div class="period-chips">
-      <button type="button" class="chip" onclick="selectPeriod(this, 0)">Сегодня</button>
-      <button type="button" class="chip" onclick="selectPeriod(this, 1)">Вчера</button>
-      <button type="button" class="chip active" onclick="selectPeriod(this, 7)">7 дней</button>
-      <button type="button" class="chip" onclick="selectPeriod(this, 14)">14 дней</button>
-      <button type="button" class="chip" onclick="selectPeriod(this, 30)">30 дней</button>
-      <button type="button" class="chip chip-custom" onclick="selectCustom(this)">Свой</button>
+      <button type="button" class="chip{% if date_from == date_to and date_from == today_str %} active{% endif %}" onclick="goDate(todayStr(), todayStr())">Сегодня</button>
+      <button type="button" class="chip{% if date_from == date_to and date_from == days1_str %} active{% endif %}" onclick="goDate(daysAgo(1), daysAgo(1))">Вчера</button>
+      <button type="button" class="chip{% if date_from == days7_str and date_to == today_str %} active{% endif %}" onclick="goDate(daysAgo(7), todayStr())">7 дней</button>
+      <button type="button" class="chip{% if date_from == days14_str and date_to == today_str %} active{% endif %}" onclick="goDate(daysAgo(14), todayStr())">14 дней</button>
+      <button type="button" class="chip{% if date_from == days30_str and date_to == today_str %} active{% endif %}" onclick="goDate(daysAgo(30), todayStr())">30 дней</button>
+      <button type="button" class="chip chip-custom" onclick="showCustom()">Свой</button>
     </div>
-    <div class="custom-date-range" id="custom-range">
-      <input type="date" id="period-date-from" name="date_from" disabled>
+    <div class="custom-date-range" id="custom-range" style="display:none">
+      <input type="date" id="period-date-from" value="{{ date_from }}">
       <span style="color:var(--text-dim);padding:0 4px;">—</span>
-      <input type="date" id="period-date-to" name="date_to" disabled>
+      <input type="date" id="period-date-to" value="{{ date_to }}">
+      <button type="button" class="btn btn-sm btn-primary" onclick="goCustom()">Применить</button>
     </div>
     <button type="submit" class="btn btn-secondary sync-btn">
       <span class="btn-text">Синхр. из Pilot</span>
@@ -68,7 +84,7 @@ document.addEventListener('DOMContentLoaded', function () {
 <div class="filters-bar">
   <div class="form-group">
     <label>Транспорт</label>
-    <select id="filter-vehicle" onchange="window.location='?vehicle_id='+this.value+'&status='+document.getElementById('filter-status').value">
+    <select id="filter-vehicle" onchange="window.location=qs({vehicle_id: this.value, status: document.getElementById('filter-status').value})">
       <option value="">Все ТС</option>
       {% for v in all_vehicles %}
       <option value="{{ v.id }}" {% if selected_vehicle_id == v.id %}selected{% endif %}>{{ v.plate_number or v.name }}</option>
@@ -77,7 +93,7 @@ document.addEventListener('DOMContentLoaded', function () {
   </div>
   <div class="form-group">
     <label>Статус</label>
-    <select id="filter-status" onchange="window.location='?status='+this.value+'&vehicle_id='+document.getElementById('filter-vehicle').value">
+    <select id="filter-status" onchange="window.location=qs({status: this.value, vehicle_id: document.getElementById('filter-vehicle').value})">
       <option value="">Все</option>
       <option value="normal" {% if selected_status == 'normal' %}selected{% endif %}>Норма</option>
       <option value="small_deviation" {% if selected_status == 'small_deviation' %}selected{% endif %}>Расхождение</option>
