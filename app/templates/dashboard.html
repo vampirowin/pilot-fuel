@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}pilot-fuel — Главная{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Главная</h1>
+  <div class="page-header-actions">
+    <a href="/vehicles" class="btn btn-primary">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+      Синхронизировать ТС
+    </a>
+  </div>
+</div>
+
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-label">Транспортные средства</div>
+    <div class="stat-value">{{ total_vehicles }}</div>
+    <div class="stat-sub">в системе Pilot</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Всего заправок</div>
+    <div class="stat-value">{{ total_refuels }}</div>
+    <div class="stat-sub">в базе данных</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Критические события</div>
+    <div class="stat-value" style="color: var(--critical);">{{ critical_count }}</div>
+    <div class="stat-sub">нет данных в Pilot</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Недопустимые расхождения</div>
+    <div class="stat-value" style="color: var(--danger);">{{ unacceptable_count }}</div>
+    <div class="stat-sub">требуют внимания</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <h2>Быстрые действия</h2>
+  </div>
+  <div class="card-body" style="display: flex; gap: 12px; flex-wrap: wrap;">
+    <a href="/refuels" class="btn btn-primary">Список заправок</a>
+    <a href="/critical" class="btn btn-secondary">Критические события</a>
+    <a href="/vehicles" class="btn btn-secondary">Транспортные средства</a>
+    {% if request.session.get('is_admin') %}
+    <a href="/admin" class="btn btn-secondary">Администрирование</a>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
