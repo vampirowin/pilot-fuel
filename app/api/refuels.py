@@ -1,4 +1,3 @@
-import math
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Request, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse
@@ -64,89 +63,102 @@ async def sync_refuels(
         raise HTTPException(status_code=401, detail="Not authenticated")
 
     pilot = PilotService()
-    now = datetime.now(timezone.utc)
+    now_local = datetime.now()
     if date_from and date_to:
         try:
-            df = datetime.strptime(date_from, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-            dt = datetime.strptime(date_to, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=timezone.utc)
-            ts_from = int(df.timestamp())
-            ts_to = int(dt.timestamp())
+            df = datetime.strptime(date_from, "%Y-%m-%d")
+            dt = datetime.strptime(date_to, "%Y-%m-%d")
         except ValueError:
-            ts_to = int(now.timestamp())
-            ts_from = int((now - timedelta(days=days)).timestamp())
+            df = now_local - timedelta(days=days)
+            dt = now_local
     else:
-        ts_to = int(now.timestamp())
-        ts_from = int((now - timedelta(days=days)).timestamp())
+        dt = now_local
+        df = now_local - timedelta(days=days)
+
+    start_str = df.strftime("%d.%m.%Y 00:00")
+    stop_str = dt.strftime("%d.%m.%Y 23:59")
 
     vehicles = (await db.execute(
         select(Vehicle).where(
             Vehicle.is_active == True,
             Vehicle.has_fuel_sensor == True,
-            Vehicle.imei.isnot(None),
         )
     )).scalars().all()
+    if not vehicles:
+        return HTMLResponse('<div class="card"><div class="empty-state"><p>Нет ТС для синхронизации.</p></div></div>')
+
+    veh_ids = [v.pilot_agent_id for v in vehicles if v.pilot_agent_id]
+    if not veh_ids:
+        return HTMLResponse('<div class="card"><div class="empty-state"><p>Нет ТС с agent_id.</p></div></div>')
+
+    try:
+        raw_events = await pilot.get_refuel_report(token, node_id, veh_ids, start_str, stop_str)
+    except Exception as e:
+        return HTMLResponse(f'<div class="card"><div class="empty-state"><p>Ошибка Pilot API: {str(e)[:200]}</p></div></div>')
+
+    name_map = {}
+    for v in vehicles:
+        key = (v.plate_number or "").strip().lower()
+        if key:
+            name_map[key] = v
+        name_key = (v.name or "").strip().lower()
+        if name_key and name_key != key:
+            name_map[name_key] = v
 
     total_new = 0
     errors = []
 
-    for v in vehicles:
-        try:
-            events = await pilot.get_fuel_report(token, node_id, v.imei, ts_from, ts_to)
-        except Exception as e:
-            errors.append(f"{v.plate_number or v.imei}: {str(e)[:80]}")
+    for ev in raw_events:
+        ev_name = (ev.get("name") or "").strip().lower()
+        v = name_map.get(ev_name)
+        if not v:
+            errors.append(f"ТС не найден: {ev.get('name', '?')}")
             continue
 
-        for ev in events:
-            ev_ts = _parse_timestamp(ev.get("it") or ev.get("ts") or ev.get("timestamp") or 0)
-            if not ev_ts:
-                continue
+        ev_ts = _parse_timestamp(ev.get("ts"))
+        if not ev_ts:
+            continue
 
-            amount = _parse_float(ev.get("v") or ev.get("val") or ev.get("amount") or ev.get("fuel"))
-            if not amount or amount <= 0:
-                continue
+        amount = ev.get("refuel_amount")
+        if not amount or amount <= 0:
+            continue
 
-            start_lvl = _parse_float(ev.get("fl"))
-            end_lvl = _parse_float(ev.get("fl2"))
-            odometer = _parse_float(ev.get("od") or ev.get("odometer"))
-            address = ev.get("ad") or ev.get("address") or ""
-            location_raw = ev.get("ll") or {}
-            lat = location_raw.get("lat") if isinstance(location_raw, dict) else None
-            lon = location_raw.get("lng") if isinstance(location_raw, dict) else None
+        start_lvl = ev.get("start_level")
+        end_lvl = ev.get("end_level")
 
-            existing = await db.execute(
-                select(PilotRefuel).where(
-                    PilotRefuel.vehicle_id == v.id,
-                    PilotRefuel.event_date >= ev_ts - timedelta(seconds=30),
-                    PilotRefuel.event_date <= ev_ts + timedelta(seconds=30),
-                )
+        existing = await db.execute(
+            select(PilotRefuel).where(
+                PilotRefuel.vehicle_id == v.id,
+                PilotRefuel.event_date >= ev_ts - timedelta(seconds=30),
+                PilotRefuel.event_date <= ev_ts + timedelta(seconds=30),
             )
-            if existing.scalar_one_or_none():
-                continue
+        )
+        if existing.scalar_one_or_none():
+            continue
 
-            pr = PilotRefuel(
-                vehicle_id=v.id,
-                event_date=ev_ts,
-                amount=amount,
-                start_level=start_lvl,
-                end_level=end_lvl,
-                odometer=odometer,
-                address=address[:500] if address else None,
-                lat=lat,
-                lon=lon,
-                raw_data=ev,
-            )
-            db.add(pr)
-            await db.flush()
+        pr = PilotRefuel(
+            vehicle_id=v.id,
+            event_date=ev_ts,
+            amount=amount,
+            start_level=start_lvl,
+            end_level=end_lvl,
+            address=(ev.get("address") or "")[:500],
+            lat=ev.get("lat"),
+            lon=ev.get("lon"),
+            raw_data=ev,
+        )
+        db.add(pr)
+        await db.flush()
 
-            refuel_entry = RefuelEntry(
-                vehicle_id=v.id,
-                pilot_refuel_id=pr.id,
-                event_date=ev_ts,
-                pilot_amount=amount,
-                source="pilot_sync",
-            )
-            db.add(refuel_entry)
-            total_new += 1
+        refuel_entry = RefuelEntry(
+            vehicle_id=v.id,
+            pilot_refuel_id=pr.id,
+            event_date=ev_ts,
+            pilot_amount=amount,
+            source="pilot_sync",
+        )
+        db.add(refuel_entry)
+        total_new += 1
 
     log = SyncLog(
         sync_type="refuels",
