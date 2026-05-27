@@ -1,7 +1,7 @@
 import asyncio
 import math
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Request, Depends, HTTPException, Query, Form
+from fastapi import APIRouter, Request, Depends, HTTPException, Query, Form, Path
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select, desc
@@ -10,6 +10,7 @@ from app.database import get_db
 from app.models.refuel_entry import RefuelEntry
 from app.models.pilot_refuel import PilotRefuel
 from app.models.vehicle import Vehicle
+from app.models.setting import Setting
 from app.models.sync_log import SyncLog
 from app.dependencies import get_current_username
 from app.services.pilot_service import PilotService
@@ -21,7 +22,8 @@ PER_PAGE = 10
 
 def _render_vehicle_group(vehicle_id: int, entries: list, vmap: dict) -> str:
     plate = vmap.get(vehicle_id, {}).get("plate_number", "—")
-    h = f'<div class="card vehicle-group"><h3 class="vehicle-group-title">{plate} <span class="vehicle-group-count">{len(entries)}</span></h3><div class="table-container"><table><thead><tr><th>Дата</th><th>Pilot (л)</th><th>Чек (л)</th><th>Разница</th><th>Погрешность</th><th>Статус</th><th>Действия</th></tr></thead><tbody>'
+    add_btn = f'<button class="btn btn-sm btn-secondary" hx-get="/api/refuels/add-form?vehicle_id={vehicle_id}" hx-target="#modal-container" hx-swap="innerHTML">+ Добавить</button>'
+    h = f'<div class="card vehicle-group"><h3 class="vehicle-group-title"><span>{plate} <span class="vehicle-group-count">{len(entries)}</span></span>{add_btn}</h3><div class="table-container"><table><thead><tr><th>Дата</th><th>Pilot (л)</th><th>Чек (л)</th><th>Разница</th><th>Погрешность</th><th>Статус</th><th>Действия</th></tr></thead><tbody>'
     for e in entries:
         sc = STATUS_MAP.get(e.comparison_status, "")
         sl = STATUS_LABELS.get(e.comparison_status, e.comparison_status or "—")
@@ -43,7 +45,7 @@ def _pagination_html(page: int, total: int, qs: str) -> str:
     qs_part = f"&{qs}" if qs else ""
     prev_url = f"/refuels?page={page-1}{qs_part}" if page > 1 else "#"
     next_url = f"/refuels?page={page+1}{qs_part}" if page < total else "#"
-    return f"""<div class="pagination"><button class="btn btn-sm {prev_d}" hx-get="{prev_url}" hx-target="#refuels-list" hx-push-url="true" {prev_d}>← Назад</button><span>стр. {page} из {total}</span><button class="btn btn-sm {next_d}" hx-get="{next_url}" hx-target="#refuels-list" hx-push-url="true" {next_d}>Вперед →</button></div>"""
+    return f"""<div class="pagination"><button class="chip {prev_d}" hx-get="{prev_url}" hx-target="#refuels-list" hx-push-url="true" {prev_d}>← Назад</button><span>стр. {page} из {total}</span><button class="chip {next_d}" hx-get="{next_url}" hx-target="#refuels-list" hx-push-url="true" {next_d}>Вперед →</button></div>"""
 
 
 def _list_html(grouped: list, vmap: dict, page: int, total: int, qs: str) -> str:
@@ -333,6 +335,220 @@ async def sync_refuels(
     if raw_events:
         html += f'<div class="toast toast-info">Всего от Pilot: {len(raw_events)} событий</div>'
 
+    return HTMLResponse(html)
+
+
+async def _get_thresholds(db: AsyncSession) -> tuple[float, float]:
+    n, w = 3.0, 10.0
+    rows = (await db.execute(select(Setting).where(Setting.key.in_(["normal_threshold", "warning_threshold"])))).scalars().all()
+    for s in rows:
+        if s.key == "normal_threshold":
+            n = float(s.value)
+        elif s.key == "warning_threshold":
+            w = float(s.value)
+    return n, w
+
+
+def _calc_comparison(pilot_amount: float | None, actual_amount: float | None, n_th: float, w_th: float) -> tuple:
+    if pilot_amount and actual_amount and pilot_amount > 0:
+        diff = actual_amount - pilot_amount
+        err = abs(diff) / pilot_amount * 100
+        status = "normal" if err <= n_th else ("small_deviation" if err <= w_th else "unacceptable")
+    else:
+        diff = None
+        err = None
+        status = "pilot_missing" if actual_amount else None
+    return diff, err, status
+
+
+@router.get("/api/refuels/add-form", response_class=HTMLResponse)
+async def add_refuel_form(
+    request: Request,
+    _=Depends(get_current_username),
+    db: AsyncSession = Depends(get_db),
+    vehicle_id: int = Query(...),
+):
+    vehicle = await db.get(Vehicle, vehicle_id)
+    all_v = (await db.execute(
+        select(Vehicle).where(Vehicle.is_active == True).order_by(Vehicle.plate_number)
+    )).scalars().all()
+    return templates.TemplateResponse(request, "add_refuel_modal.html", {
+        "vehicle": vehicle,
+        "all_vehicles": all_v,
+        "default_date": datetime.now().strftime("%Y-%m-%d"),
+        "default_time": datetime.now().strftime("%H:%M"),
+    })
+
+
+@router.post("/api/refuels/add", response_class=HTMLResponse)
+async def add_refuel(
+    request: Request,
+    _=Depends(get_current_username),
+    db: AsyncSession = Depends(get_db),
+    vehicle_id: int = Form(...),
+    event_date: str = Form(...),
+    event_time: str = Form(...),
+    actual_amount: float = Form(...),
+    receipt_number: str = Form(default=""),
+):
+    try:
+        dt = datetime.strptime(f"{event_date} {event_time}", "%Y-%m-%d %H:%M")
+    except ValueError:
+        dt = datetime.now()
+
+    n_th, w_th = await _get_thresholds(db)
+
+    nearby = await db.execute(
+        select(PilotRefuel).where(
+            PilotRefuel.vehicle_id == vehicle_id,
+            PilotRefuel.event_date >= dt - timedelta(hours=1),
+            PilotRefuel.event_date <= dt + timedelta(hours=1),
+        ).order_by(PilotRefuel.event_date)
+    )
+    nearby_refuel = nearby.scalar_one_or_none()
+
+    if nearby_refuel:
+        diff, err, status = _calc_comparison(nearby_refuel.amount, actual_amount, n_th, w_th)
+        pilot_refuel_id = nearby_refuel.id
+        pilot_amount = nearby_refuel.amount
+    else:
+        diff = err = None
+        status = "pilot_missing"
+        pilot_refuel_id = None
+        pilot_amount = None
+
+    entry = RefuelEntry(
+        vehicle_id=vehicle_id,
+        pilot_refuel_id=pilot_refuel_id,
+        event_date=dt,
+        pilot_amount=pilot_amount,
+        actual_amount=actual_amount,
+        receipt_number=receipt_number or None,
+        source="manual",
+        difference=diff,
+        error_percent=err,
+        comparison_status=status,
+    )
+    db.add(entry)
+
+    log = SyncLog(
+        sync_type="refuel_add",
+        status="completed",
+        records_affected=1,
+        details=f"manual add for vehicle {vehicle_id}",
+        created_by=request.session.get("username"),
+    )
+    db.add(log)
+    await db.commit()
+
+    today = datetime.now().strftime("%Y-%m-%d")
+    month_start = datetime.now().replace(day=1).strftime("%Y-%m-%d")
+    q = select(RefuelEntry).where(RefuelEntry.is_deleted == False)
+    try:
+        df = datetime.strptime(month_start, "%Y-%m-%d")
+        q = q.where(RefuelEntry.event_date >= df)
+        q = q.where(RefuelEntry.event_date <= datetime.now().replace(hour=23, minute=59, second=59))
+    except ValueError:
+        pass
+    q = q.order_by(desc(RefuelEntry.event_date))
+    entries = (await db.execute(q)).scalars().all()
+
+    all_v = (await db.execute(
+        select(Vehicle).where(Vehicle.is_active == True, Vehicle.has_fuel_sensor == True)
+    )).scalars().all()
+    vmap = {v.id: {"plate_number": v.plate_number, "name": v.name} for v in all_v}
+    grouped = _group_by_vehicle(entries)
+    total_pages = max(1, math.ceil(len(grouped) / PER_PAGE))
+    qparts = {"date_from": month_start, "date_to": today}
+    qs = "&".join(f"{k}={v}" for k, v in qparts.items())
+    html = _list_html(grouped, vmap, 1, total_pages, qs)
+    html += '<div class="toast toast-success">Заправка добавлена</div>'
+    return HTMLResponse(html)
+
+
+@router.get("/api/refuels/{entry_id}/edit", response_class=HTMLResponse)
+async def edit_refuel_form(
+    request: Request,
+    _=Depends(get_current_username),
+    db: AsyncSession = Depends(get_db),
+    entry_id: int = Path(...),
+):
+    entry = await db.get(RefuelEntry, entry_id)
+    if not entry or entry.is_deleted:
+        raise HTTPException(404, "Запись не найдена")
+    vehicle = await db.get(Vehicle, entry.vehicle_id)
+    all_v = (await db.execute(
+        select(Vehicle).where(Vehicle.is_active == True).order_by(Vehicle.plate_number)
+    )).scalars().all()
+    return templates.TemplateResponse(request, "edit_refuel_modal.html", {
+        "entry": entry,
+        "vehicle": vehicle,
+        "all_vehicles": all_v,
+        "default_date": entry.event_date.strftime("%Y-%m-%d") if entry.event_date else "",
+        "default_time": entry.event_date.strftime("%H:%M") if entry.event_date else "",
+    })
+
+
+@router.post("/api/refuels/{entry_id}/edit", response_class=HTMLResponse)
+async def edit_refuel(
+    request: Request,
+    _=Depends(get_current_username),
+    db: AsyncSession = Depends(get_db),
+    entry_id: int = Path(...),
+    actual_amount: float = Form(...),
+    receipt_number: str = Form(default=""),
+):
+    entry = await db.get(RefuelEntry, entry_id)
+    if not entry or entry.is_deleted:
+        raise HTTPException(404, "Запись не найдена")
+
+    n_th, w_th = await _get_thresholds(db)
+    entry.actual_amount = actual_amount
+    entry.receipt_number = receipt_number or None
+
+    pilot_amount = entry.pilot_amount
+    if entry.pilot_refuel_id and pilot_amount:
+        diff, err, status = _calc_comparison(pilot_amount, actual_amount, n_th, w_th)
+    else:
+        diff = err = None
+        status = "pilot_missing" if actual_amount else None
+
+    entry.difference = diff
+    entry.error_percent = err
+    entry.comparison_status = status
+
+    log = SyncLog(
+        sync_type="refuel_edit",
+        status="completed",
+        records_affected=1,
+        details=f"edited entry {entry_id}",
+        created_by=request.session.get("username"),
+    )
+    db.add(log)
+    await db.commit()
+
+    today = datetime.now().strftime("%Y-%m-%d")
+    month_start = datetime.now().replace(day=1).strftime("%Y-%m-%d")
+    q = select(RefuelEntry).where(RefuelEntry.is_deleted == False)
+    try:
+        df = datetime.strptime(month_start, "%Y-%m-%d")
+        q = q.where(RefuelEntry.event_date >= df)
+        q = q.where(RefuelEntry.event_date <= datetime.now().replace(hour=23, minute=59, second=59))
+    except ValueError:
+        pass
+    q = q.order_by(desc(RefuelEntry.event_date))
+    entries = (await db.execute(q)).scalars().all()
+
+    all_v = (await db.execute(
+        select(Vehicle).where(Vehicle.is_active == True, Vehicle.has_fuel_sensor == True)
+    )).scalars().all()
+    vmap = {v.id: {"plate_number": v.plate_number, "name": v.name} for v in all_v}
+    grouped = _group_by_vehicle(entries)
+    total_pages = max(1, math.ceil(len(grouped) / PER_PAGE))
+    qparts = {"date_from": month_start, "date_to": today}
+    qs = "&".join(f"{k}={v}" for k, v in qparts.items())
+    html = _list_html(grouped, vmap, 1, total_pages, qs)
+    html += '<div class="toast toast-success">Заправка обновлена</div>'
     return HTMLResponse(html)
 
 

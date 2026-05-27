@@ -1,0 +1,43 @@
+<div class="modal-overlay" onclick="if(event.target===this)this.remove()">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Добавить заправку</h2>
+      <button type="button" class="modal-close" onclick="this.closest('.modal-overlay').remove()">&times;</button>
+    </div>
+    <form hx-post="/api/refuels/add" hx-target="#refuels-list" hx-swap="innerHTML"
+          hx-on::after-request="if(event.detail.successful) this.closest('.modal-overlay').remove()">
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Транспорт</label>
+          <select name="vehicle_id">
+            {% for v in all_vehicles %}
+            <option value="{{ v.id }}" {% if vehicle and v.id == vehicle.id %}selected{% endif %}>{{ v.plate_number or v.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Дата</label>
+            <input type="date" name="event_date" value="{{ default_date }}" required>
+          </div>
+          <div class="form-group">
+            <label>Время</label>
+            <input type="time" name="event_time" value="{{ default_time }}" required>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Объём (л)</label>
+          <input type="number" name="actual_amount" step="0.1" min="0" required placeholder="0.0">
+        </div>
+        <div class="form-group">
+          <label>Номер чека</label>
+          <input type="text" name="receipt_number" placeholder="необязательно">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Отмена</button>
+        <button type="submit" class="btn btn-primary">Добавить</button>
+      </div>
+    </form>
+  </div>
+</div>

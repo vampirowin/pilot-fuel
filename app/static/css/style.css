@@ -749,6 +749,7 @@ tr:hover td {
 .vehicle-group-title {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
   padding: 14px 20px;
   font-size: 15px;
@@ -780,8 +781,8 @@ tr:hover td {
   color: var(--text-muted);
 }
 
-.pagination button[disabled] {
-  opacity: 0.4;
+.pagination .chip[disabled] {
+  opacity: 0.35;
   cursor: not-allowed;
   pointer-events: none;
 }
