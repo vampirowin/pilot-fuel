@@ -35,6 +35,39 @@
           <label>Номер чека</label>
           <input type="text" name="receipt_number" value="{{ entry.receipt_number or '' }}" placeholder="необязательно">
         </div>
+        {% if entry.is_false %}
+        <div class="form-group" style="margin-top:12px;padding:10px;background:#fef3cd;border-radius:6px;border:1px solid #ffc107">
+          <strong style="color:#856404">Отмечено как ложная</strong>
+          {% if entry.false_reason %}<p style="margin:4px 0 0;color:#856404;font-size:13px">Причина: {{ entry.false_reason }}</p>{% endif %}
+          <button type="button" class="btn btn-sm btn-secondary" style="margin-top:8px"
+                  hx-vals='{"page":{{ page }},"date_from":"{{ date_from }}","date_to":"{{ date_to }}"}'
+                  hx-post="/api/refuels/{{ entry.id }}/unmark-false"
+                  hx-target="#refuels-list" hx-swap="innerHTML"
+                  hx-on::after-request="if(event.detail.successful) this.closest('.modal-overlay').remove()">
+            Снять отметку «Ложная»
+          </button>
+        </div>
+        {% else %}
+        <div style="margin-top:12px">
+          <button type="button" class="btn btn-sm btn-secondary"
+                  hx-get="/api/refuels/{{ entry.id }}/mark-false-form?page={{ page }}&date_from={{ date_from }}&date_to={{ date_to }}"
+                  hx-target="#modal-container" hx-swap="innerHTML">
+            Отметить как ложную
+          </button>
+        </div>
+        {% endif %}
+        {% if is_admin or entry.source == "manual" %}
+        <div style="margin-top:12px">
+          <button type="button" class="btn btn-sm btn-danger"
+                  hx-vals='{"page":{{ page }},"date_from":"{{ date_from }}","date_to":"{{ date_to }}"}'
+                  hx-post="/api/refuels/{{ entry.id }}/delete"
+                  hx-target="#refuels-list" hx-swap="innerHTML"
+                  hx-confirm="Удалить запись из БД?"
+                  hx-on::after-request="if(event.detail.successful) this.closest('.modal-overlay').remove()">
+            Удалить запись
+          </button>
+        </div>
+        {% endif %}
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Отмена</button>

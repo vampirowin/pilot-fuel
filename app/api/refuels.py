@@ -21,7 +21,7 @@ templates = Jinja2Templates(directory="app/templates")
 PER_PAGE = 10
 
 
-def _render_vehicle_group(vehicle_id: int, entries: list, vmap: dict, page: int = 1, date_from: str = "", date_to: str = "", is_admin: bool = False) -> str:
+def _render_vehicle_group(vehicle_id: int, entries: list, vmap: dict, page: int = 1, date_from: str = "", date_to: str = "") -> str:
     plate = vmap.get(vehicle_id, {}).get("plate_number", "—")
     add_btn = f'<button class="btn btn-sm btn-secondary" hx-get="/api/refuels/add-form?vehicle_id={vehicle_id}" hx-target="#modal-container" hx-swap="innerHTML">+ Добавить</button>'
     h = f'<div class="card vehicle-group"><h3 class="vehicle-group-title"><span>{plate} <span class="vehicle-group-count">{len(entries)}</span></span>{add_btn}</h3><div class="table-container"><table><thead><tr><th>Дата</th><th>Pilot (л)</th><th>Чек (л)</th><th>Разница</th><th>Погрешность</th><th>Статус</th><th>Действия</th></tr></thead><tbody>'
@@ -38,15 +38,8 @@ def _render_vehicle_group(vehicle_id: int, entries: list, vmap: dict, page: int 
         df = f"{e.difference:.1f}" if e.difference is not None else "—"
         er = f"{e.error_percent:.1f}%" if e.error_percent is not None else "—"
         ds = e.event_date.strftime("%d.%m.%Y %H:%M") if e.event_date else "—"
-        actions = f'<button class="btn btn-sm btn-secondary" hx-get="/api/refuels/{e.id}/edit" hx-target="#modal-container" hx-swap="innerHTML">Правка</button>'
-        vals = json.dumps({"page": page, "date_from": date_from, "date_to": date_to})
-        if e.is_false:
-            actions += f'<button class="btn btn-sm btn-secondary" hx-vals=\'{vals}\' hx-post="/api/refuels/{e.id}/unmark-false" hx-target="#refuels-list" hx-swap="innerHTML" hx-confirm="Снять отметку «Ложная»?">✓ Ложная</button>'
-        else:
-            actions += f'<button class="btn btn-sm btn-secondary" hx-get="/api/refuels/{e.id}/mark-false-form?page={page}&date_from={date_from}&date_to={date_to}" hx-target="#modal-container" hx-swap="innerHTML">Ложная</button>'
-        if is_admin or e.source == "manual":
-            actions += f'<button class="btn btn-sm btn-danger" hx-vals=\'{vals}\' hx-post="/api/refuels/{e.id}/delete" hx-target="#refuels-list" hx-swap="innerHTML" hx-confirm="Удалить запись из БД?">Удалить</button>'
-        h += f"<tr{rc}><td>{ds}</td><td>{pa}</td><td>{aa}</td><td>{df}</td><td>{er}</td><td><span class=\"status-badge {sc}\">{sl}</span></td><td><div style=\"display:flex;gap:4px\">{actions}</div></td></tr>"
+        actions = f'<button class="btn btn-sm btn-secondary" hx-get="/api/refuels/{e.id}/edit?page={page}&date_from={date_from}&date_to={date_to}" hx-target="#modal-container" hx-swap="innerHTML">Правка</button>'
+        h += f"<tr{rc}><td>{ds}</td><td>{pa}</td><td>{aa}</td><td>{df}</td><td>{er}</td><td><span class=\"status-badge {sc}\">{sl}</span></td><td>{actions}</td></tr>"
     h += "</tbody></table></div></div>"
     return h
 
@@ -62,13 +55,13 @@ def _pagination_html(page: int, total: int, qs: str) -> str:
     return f"""<div class="pagination"><button class="chip {prev_d}" hx-get="{prev_url}" hx-target="#refuels-list" hx-push-url="true" {prev_d}>← Назад</button><span>стр. {page} из {total}</span><button class="chip {next_d}" hx-get="{next_url}" hx-target="#refuels-list" hx-push-url="true" {next_d}>Вперед →</button></div>"""
 
 
-def _list_html(grouped: list, vmap: dict, page: int, total: int, qs: str, date_from: str = "", date_to: str = "", is_admin: bool = False) -> str:
+def _list_html(grouped: list, vmap: dict, page: int, total: int, qs: str, date_from: str = "", date_to: str = "") -> str:
     if not grouped:
         return '<div class="card"><div class="empty-state"><p>Нет заправок.</p></div></div>'
     start = (page - 1) * PER_PAGE
     h = ""
     for vid, entries in grouped[start:start + PER_PAGE]:
-        h += _render_vehicle_group(vid, entries, vmap, page, date_from, date_to, is_admin)
+        h += _render_vehicle_group(vid, entries, vmap, page, date_from, date_to)
     h += _pagination_html(page, total, qs)
     return h
 
@@ -128,8 +121,7 @@ async def refuels_page(
         qparts["status"] = status_filter
     qs = "&".join(f"{k}={v}" for k, v in qparts.items())
 
-    is_admin = request.session.get("is_admin", False)
-    rendered = _list_html(grouped, vmap, page, total_pages, qs, df_str, dt_str, is_admin)
+    rendered = _list_html(grouped, vmap, page, total_pages, qs, df_str, dt_str)
 
     is_hx = request.headers.get("hx-request") == "true"
     if is_hx:
@@ -340,8 +332,7 @@ async def sync_refuels(
     if vehicle_id:
         qparts["vehicle_id"] = vehicle_id
     qs = "&".join(f"{k}={v}" for k, v in qparts.items())
-    is_admin = request.session.get("is_admin", False)
-    html = _list_html(grouped, vmap, 1, total_pages, qs, qf, qt, is_admin)
+    html = _list_html(grouped, vmap, 1, total_pages, qs, qf, qt)
 
     if total_new:
         html += f'<div class="toast toast-success">Загружено {total_new} заправок</div>'
@@ -479,8 +470,7 @@ async def add_refuel(
     total_pages = max(1, math.ceil(len(grouped) / PER_PAGE))
     qparts = {"date_from": month_start, "date_to": today}
     qs = "&".join(f"{k}={v}" for k, v in qparts.items())
-    is_admin = request.session.get("is_admin", False)
-    html = _list_html(grouped, vmap, 1, total_pages, qs, month_start, today, is_admin)
+    html = _list_html(grouped, vmap, 1, total_pages, qs, month_start, today)
     html += '<div class="toast toast-success">Заправка добавлена</div>'
     return HTMLResponse(html)
 
@@ -491,6 +481,9 @@ async def edit_refuel_form(
     _=Depends(get_current_username),
     db: AsyncSession = Depends(get_db),
     entry_id: int = Path(...),
+    page: int = Query(default=1),
+    date_from: str = Query(default=""),
+    date_to: str = Query(default=""),
 ):
     entry = await db.get(RefuelEntry, entry_id)
     if not entry or entry.is_deleted:
@@ -503,6 +496,10 @@ async def edit_refuel_form(
         "entry": entry,
         "vehicle": vehicle,
         "all_vehicles": all_v,
+        "page": page,
+        "date_from": date_from,
+        "date_to": date_to,
+        "is_admin": request.session.get("is_admin", False),
         "default_date": entry.event_date.strftime("%Y-%m-%d") if entry.event_date else "",
         "default_time": entry.event_date.strftime("%H:%M") if entry.event_date else "",
     })
@@ -566,8 +563,7 @@ async def edit_refuel(
     total_pages = max(1, math.ceil(len(grouped) / PER_PAGE))
     qparts = {"date_from": month_start, "date_to": today}
     qs = "&".join(f"{k}={v}" for k, v in qparts.items())
-    is_admin = request.session.get("is_admin", False)
-    html = _list_html(grouped, vmap, 1, total_pages, qs, month_start, today, is_admin)
+    html = _list_html(grouped, vmap, 1, total_pages, qs, month_start, today)
     html += '<div class="toast toast-success">Заправка обновлена</div>'
     return HTMLResponse(html)
 
@@ -719,8 +715,7 @@ async def _refresh_list(request: Request, db: AsyncSession, page: int, date_from
         qparts["date_from"] = df_str
         qparts["date_to"] = dt_str
     qs = "&".join(f"{k}={v}" for k, v in qparts.items())
-    is_admin = request.session.get("is_admin", False)
-    html = _list_html(grouped, vmap, page, total_pages, qs, df_str, dt_str, is_admin)
+    html = _list_html(grouped, vmap, page, total_pages, qs, df_str, dt_str)
     return HTMLResponse(html)
 
 
