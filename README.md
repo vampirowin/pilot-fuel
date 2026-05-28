@@ -9,16 +9,17 @@
 | Функция | Описание |
 |---|---|
 | **Авторизация** | Вход через Pilot API или локальный суперадмин |
-| **Панель управления** | Общая статистика и счётчики критических событий |
-| **Транспортные средства** | Иерархия Компания → Площадка → Папка с коллапсами, группировка ТС |
-| **Заправки** | Иерархия Компания → Площадка → Папка → ТС, данные Pilot vs чек, погрешность |
-| **Синхронизация** | Двухфазная (preview + apply): классификация конфликтов, замена/пропуск |
-| **Ручной ввод** | Добавление заправок с авто-подбором Pilot-данных |
-| **Разметка «Ложная»** | Отметка ошибочных показаний с указанием причины |
-| **Графики** | Визуализация показаний датчика уровня топлива (Chart.js) |
-| **Пороги точности** | Настраиваемые: норма (≤3%), предупреждение (≤10%), критично (>10%) |
+| **Панель управления** | Статистика, счётчики критических, графики (Chart.js) |
+| **Транспорт** | Иерархия Компания → Площадка → Тип ТС с коллапсами, цветные бейджи, поиск, bulk-операции |
+| **Заправки** | Иерархия Компания → Площадка → Тип ТС → ТС, данные Pilot vs чек, погрешность, статус |
+| **Синхронизация** | Двухфазная (preview + apply): классификация конфликтов (new/conflict/identical), замена/пропуск |
+| **Ручной ввод** | Добавление заправок с авто-подбором Pilot, отслеживание `created_by` |
+| **Фильтры** | По компании (superadmin), площадке, типу ТС, статусу, дате, госномеру |
+| **Разметка «Ложная»** | Отметка ошибочных показаний в модалке |
+| **Пороги точности** | Настраиваемые: норма, предупреждение, критично |
 | **Multi-tenant** | Компании, площадки, роли (superadmin / company_admin / user) |
-| **Блокировка** | Отключение доступа пользователя из админки без удаления |
+| **Блокировка** | Отключение доступа без удаления |
+| **ТС без датчиков** | Отдельная страница с иерархией и bulk-возвратом |
 
 ---
 
@@ -54,7 +55,8 @@ cd pilot-fuel
 
 # Виртуальное окружение
 python -m venv venv
-.\venv\Scripts\activate    # Windows
+source venv/bin/activate    # Linux
+.\venv\Scripts\activate     # Windows
 
 # Зависимости
 pip install -r requirements.txt
@@ -68,7 +70,7 @@ cp .env.example .env
 ```env
 DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/pilot_fuel
 SECRET_KEY=your-secret-key
-APP_PORT=9000
+APP_PORT=9001
 ```
 
 ### База данных
@@ -88,7 +90,7 @@ python seed.py
 
 ```bash
 python run.py
-# → http://localhost:9000
+# → http://localhost:9001
 ```
 
 ---
@@ -108,10 +110,10 @@ python run.py
 ```
 pilot-fuel/
 ├── app/
-│   ├── api/            # Маршруты (auth, vehicles, refuels, admin)
+│   ├── api/            # Маршруты (auth, vehicles, refuels, admin, main)
 │   ├── models/         # SQLAlchemy модели (9 шт.)
 │   ├── services/       # Сервисы (Pilot API client)
-│   ├── templates/      # Jinja2 шаблоны
+│   ├── templates/      # Jinja2 шаблоны (20+)
 │   ├── static/         # CSS, JS
 │   ├── __init__.py     # FastAPI app factory
 │   ├── config.py       # Настройки
@@ -119,7 +121,9 @@ pilot-fuel/
 ├── alembic/            # Миграции БД
 ├── run.py              # Точка входа
 ├── requirements.txt
-└── .env
+├── seed.py             # Сидирование
+├── MEMORY.md           # Памятка
+└── AGENTS.md           # Правила для AI
 ```
 
 ---
@@ -129,14 +133,14 @@ pilot-fuel/
 ```
 client_accounts    — id, name
 sites              — id, client_account_id (FK), name
-users              — id, username, role, client_account_id (FK), site_id (FK), is_active
-vehicles           — id, pilot_agent_id, imei, plate_number, folder,
-                     client_account_id (FK), site_id (FK), sensor_count, has_fuel_sensor
-fuel_sensors       — id, vehicle_id (FK), pilot_sensor_id, tag_id, is_active
-pilot_refuels      — id, vehicle_id (FK), event_date, amount, sensor_levels, address
-refuel_entries     — id, vehicle_id (FK), pilot_amount, actual_amount,
-                     difference, error_percent, comparison_status,
-                     is_false, is_deleted
+users              — id, username, role, pilot_token, client_account_id (FK), site_id (FK), is_active
+vehicles           — id, pilot_agent_id, imei, plate_number, name, folder,
+                     sensor_count, has_fuel_sensor, client_account_id (FK), site_id (FK)
+fuel_sensors       — id, vehicle_id (FK), pilot_sensor_id, name, tag_id, unit, is_active
+pilot_refuels      — id, vehicle_id (FK), event_date, amount, start_level, end_level, address
+refuel_entries     — id, vehicle_id (FK), pilot_refuel_id (FK), event_date, pilot_amount,
+                     actual_amount, receipt_number, source, difference, error_percent,
+                     comparison_status, is_false, false_reason, is_deleted, created_by
 settings           — id, key, value (норма 3%, предупреждение 10%)
 sync_log           — id, vehicle_id, sync_type, status, records_affected, details
 ```
@@ -150,9 +154,9 @@ sync_log           — id, vehicle_id, sync_type, status, records_affected, deta
 | Маршрут | Описание |
 |---|---|
 | `GET /` | Панель управления |
-| `GET /vehicles` | Список ТС (иерархия) |
+| `GET /vehicles` | Список ТС (иерархия + поиск) |
 | `GET /refuels` | Заправки (иерархия + фильтры) |
-| `GET /critical` | Критические события |
+| `GET /critical` | Критические события (иерархия) |
 | `GET /admin/*` | Администрирование |
 | `POST /logout` | Выход |
 
@@ -161,15 +165,20 @@ sync_log           — id, vehicle_id, sync_type, status, records_affected, deta
 | Маршрут | Описание |
 |---|---|
 | `POST /api/vehicles/sync` | Синхронизация ТС из Pilot |
-| `POST /api/refuels/sync/preview` | Предпросмотр синхронизации заправок |
+| `GET /api/vehicles/search` | Поиск ТС (HTMX) |
+| `POST /api/vehicles/{id}/toggle-sensor` | Переключить датчик ТС |
+| `POST /api/vehicles/bulk-remove-sensor` | Bulk: убрать датчики |
+| `POST /api/refuels/sync/preview` | Предпросмотр синхронизации |
 | `POST /api/refuels/sync/apply` | Применить синхронизацию |
 | `POST /api/refuels/add` | Ручная заправка |
-| `GET/POST /api/refuels/{id}/edit` | Редактирование заправки |
-| `POST /api/refuels/{id}/mark-false` | Отметить как ложную |
+| `GET/POST /api/refuels/{id}/edit` | Редактирование |
+| `POST /api/refuels/{id}/mark-false` | Отметить ложной |
 | `POST /api/refuels/{id}/unmark-false` | Снять отметку |
-| `POST /api/refuels/{id}/delete` | Удалить запись |
+| `POST /api/refuels/{id}/delete` | Удалить |
 | `GET /api/critical-count` | Счётчик критических |
-| `GET /api/admin/companies/{id}/sites` | Список площадок компании |
+| `GET /api/admin/vehicles-no-sensor` | ТС без датчиков |
+| `GET /api/admin/vehicles-no-sensor/search` | Поиск среди ТС без датчиков |
+| `POST /api/admin/vehicles-no-sensor/bulk-restore` | Bulk: вернуть датчики |
 
 ---
 
