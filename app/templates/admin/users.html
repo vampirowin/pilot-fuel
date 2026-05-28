@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}pilot-fuel — Пользователи{% endblock %}
+{% block title %}UI fuel — Пользователи{% endblock %}
 {% block content %}
 <div class="page-header">
   <h1>Пользователи</h1>
@@ -9,7 +9,7 @@
     <table>
       <thead>
         <tr>
-          <th>ID</th><th>Логин</th><th>Роль</th><th>Компания</th><th>Площадка</th><th>Последний вход</th><th>Действия</th>
+          <th>ID</th><th>Логин</th><th>Роль</th><th>Компания</th><th>Площадка</th><th>Статус</th><th>Последний вход</th><th>Действия</th>
         </tr>
       </thead>
       <tbody>
@@ -28,6 +28,7 @@
           </td>
           <td>{{ companies.get(u.client_account_id, '—') }}</td>
           <td>{{ u.site_id or '—' }}</td>
+          <td>{% if u.is_active %}<span class="status-badge status-normal">активен</span>{% else %}<span class="status-badge status-false-reading">заблокирован</span>{% endif %}</td>
           <td>{{ u.last_login.strftime('%d.%m.%Y %H:%M') if u.last_login else '—' }}</td>
           <td>
             <a href="/admin/users/{{ u.id }}/edit" class="btn btn-sm btn-secondary">Правка</a>
@@ -39,7 +40,7 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="7" style="text-align:center;color:var(--text-dim)">Нет пользователей</td></tr>
+        <tr><td colspan="8" style="text-align:center;color:var(--text-dim)">Нет пользователей</td></tr>
         {% endfor %}
       </tbody>
     </table>

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}pilot-fuel — Заправки{% endblock %}
+{% block title %}UI fuel — Заправки{% endblock %}
 {% block head %}
 <script>
 function qs(params, keepPage) {
@@ -81,7 +81,10 @@ document.addEventListener('DOMContentLoaded', function () {
 <div class="page-header">
   <h1>Заправки</h1>
   <div class="page-header-actions">
+    {% set role = request.session.get('role') %}
+    {% if role in ('superadmin', 'company_admin') %}
     <button class="btn btn-secondary" hx-get="/api/refuels/sync-modal" hx-target="#modal-container" hx-swap="innerHTML">Синхр. из Pilot</button>
+    {% endif %}
   </div>
 </div>
 

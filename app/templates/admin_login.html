@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>pilot-fuel — вход администратора</title>
+<title>UI fuel — вход администратора</title>
 <script src="https://unpkg.com/htmx.org@2.0.4"></script>
 <link rel="stylesheet" href="/static/css/style.css">
 </head>
@@ -15,8 +15,11 @@
         <path d="M3 22V8l7-5v14l-7 5zM10 3l7 5v14l-7-5V3zM17 8l4 2v12l-4-2V8z"/>
       </svg>
     </div>
-    <h1 class="login-title">pilot-fuel</h1>
+    <h1 class="login-title">UI fuel</h1>
     <p class="login-subtitle">Администратор</p>
+    {% if error %}
+    <div class="alert alert-error" style="margin-bottom:12px;text-align:center">{{ error }}</div>
+    {% endif %}
     <form action="/admin/login" method="POST" hx-post="/admin/login" hx-target="body" hx-push-url="true">
       <div class="form-group">
         <label for="username">Логин</label>

@@ -386,6 +386,7 @@ async def edit_user(
     role: str = Form(...),
     client_account_id: int = Form(default=0),
     site_id: int = Form(default=0),
+    is_active: str = Form(default=""),
 ):
     target = await db.get(User, user_id)
     if not target:
@@ -393,6 +394,7 @@ async def edit_user(
     target.role = role
     target.client_account_id = client_account_id if client_account_id > 0 else None
     target.site_id = site_id if site_id > 0 else None
+    target.is_active = is_active == "1"
     await db.commit()
     return RedirectResponse(url="/admin/users", status_code=302)
 

@@ -17,7 +17,8 @@ templates = Jinja2Templates(directory="app/templates")
 async def login_page(request: Request):
     if request.session.get("username"):
         return RedirectResponse(url="/", status_code=302)
-    return templates.TemplateResponse(request, "login.html")
+    error = request.query_params.get("error", "")
+    return templates.TemplateResponse(request, "login.html", {"error": error})
 
 
 @router.post("/login")
@@ -27,13 +28,13 @@ async def login(request: Request, db: AsyncSession = Depends(get_db)):
     password = form.get("password", "")
 
     if not username or not password:
-        return HTMLResponse("Логин и пароль обязательны", status_code=400)
+        return templates.TemplateResponse(request, "login.html", {"error": "Логин и пароль обязательны"})
 
     service = PilotService()
     try:
         result = await service.login(username, password)
     except Exception as e:
-        return HTMLResponse(f"Ошибка: {e}", status_code=401)
+        return templates.TemplateResponse(request, "login.html", {"error": f"Ошибка: {e}"})
 
     token = result.get("token")
     node_id = result.get("node_id", 0)
@@ -45,6 +46,8 @@ async def login(request: Request, db: AsyncSession = Depends(get_db)):
     stmt = select(User).where(User.username == username)
     user = (await db.execute(stmt)).scalar_one_or_none()
     if user:
+        if not user.is_active:
+            return templates.TemplateResponse(request, "login.html", {"error": "Пользователь заблокирован. Обратитесь к администратору."})
         user.pilot_token = token
         user.pilot_node_id = node_id
         user.last_login = datetime.now()
@@ -74,7 +77,8 @@ async def superadmin_login_page(request: Request):
     if request.session.get("username") and request.session.get("role") == "superadmin":
         return RedirectResponse(url="/admin/users", status_code=302)
     from app.config import get_settings
-    return templates.TemplateResponse(request, "admin_login.html")
+    error = request.query_params.get("error", "")
+    return templates.TemplateResponse(request, "admin_login.html", {"error": error})
 
 
 @router.post("/admin/login")
@@ -87,10 +91,10 @@ async def superadmin_login(request: Request, db: AsyncSession = Depends(get_db))
     password = form.get("password", "")
 
     if not username or not password:
-        return HTMLResponse("Логин и пароль обязательны", status_code=400)
+        return templates.TemplateResponse(request, "admin_login.html", {"error": "Логин и пароль обязательны"})
 
     if username != settings.superadmin_username or password != settings.superadmin_password:
-        return HTMLResponse("Неверный логин или пароль", status_code=401)
+        return templates.TemplateResponse(request, "admin_login.html", {"error": "Неверный логин или пароль"})
 
     stmt = select(User).where(User.username == username)
     user = (await db.execute(stmt)).scalar_one_or_none()

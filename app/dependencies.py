@@ -22,6 +22,9 @@ async def get_current_user(
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=302, headers={"Location": "/login"})
+    if not user.is_active:
+        request.session.clear()
+        raise HTTPException(status_code=302, headers={"Location": "/login?error=blocked"})
     return user
 
 
@@ -43,9 +46,7 @@ def apply_vehicle_filter(query, user: User, model_vehicle=Vehicle):
     if user.client_account_id:
         query = query.where(model_vehicle.client_account_id == user.client_account_id)
         if user.site_id:
-            query = query.where(
-                (model_vehicle.site_id == user.site_id) | (model_vehicle.site_id.is_(None))
-            )
+            query = query.where(model_vehicle.site_id == user.site_id)
     else:
         query = query.where(False)
     return query
@@ -57,9 +58,7 @@ def apply_refuel_filter(query, user: User, refuel_model, vehicle_model=Vehicle):
     from sqlalchemy import select as sel
     sq = sel(vehicle_model.id).where(vehicle_model.client_account_id == user.client_account_id)
     if user.site_id:
-        sq = sq.where(
-            (vehicle_model.site_id == user.site_id) | (vehicle_model.site_id.is_(None))
-        )
+        sq = sq.where(vehicle_model.site_id == user.site_id)
     elif user.client_account_id is None:
         sq = sq.where(False)
     return query.where(refuel_model.vehicle_id.in_(sq))

@@ -12,6 +12,7 @@ from app.models.refuel_entry import RefuelEntry
 from app.models.pilot_refuel import PilotRefuel
 from app.models.vehicle import Vehicle
 from app.models.client_account import ClientAccount
+from app.models.site import Site
 from app.models.setting import Setting
 from app.models.sync_log import SyncLog
 from app.dependencies import get_current_user, apply_refuel_filter, apply_vehicle_filter
@@ -22,9 +23,97 @@ templates = Jinja2Templates(directory="app/templates")
 PER_PAGE = 10
 
 
+def build_refuel_hierarchy(entries: list, vmap: dict) -> list:
+    tree = {}
+    for entry in entries:
+        vin = vmap.get(entry.vehicle_id, {})
+        cname = vin.get("company") or "Без компании"
+        sname = vin.get("site") or "Без площадки"
+        folder = vin.get("folder") or "Без папки"
+        plate = vin.get("plate_number") or "—"
+        tree.setdefault(cname, {}).setdefault(sname, {}).setdefault(folder, {}).setdefault(
+            entry.vehicle_id, {"plate": plate, "entries": []}
+        )["entries"].append(entry)
+
+    result = []
+    for cname in sorted(tree.keys(), key=lambda x: (x == "Без компании", x)):
+        site_names = list(tree[cname].keys())
+        all_placeholder = all(s == "Без площадки" for s in site_names)
+        ctotal = 0
+        if all_placeholder:
+            flat = []
+            for sname in site_names:
+                for fname, vdata in tree[cname][sname].items():
+                    for vid, vd in vdata.items():
+                        flat.append((vid, vd["plate"], vd["entries"]))
+            ctotal = sum(len(v[2]) for v in flat)
+            result.append((cname, ctotal, [("__flat__", 0, [("__flat__", ctotal, flat)])]))
+        else:
+            sites = []
+            for sname in sorted(site_names, key=lambda x: (x == "Без площадки", x)):
+                folder_names = list(tree[cname][sname].keys())
+                all_f_placeholder = all(f == "Без папки" for f in folder_names)
+                stotal = 0
+                if all_f_placeholder:
+                    flat = []
+                    for fname in folder_names:
+                        for vid, vd in tree[cname][sname][fname].items():
+                            flat.append((vid, vd["plate"], vd["entries"]))
+                    stotal = sum(len(v[2]) for v in flat)
+                    sites.append((sname, stotal, [("__flat__", stotal, flat)]))
+                else:
+                    folders = []
+                    for fname in sorted(folder_names, key=lambda x: (x == "Без папки", x)):
+                        vl = [(vid, vd["plate"], vd["entries"]) for vid, vd in sorted(tree[cname][sname][fname].items())]
+                        ft = sum(len(v[2]) for v in vl)
+                        folders.append((fname, ft, vl))
+                        stotal += ft
+                    sites.append((sname, stotal, folders))
+                ctotal += stotal
+            result.append((cname, ctotal, sites))
+    return result
+
+
+def _render_refuel_hierarchy(nested_groups: list, vmap: dict, user_role: str, page: int = 1, date_from: str = "", date_to: str = "") -> str:
+    if not nested_groups:
+        return '<div class="card"><div class="empty-state"><p>Нет заправок.</p></div></div>'
+    html = ""
+    cidx = 0
+    for cname, ctotal, sites in nested_groups:
+        cidx += 1
+        cid = f"rc-{cidx}"
+        html += f'<div class="card level-company" style="margin-top:16px"><div class="card-header collapsible-header" onclick="toggleGroup(\'{cid}\')"><span class="arrow">&#9660;</span><span class="level-badge level-badge-company">{cname}</span><span class="level-count">({ctotal})</span></div><div class="collapsible-body" id="{cid}">'
+        sidx = 0
+        for sname, stotal, folders in sites:
+            sidx += 1
+            if sname == "__flat__":
+                for fname, ftotal, vehicles_list in folders:
+                    for vid, plate, entries in vehicles_list:
+                        html += _render_vehicle_group(vid, entries, vmap, page, date_from, date_to, user_role)
+            else:
+                sid = f"rs-{cidx}-{sidx}"
+                html += f'<div class="card level-site" style="margin-top:8px"><div class="card-header collapsible-header" onclick="toggleGroup(\'{sid}\')"><span class="arrow">&#9660;</span><span class="level-badge level-badge-site">{sname}</span><span class="level-count">({stotal})</span></div><div class="collapsible-body" id="{sid}">'
+                fidx = 0
+                for fname, ftotal, vehicles_list in folders:
+                    fidx += 1
+                    if fname == "__flat__":
+                        for vid, plate, entries in vehicles_list:
+                            html += _render_vehicle_group(vid, entries, vmap, page, date_from, date_to, user_role)
+                    else:
+                        fid = f"rf-{cidx}-{sidx}-{fidx}"
+                        html += f'<div class="level-folder" style="margin:4px 0;border:1px solid var(--border);border-radius:6px"><div class="collapsible-header" onclick="toggleGroup(\'{fid}\')"><span class="arrow">&#9660;</span><span class="level-badge level-badge-folder">{fname}</span><span class="level-count">({ftotal})</span></div><div class="collapsible-body" id="{fid}">'
+                        for vid, plate, entries in vehicles_list:
+                            html += _render_vehicle_group(vid, entries, vmap, page, date_from, date_to, user_role)
+                        html += '</div></div>'
+                html += '</div></div>'
+        html += '</div></div>'
+    return html
+
+
 def _render_vehicle_group(vehicle_id: int, entries: list, vmap: dict, page: int = 1, date_from: str = "", date_to: str = "", user_role: str = "user") -> str:
     plate = vmap.get(vehicle_id, {}).get("plate_number", "—")
-    add_btn = f'<button class="btn btn-sm btn-secondary" hx-get="/api/refuels/add-form?vehicle_id={vehicle_id}" hx-target="#modal-container" hx-swap="innerHTML">+ Добавить</button>'
+    can_act = user_role in ("superadmin", "company_admin")
+    add_btn = f'<button class="btn btn-sm btn-secondary" hx-get="/api/refuels/add-form?vehicle_id={vehicle_id}" hx-target="#modal-container" hx-swap="innerHTML">+ Добавить</button>' if can_act else ""
     h = f'<div class="card vehicle-group"><h3 class="vehicle-group-title"><span>{plate} <span class="vehicle-group-count">{len(entries)}</span></span>{add_btn}</h3><div class="table-container"><table><thead><tr><th>Дата</th><th>Pilot (л)</th><th>Чек (л)</th><th>Разница</th><th>Погрешность</th><th>Статус</th><th>Действия</th></tr></thead><tbody>'
     for e in entries:
         rc = ' class="row-false"' if e.is_false else ""
@@ -108,23 +197,30 @@ async def refuels_page(
     all_vehicles_result = await db.execute(all_vehicles_query.order_by(Vehicle.plate_number))
     all_vehicles = all_vehicles_result.scalars().all()
 
-    vmap = {v.id: {"plate_number": v.plate_number, "name": v.name} for v in all_vehicles}
-    grouped = _group_by_vehicle(entries)
-    total_pages = max(1, math.ceil(len(grouped) / PER_PAGE))
-    if page > total_pages:
-        page = total_pages
+    # Build full vmap with company/site/folder info
+    cids = {v.client_account_id for v in all_vehicles if v.client_account_id}
+    companies = {}
+    if cids:
+        for c in (await db.execute(select(ClientAccount).where(ClientAccount.id.in_(cids)))).scalars().all():
+            companies[c.id] = c.name
+    sids = {v.site_id for v in all_vehicles if v.site_id}
+    slookup = {}
+    if sids:
+        for s in (await db.execute(select(Site).where(Site.id.in_(sids)))).scalars().all():
+            slookup[s.id] = s.name
+    vmap = {}
+    for v in all_vehicles:
+        vmap[v.id] = {
+            "plate_number": v.plate_number or v.name or "—",
+            "name": v.name,
+            "company": companies.get(v.client_account_id) if v.client_account_id else "Без компании",
+            "site": slookup.get(v.site_id) if v.site_id else "Без площадки",
+            "folder": v.folder,
+        }
 
-    qparts = {}
-    if df_str != month_start or dt_str != today:
-        qparts["date_from"] = df_str
-        qparts["date_to"] = dt_str
-    if vehicle_id:
-        qparts["vehicle_id"] = vehicle_id
-    if status_filter:
-        qparts["status"] = status_filter
-    qs = "&".join(f"{k}={v}" for k, v in qparts.items())
+    nested = build_refuel_hierarchy(entries, vmap)
+    rendered = _render_refuel_hierarchy(nested, vmap, user.role, page, df_str, dt_str)
 
-    rendered = _list_html(grouped, vmap, page, total_pages, qs, df_str, dt_str, user.role)
     is_hx = request.headers.get("hx-request") == "true"
     if is_hx:
         return HTMLResponse(rendered)
@@ -147,8 +243,6 @@ async def refuels_page(
         "days7_str": days7_str,
         "days14_str": days14_str,
         "days30_str": days30_str,
-        "page": page,
-        "total_pages": total_pages,
     })
 
 

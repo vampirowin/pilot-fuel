@@ -1,4 +1,4 @@
-# pilot-fuel — Memory
+# UI fuel — Memory
 
 ## Project
 Приложение для работы с датчиками уровня топлива через API Pilot GPS.
@@ -219,6 +219,20 @@ pilot-fuel/
   - Идентичные записи пропускаются
 - **Новые шаблоны**: `sync_preview.html`, `sync_result.html`
 
+### 2026-05-28 — Fixes + Refuels hierarchy + User blocking
+
+**Исправления:**
+- **Баг dashboard**: убрано `site_id.is_(None)` из фильтров — пользователь с привязкой к площадке видит только ТС этой площадки
+- **Ошибка входа**: неверный логин/пароль теперь показывается как `alert-error` на странице логина (был голый текст)
+- **Кнопки синхронизации** спрятаны для обычных пользователей (dashboard, vehicles, refuels)
+
+**Новое:**
+- **Иерархия заправок**: Company → Site → Folder → ТС, как на странице ТС (функции `build_refuel_hierarchy` + `_render_refuel_hierarchy` в `refuels.py`)
+- **Блокировка пользователей**: поле `is_active` в модели User, проверка при входе и в `get_current_user`, управление из админки (users.html + user_edit.html)
+- **Бренд**: UI → UI fuel (заголовки, title, sidebar)
+
+**Git**: ещё не закоммичено
+
 ## Ports
-- pilot-fuel: **9001** (9000 занят zombie PID 32440)
+- UI fuel: **9001** (9000 занят zombie PID 32440)
 - PostgreSQL: 5432 (shared)

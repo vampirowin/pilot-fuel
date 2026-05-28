@@ -15,7 +15,7 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="pilot-fuel", lifespan=lifespan)
+    app = FastAPI(title="UI fuel", lifespan=lifespan)
     app.add_middleware(SessionMiddleware, secret_key=settings.secret_key, max_age=settings.session_lifetime_hours * 3600)
 
     app.mount("/static", StaticFiles(directory="app/static"), name="static")
