@@ -264,7 +264,7 @@ async def refuels_page(
         query = query.where(RefuelEntry.vehicle_id == int(vehicle_id))
     if status_filter:
         query = query.where(RefuelEntry.comparison_status == status_filter)
-    query = query.order_by(desc(RefuelEntry.event_date))
+    query = query.order_by(RefuelEntry.event_date)
     entries = (await db.execute(query)).scalars().all()
 
     grouped = _group_by_vehicle(entries)
@@ -324,6 +324,8 @@ async def refuels_page(
         "days7_str": days7_str,
         "days14_str": days14_str,
         "days30_str": days30_str,
+        "is_superadmin": user.role == "superadmin",
+        "user_role": user.role,
     })
 
 

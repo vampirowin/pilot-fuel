@@ -119,6 +119,28 @@ document.addEventListener('DOMContentLoaded', function () {
       {% endfor %}
     </datalist>
   </div>
+  {% if is_superadmin and all_companies %}
+  <div class="form-group">
+    <label>Компания</label>
+    <select onchange="window.location=qs({company: this.value, page: ''})">
+      <option value="">Все</option>
+      {% for cid, cname in all_companies %}
+      <option value="{{ cid }}" {% if selected_company == cid|string %}selected{% endif %}>{{ cname }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+  {% if all_sites %}
+  <div class="form-group">
+    <label>Площадка</label>
+    <select onchange="window.location=qs({site: this.value, page: ''})">
+      <option value="">Все</option>
+      {% for sid, sname in all_sites %}
+      <option value="{{ sid }}" {% if selected_site == sid|string %}selected{% endif %}>{{ sname }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
   <div class="form-group">
     <label>Статус</label>
     <select id="filter-status" onchange="window.location=qs({status: this.value, vehicle_id: vehicleMap[document.getElementById('filter-vehicle-search').value] || ''})">
