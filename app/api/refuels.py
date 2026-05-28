@@ -17,6 +17,7 @@ from app.models.setting import Setting
 from app.models.sync_log import SyncLog
 from app.dependencies import get_current_user, apply_refuel_filter, apply_vehicle_filter
 from app.services.pilot_service import PilotService
+from app.config import get_settings
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
@@ -112,9 +113,9 @@ def _render_refuel_hierarchy(nested_groups: list, vmap: dict, user_role: str, pa
 
 def _render_vehicle_group(vehicle_id: int, entries: list, vmap: dict, page: int = 1, date_from: str = "", date_to: str = "", user_role: str = "user") -> str:
     plate = vmap.get(vehicle_id, {}).get("plate_number", "—")
-    can_act = user_role in ("superadmin", "company_admin")
-    add_btn = f'<button class="btn btn-sm btn-secondary" hx-get="/api/refuels/add-form?vehicle_id={vehicle_id}" hx-target="#modal-container" hx-swap="innerHTML">+ Добавить</button>' if can_act else ""
-    h = f'<div class="card vehicle-group"><h3 class="vehicle-group-title"><span>{plate} <span class="vehicle-group-count">{len(entries)}</span></span>{add_btn}</h3><div class="table-container"><table><thead><tr><th>Дата</th><th>Pilot (л)</th><th>Чек (л)</th><th>Разница</th><th>Погрешность</th><th>Статус</th><th>Действия</th></tr></thead><tbody>'
+    add_btn = f'<button class="btn btn-sm btn-secondary" hx-get="/api/refuels/add-form?vehicle_id={vehicle_id}" hx-target="#modal-container" hx-swap="innerHTML">+ Добавить</button>'
+    gid = f"vg-{vehicle_id}"
+    h = f'<div class="card vehicle-group"><div class="vehicle-group-title collapsible-header" onclick="toggleGroup(\'{gid}\')"><span class="arrow">&#9660;</span><span>{plate} <span class="vehicle-group-count">{len(entries)}</span></span>{add_btn}</div><div class="collapsible-body" id="{gid}"><div class="table-container"><table><thead><tr><th>Дата</th><th>Pilot (л)</th><th>Чек (л)</th><th>Разница</th><th>Погрешность</th><th>Статус</th><th>Действия</th></tr></thead><tbody>'
     for e in entries:
         rc = ' class="row-false"' if e.is_false else ""
         if e.is_false:
@@ -128,9 +129,39 @@ def _render_vehicle_group(vehicle_id: int, entries: list, vmap: dict, page: int 
         df = f"{e.difference:.1f}" if e.difference is not None else "—"
         er = f"{e.error_percent:.1f}%" if e.error_percent is not None else "—"
         ds = e.event_date.strftime("%d.%m.%Y %H:%M") if e.event_date else "—"
+        title_attr = ""
+        if e.source == "manual" and e.created_by:
+            created_at_str = e.created_at.strftime("%d.%m.%Y %H:%M") if e.created_at else ""
+            title_attr = f' title="Добавил: {e.created_by}, {created_at_str}"'
         actions = f'<button class="btn btn-sm btn-secondary" hx-get="/api/refuels/{e.id}/edit?page={page}&date_from={date_from}&date_to={date_to}" hx-target="#modal-container" hx-swap="innerHTML">Правка</button>'
-        h += f"<tr{rc}><td>{ds}</td><td>{pa}</td><td>{aa}</td><td>{df}</td><td>{er}</td><td><span class=\"status-badge {sc}\">{sl}</span></td><td>{actions}</td></tr>"
-    h += "</tbody></table></div></div>"
+        h += f"<tr{rc}{title_attr}><td>{ds}</td><td>{pa}</td><td>{aa}</td><td>{df}</td><td>{er}</td><td><span class=\"status-badge {sc}\">{sl}</span></td><td>{actions}</td></tr>"
+
+    total_pilot = sum(e.pilot_amount or 0 for e in entries)
+    total_actual = sum(e.actual_amount or 0 for e in entries)
+    df_total = total_actual - total_pilot
+    err_pct = abs(df_total) / total_pilot * 100 if total_pilot > 0 else None
+
+    n_th = get_settings().normal_threshold
+    w_th = get_settings().warning_threshold
+
+    if any(e.is_false for e in entries):
+        overall_sc = "status-false-reading"
+        overall_sl = "Ложная"
+    elif err_pct is None:
+        overall_sc = ""
+        overall_sl = "—"
+    elif err_pct <= n_th:
+        overall_sc = "status-normal"
+        overall_sl = "Норма"
+    elif err_pct <= w_th:
+        overall_sc = "status-small-deviation"
+        overall_sl = "Расхождение"
+    else:
+        overall_sc = "status-unacceptable"
+        overall_sl = "Недопустимо"
+
+    h += f'<tfoot class="vehicle-group-tfoot"><tr><td><strong>Итого</strong></td><td><strong>{total_pilot:.1f}</strong></td><td><strong>{total_actual:.1f}</strong></td><td><strong>{df_total:.1f}</strong></td><td><strong>{f"{err_pct:.1f}%" if err_pct is not None else "—"}</strong></td><td><span class="status-badge {overall_sc}">{overall_sl}</span></td><td></td></tr></tfoot>'
+    h += "</tbody></table></div></div></div>"
     return h
 
 
@@ -167,14 +198,58 @@ async def refuels_page(
     status_filter = request.query_params.get("status")
     date_from_str = request.query_params.get("date_from")
     date_to_str = request.query_params.get("date_to")
+    company_filter = request.query_params.get("company")
+    site_filter = request.query_params.get("site")
+    folder_filter = request.query_params.get("folder")
 
     today = datetime.now().strftime("%Y-%m-%d")
     month_start = datetime.now().replace(day=1).strftime("%Y-%m-%d")
     df_str = date_from_str or month_start
     dt_str = date_to_str or today
 
+    # Fetch all vehicles with company/site/folder filters
+    all_vehicles_query = select(Vehicle).where(Vehicle.is_active == True, Vehicle.has_fuel_sensor == True)
+    all_vehicles_query = apply_vehicle_filter(all_vehicles_query, user, Vehicle)
+    if company_filter:
+        all_vehicles_query = all_vehicles_query.where(Vehicle.client_account_id == int(company_filter))
+    if site_filter:
+        all_vehicles_query = all_vehicles_query.where(Vehicle.site_id == int(site_filter))
+    if folder_filter:
+        all_vehicles_query = all_vehicles_query.where(Vehicle.folder == folder_filter)
+    all_vehicles = (await db.execute(all_vehicles_query.order_by(Vehicle.plate_number))).scalars().all()
+
+    # Collect distinct lists for filter dropdowns
+    all_companies = []
+    cids = {v.client_account_id for v in all_vehicles if v.client_account_id}
+    if cids:
+        for c in (await db.execute(select(ClientAccount).where(ClientAccount.id.in_(cids)).order_by(ClientAccount.name))).scalars().all():
+            all_companies.append((c.id, c.name))
+    all_sites = []
+    sids = {v.site_id for v in all_vehicles if v.site_id}
+    if sids:
+        for s in (await db.execute(select(Site).where(Site.id.in_(sids)).order_by(Site.name))).scalars().all():
+            all_sites.append((s.id, s.name))
+    all_folders = sorted({v.folder for v in all_vehicles if v.folder})
+
+    # Build vmap
+    companies = dict(all_companies)
+    slookup = dict(all_sites)
+    vmap = {}
+    for v in all_vehicles:
+        vmap[v.id] = {
+            "plate_number": v.plate_number or v.name or "—",
+            "name": v.name,
+            "company": companies.get(v.client_account_id) if v.client_account_id else "Без компании",
+            "site": slookup.get(v.site_id) if v.site_id else "Без площадки",
+            "folder": v.folder,
+        }
+
+    # Filter entries by these vehicles
+    vehicle_ids = [v.id for v in all_vehicles]
     query = select(RefuelEntry).where(RefuelEntry.is_deleted == False)
     query = apply_refuel_filter(query, user, RefuelEntry, Vehicle)
+    if vehicle_ids:
+        query = query.where(RefuelEntry.vehicle_id.in_(vehicle_ids))
     try:
         df = datetime.strptime(df_str, "%Y-%m-%d")
         query = query.where(RefuelEntry.event_date >= df)
@@ -192,34 +267,33 @@ async def refuels_page(
     query = query.order_by(desc(RefuelEntry.event_date))
     entries = (await db.execute(query)).scalars().all()
 
-    all_vehicles_query = select(Vehicle).where(Vehicle.is_active == True, Vehicle.has_fuel_sensor == True)
-    all_vehicles_query = apply_vehicle_filter(all_vehicles_query, user, Vehicle)
-    all_vehicles_result = await db.execute(all_vehicles_query.order_by(Vehicle.plate_number))
-    all_vehicles = all_vehicles_result.scalars().all()
+    grouped = _group_by_vehicle(entries)
+    total_pages = max(1, math.ceil(len(grouped) / PER_PAGE))
+    if page > total_pages:
+        page = total_pages
+    start = (page - 1) * PER_PAGE
+    page_groups = grouped[start:start + PER_PAGE]
+    page_entries = [e for _, ve in page_groups for e in ve]
 
-    # Build full vmap with company/site/folder info
-    cids = {v.client_account_id for v in all_vehicles if v.client_account_id}
-    companies = {}
-    if cids:
-        for c in (await db.execute(select(ClientAccount).where(ClientAccount.id.in_(cids)))).scalars().all():
-            companies[c.id] = c.name
-    sids = {v.site_id for v in all_vehicles if v.site_id}
-    slookup = {}
-    if sids:
-        for s in (await db.execute(select(Site).where(Site.id.in_(sids)))).scalars().all():
-            slookup[s.id] = s.name
-    vmap = {}
-    for v in all_vehicles:
-        vmap[v.id] = {
-            "plate_number": v.plate_number or v.name or "—",
-            "name": v.name,
-            "company": companies.get(v.client_account_id) if v.client_account_id else "Без компании",
-            "site": slookup.get(v.site_id) if v.site_id else "Без площадки",
-            "folder": v.folder,
-        }
-
-    nested = build_refuel_hierarchy(entries, vmap)
+    nested = build_refuel_hierarchy(page_entries, vmap)
     rendered = _render_refuel_hierarchy(nested, vmap, user.role, page, df_str, dt_str)
+
+    qparts = {}
+    if vehicle_id:
+        qparts["vehicle_id"] = vehicle_id
+    if status_filter:
+        qparts["status"] = status_filter
+    if company_filter:
+        qparts["company"] = company_filter
+    if site_filter:
+        qparts["site"] = site_filter
+    if folder_filter:
+        qparts["folder"] = folder_filter
+    if df_str != month_start or dt_str != today:
+        qparts["date_from"] = df_str
+        qparts["date_to"] = dt_str
+    qs = "&".join(f"{k}={v}" for k, v in qparts.items())
+    rendered += _pagination_html(page, total_pages, qs)
 
     is_hx = request.headers.get("hx-request") == "true"
     if is_hx:
@@ -233,6 +307,12 @@ async def refuels_page(
     return templates.TemplateResponse(request, "refuels.html", {
         "list_html": rendered,
         "all_vehicles": all_vehicles,
+        "all_companies": all_companies,
+        "all_sites": all_sites,
+        "all_folders": all_folders,
+        "selected_company": company_filter or "",
+        "selected_site": site_filter or "",
+        "selected_folder": folder_filter or "",
         "selected_vehicle_id": int(vehicle_id) if vehicle_id else None,
         "selected_status": status_filter or "",
         "date_from": df_str,
@@ -898,6 +978,7 @@ async def add_refuel(
         event_date=dt, pilot_amount=pilot_amount, actual_amount=actual_amount,
         receipt_number=receipt_number or None, source="manual",
         difference=diff, error_percent=err, comparison_status=status,
+        created_by=user.username,
     )
     db.add(entry)
     log = SyncLog(sync_type="refuel_add", status="completed", records_affected=1,

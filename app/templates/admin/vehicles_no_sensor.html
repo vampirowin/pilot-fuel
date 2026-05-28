@@ -1,15 +1,6 @@
 {% extends "base.html" %}
 {% block title %}UI fuel — ТС без датчиков{% endblock %}
-{% block head %}
-<style>
-.collapsible-header { cursor: pointer; user-select: none; }
-.collapsible-header:hover { background: var(--bg-card-hover); }
-.collapsible-header .arrow { transition: transform 0.2s; display: inline-block; margin-right: 8px; font-size: 12px; }
-.collapsible-header.collapsed .arrow { transform: rotate(-90deg); }
-.collapsible-body { overflow: hidden; transition: max-height 0.3s ease; }
-.collapsible-body.collapsed { max-height: 0 !important; }
-</style>
-{% endblock %}
+{% block head %}{% endblock %}
 {% block content %}
 <div class="page-header">
   <h1>ТС без датчика топлива</h1>
@@ -28,10 +19,14 @@
   {% if groups %}
     {% for group_name, vehicles in groups %}
     {% set gid = "ns-" + loop.index|string %}
-    <div class="card" style="margin-top:16px;">
+    <div class="card level-folder" style="margin-top:16px;">
       <div class="card-header collapsible-header" onclick="toggleGroup('{{ gid }}')">
         <span class="arrow">&#9660;</span>
-        {{ group_name }} <span style="font-weight:400;color:var(--text-dim)">({{ vehicles|length }})</span>
+        <div class="level-header-center">
+          <span class="level-title">{{ group_name }}</span>
+          <span class="level-tag">Тип ТС</span>
+        </div>
+        <span class="level-count">{{ vehicles|length }}</span>
       </div>
       <div class="collapsible-body" id="{{ gid }}">
         <div class="table-container"><table>
@@ -59,14 +54,4 @@
   {% endif %}
 </div>
 </form>
-
-<script>
-function toggleGroup(id) {
-  const body = document.getElementById(id);
-  if (!body) return;
-  body.classList.toggle('collapsed');
-  const header = body.previousElementSibling;
-  if (header) header.classList.toggle('collapsed');
-}
-</script>
 {% endblock %}

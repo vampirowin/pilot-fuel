@@ -8,6 +8,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <link rel="stylesheet" href="/static/css/style.css">
 {% block head %}{% endblock %}
+{% block head_extra %}{% endblock %}
 </head>
 <body>
 <div class="app-layout">
@@ -75,5 +76,26 @@
     {% block content %}{% endblock %}
   </main>
 </div>
+<script>
+function toggleGroup(id) {
+  const body = document.getElementById(id);
+  const header = body.previousElementSibling;
+  if (!body || !header) return;
+  const isCollapsed = body.classList.toggle('collapsed');
+  header.classList.toggle('collapsed');
+  try { localStorage.setItem('folder:' + id, isCollapsed ? '1' : '0'); } catch(e) {}
+}
+(function() {
+  document.querySelectorAll('.collapsible-body').forEach(function(el) {
+    try {
+      var val = localStorage.getItem('folder:' + el.id);
+      if (val === '1') {
+        el.classList.add('collapsed');
+        if (el.previousElementSibling) el.previousElementSibling.classList.add('collapsed');
+      }
+    } catch(e) {}
+  });
+})();
+</script>
 </body>
 </html>
