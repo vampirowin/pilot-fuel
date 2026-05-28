@@ -103,6 +103,42 @@
       <div class="collapsible-body" id="{{ cid }}">
         {% set sidx = namespace(value=0) %}
         {% for sname, stotal, folders in sites %}
+        {% if sname == '__flat__' %}
+        {# Flat mode — render vehicles directly under company #}
+        {% set flat_vehicles = folders[0] %}
+        <div class="table-container" style="margin-top:12px">
+          <table>
+            <thead>
+              <tr>
+                {% if is_superadmin or is_company_admin %}<th style="width: 32px;"><input type="checkbox" onchange="var e=this;document.querySelectorAll('#bulk-vehicle-form input[name=vehicle_ids]').forEach(function(c){c.checked=e.checked})"></th>{% endif %}
+                <th>#</th>
+                <th>Госномер</th>
+                <th>IMEI</th>
+                <th>Датчик</th>
+                <th>Заправки</th>
+                <th>Компания</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for v in flat_vehicles %}
+              <tr id="v-{{ v.id }}">
+                {% if is_superadmin or is_company_admin %}<td><input type="checkbox" name="vehicle_ids" value="{{ v.id }}"></td>{% endif %}
+                <td style="color: var(--text-dim);">{{ loop.index }}</td>
+                <td><strong>{{ v.plate_number or '—' }}</strong></td>
+                <td style="font-family: monospace; font-size: 12px;">{{ v.imei or '—' }}</td>
+                <td>
+                  <span class="status-badge {% if v.sensor_count > 0 %}status-normal{% else %}status-false-reading{% endif %}">
+                    {{ v.sensor_count }} датч.
+                  </span>
+                </td>
+                <td><a href="/refuels?vehicle_id={{ v.id }}" class="btn btn-sm btn-secondary">Заправки</a></td>
+                <td>{{ v.company_name or '—' }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
         {% set sidx.value = sidx.value + 1 %}
         {% set sid = "s-" ~ cidx.value ~ "-" ~ sidx.value %}
         <div class="nested-card level-site">
@@ -160,6 +196,7 @@
             {% endfor %}
           </div>
         </div>
+        {% endif %}
         {% endfor %}
       </div>
     </div>

@@ -44,17 +44,29 @@ def build_nested_groups(vehicles: list) -> list:
         tree.setdefault(cname, {}).setdefault(sname, {}).setdefault(folder, []).append(v)
     result = []
     for cname in sorted(tree.keys(), key=lambda x: (x == "Без компании", x)):
-        sites = []
+        site_names = list(tree[cname].keys())
+        all_sites_placeholder = all(s == "Без площадки" for s in site_names)
         ctotal = 0
-        for sname in sorted(tree[cname].keys(), key=lambda x: (x == "Без площадки", x)):
-            folders = []
-            stotal = 0
-            for fname in sorted(tree[cname][sname].keys(), key=lambda x: (x == "Без папки", x)):
-                fvehicles = tree[cname][sname][fname]
-                folders.append((fname, fvehicles))
-                stotal += len(fvehicles)
-            sites.append((sname, stotal, folders))
-            ctotal += stotal
+        sites = []
+
+        if all_sites_placeholder:
+            # Flatten site level — collect all vehicles across all placeholder sites
+            flat_vehicles = []
+            for sname in site_names:
+                for folder_vehicles in tree[cname][sname].values():
+                    flat_vehicles.extend(folder_vehicles)
+            ctotal = len(flat_vehicles)
+            sites.append(("__flat__", 0, [flat_vehicles]))
+        else:
+            for sname in sorted(site_names, key=lambda x: (x == "Без площадки", x)):
+                folders = []
+                stotal = 0
+                for fname in sorted(tree[cname][sname].keys(), key=lambda x: (x == "Без папки", x)):
+                    fvehicles = tree[cname][sname][fname]
+                    folders.append((fname, fvehicles))
+                    stotal += len(fvehicles)
+                sites.append((sname, stotal, folders))
+                ctotal += stotal
         result.append((cname, ctotal, sites))
     return result
 
@@ -72,20 +84,17 @@ def render_nested_partial(nested_groups: list, can_act: bool) -> str:
         cid = f"c-{cidx}"
         html += f'<div class="card level-company" style="margin-top: 16px;"><div class="card-header collapsible-header" onclick="toggleGroup(\'{cid}\')"><span class="arrow">&#9660;</span><span class="level-badge level-badge-company">{cname}</span><span class="level-count">({ctotal})</span></div><div class="collapsible-body" id="{cid}">'
         for sname, stotal, folders in sites:
-            sidx += 1
-            sid = f"s-{cidx}-{sidx}"
-            html += f'<div class="card level-site" style="margin: 8px 0;"><div class="card-header collapsible-header" onclick="toggleGroup(\'{sid}\')"><span class="arrow">&#9660;</span><span class="level-badge level-badge-site">{sname}</span><span class="level-count">({stotal})</span></div><div class="collapsible-body" id="{sid}">'
-            for fname, vehicles in folders:
-                fidx += 1
-                fid = f"f-{cidx}-{sidx}-{fidx}"
-                html += f'<div class="level-folder" style="margin:4px 0;border:1px solid var(--border);border-radius:6px"><div class="collapsible-header" onclick="toggleGroup(\'{fid}\')"><span class="arrow">&#9660;</span><span class="level-badge level-badge-folder">{fname}</span><span class="level-count">({len(vehicles)})</span></div><div class="collapsible-body" id="{fid}"><div class="table-container"><table><thead><tr>'
+            if sname == "__flat__":
+                # Flat mode — render vehicles directly under company
+                all_vehicles = folders[0]
+                html += '<div class="table-container" style="margin-top:12px"><table><thead><tr>'
                 if can_act:
                     html += '<th style="width:32px;"><input type="checkbox" onchange="var e=this;document.querySelectorAll(\'#bulk-vehicle-form input[name=vehicle_ids]\').forEach(function(c){c.checked=e.checked})"></th>'
                 html += '<th>#</th><th>Госномер</th><th>IMEI</th><th>Датчик</th><th>Заправки</th><th>Компания</th>'
                 if can_act:
                     html += '<th style="width:100px;">Действия</th>'
                 html += '</tr></thead><tbody>'
-                for idx, v in enumerate(vehicles, 1):
+                for idx, v in enumerate(all_vehicles, 1):
                     badge = "status-normal" if v.get("sensor_count", 0) > 0 else "status-false-reading"
                     html += f'<tr id="v-{v["id"]}">'
                     if can_act:
@@ -94,8 +103,32 @@ def render_nested_partial(nested_groups: list, can_act: bool) -> str:
                     if can_act:
                         html += f'<td><button class="btn btn-sm btn-danger" hx-post="/api/vehicles/{v["id"]}/toggle-sensor" hx-target="#v-{v["id"]}" hx-swap="outerHTML" hx-confirm="Пометить «{v.get("plate_number") or v["id"]}» как ТС без датчика?">Нет датчика</button></td>'
                     html += '</tr>'
-                html += '</tbody></table></div></div></div>'
-            html += '</div></div>'
+                html += '</tbody></table></div>'
+            else:
+                sidx += 1
+                sid = f"s-{cidx}-{sidx}"
+                html += f'<div class="card level-site" style="margin: 8px 0;"><div class="card-header collapsible-header" onclick="toggleGroup(\'{sid}\')"><span class="arrow">&#9660;</span><span class="level-badge level-badge-site">{sname}</span><span class="level-count">({stotal})</span></div><div class="collapsible-body" id="{sid}">'
+                for fname, vehicles in folders:
+                    fidx += 1
+                    fid = f"f-{cidx}-{sidx}-{fidx}"
+                    html += f'<div class="level-folder" style="margin:4px 0;border:1px solid var(--border);border-radius:6px"><div class="collapsible-header" onclick="toggleGroup(\'{fid}\')"><span class="arrow">&#9660;</span><span class="level-badge level-badge-folder">{fname}</span><span class="level-count">({len(vehicles)})</span></div><div class="collapsible-body" id="{fid}"><div class="table-container"><table><thead><tr>'
+                    if can_act:
+                        html += '<th style="width:32px;"><input type="checkbox" onchange="var e=this;document.querySelectorAll(\'#bulk-vehicle-form input[name=vehicle_ids]\').forEach(function(c){c.checked=e.checked})"></th>'
+                    html += '<th>#</th><th>Госномер</th><th>IMEI</th><th>Датчик</th><th>Заправки</th><th>Компания</th>'
+                    if can_act:
+                        html += '<th style="width:100px;">Действия</th>'
+                    html += '</tr></thead><tbody>'
+                    for idx, v in enumerate(vehicles, 1):
+                        badge = "status-normal" if v.get("sensor_count", 0) > 0 else "status-false-reading"
+                        html += f'<tr id="v-{v["id"]}">'
+                        if can_act:
+                            html += f'<td><input type="checkbox" name="vehicle_ids" value="{v["id"]}"></td>'
+                        html += f'<td style="color:var(--text-dim)">{idx}</td><td><strong>{v.get("plate_number") or "—"}</strong></td><td style="font-family:monospace;font-size:12px">{v.get("imei") or "—"}</td><td><span class="status-badge {badge}">{v.get("sensor_count", 0)} датч.</span></td><td><a href="/refuels?vehicle_id={v["id"]}" class="btn btn-sm btn-secondary">Заправки</a></td><td>{v.get("company_name") or "—"}</td>'
+                        if can_act:
+                            html += f'<td><button class="btn btn-sm btn-danger" hx-post="/api/vehicles/{v["id"]}/toggle-sensor" hx-target="#v-{v["id"]}" hx-swap="outerHTML" hx-confirm="Пометить «{v.get("plate_number") or v["id"]}» как ТС без датчика?">Нет датчика</button></td>'
+                        html += '</tr>'
+                    html += '</tbody></table></div></div></div>'
+                html += '</div></div>'
         html += '</div></div>'
     return html
 
