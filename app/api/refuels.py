@@ -45,7 +45,7 @@ def build_refuel_hierarchy(entries: list, vmap: dict) -> list:
             flat = []
             for sname in site_names:
                 for fname, vdata in tree[cname][sname].items():
-                    for vid, vd in vdata.items():
+                    for vid, vd in sorted(vdata.items(), key=lambda x: x[1]["plate"]):
                         flat.append((vid, vd["plate"], vd["entries"]))
             ctotal = sum(len(v[2]) for v in flat)
             result.append((cname, ctotal, [("__flat__", 0, [("__flat__", ctotal, flat)])]))
@@ -58,14 +58,14 @@ def build_refuel_hierarchy(entries: list, vmap: dict) -> list:
                 if all_f_placeholder:
                     flat = []
                     for fname in folder_names:
-                        for vid, vd in tree[cname][sname][fname].items():
+                        for vid, vd in sorted(tree[cname][sname][fname].items(), key=lambda x: x[1]["plate"]):
                             flat.append((vid, vd["plate"], vd["entries"]))
                     stotal = sum(len(v[2]) for v in flat)
                     sites.append((sname, stotal, [("__flat__", stotal, flat)]))
                 else:
                     folders = []
                     for fname in sorted(folder_names, key=lambda x: (x == "Без папки", x)):
-                        vl = [(vid, vd["plate"], vd["entries"]) for vid, vd in sorted(tree[cname][sname][fname].items())]
+                        vl = [(vid, vd["plate"], vd["entries"]) for vid, vd in sorted(tree[cname][sname][fname].items(), key=lambda x: x[1]["plate"])]
                         ft = sum(len(v[2]) for v in vl)
                         folders.append((fname, ft, vl))
                         stotal += ft
@@ -268,6 +268,7 @@ async def refuels_page(
     entries = (await db.execute(query)).scalars().all()
 
     grouped = _group_by_vehicle(entries)
+    grouped.sort(key=lambda x: vmap.get(x[0], {}).get("plate_number", "") or "")
     total_pages = max(1, math.ceil(len(grouped) / PER_PAGE))
     if page > total_pages:
         page = total_pages
@@ -493,6 +494,7 @@ async def sync_refuels(
     )).scalars().all()
     vmap = {v.id: {"plate_number": v.plate_number, "name": v.name} for v in vehicles_result}
     grouped = _group_by_vehicle(entries)
+    grouped.sort(key=lambda x: vmap.get(x[0], {}).get("plate_number", "") or "")
     total_pages = max(1, math.ceil(len(grouped) / PER_PAGE))
     qf = date_from or df.strftime("%Y-%m-%d")
     qt = date_to or dt.strftime("%Y-%m-%d")
@@ -1003,6 +1005,7 @@ async def add_refuel(
     )).scalars().all()
     vmap = {v.id: {"plate_number": v.plate_number, "name": v.name} for v in all_v}
     grouped = _group_by_vehicle(entries)
+    grouped.sort(key=lambda x: vmap.get(x[0], {}).get("plate_number", "") or "")
     total_pages = max(1, math.ceil(len(grouped) / PER_PAGE))
     qparts = {"date_from": month_start, "date_to": today}
     qs = "&".join(f"{k}={v}" for k, v in qparts.items())
@@ -1083,6 +1086,7 @@ async def edit_refuel(
     all_v = (await db.execute(select(Vehicle).where(Vehicle.is_active == True, Vehicle.has_fuel_sensor == True))).scalars().all()
     vmap = {v.id: {"plate_number": v.plate_number, "name": v.name} for v in all_v}
     grouped = _group_by_vehicle(entries)
+    grouped.sort(key=lambda x: vmap.get(x[0], {}).get("plate_number", "") or "")
     total_pages = max(1, math.ceil(len(grouped) / PER_PAGE))
     qparts = {"date_from": month_start, "date_to": today}
     qs = "&".join(f"{k}={v}" for k, v in qparts.items())
@@ -1208,6 +1212,7 @@ async def _refresh_list(request: Request, db: AsyncSession, user, page: int, dat
     )).scalars().all()
     vmap = {v.id: {"plate_number": v.plate_number, "name": v.name} for v in all_v}
     grouped = _group_by_vehicle(entries)
+    grouped.sort(key=lambda x: vmap.get(x[0], {}).get("plate_number", "") or "")
     total_pages = max(1, math.ceil(len(grouped) / PER_PAGE))
     if page > total_pages:
         page = total_pages
