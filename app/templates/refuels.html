@@ -29,6 +29,20 @@ function todayStr() { return new Date().toISOString().split('T')[0]; }
 
 function showCustom() { document.getElementById('custom-range').style.display = 'flex'; }
 
+function filterVehicleOptions(q) {
+  var sel = document.getElementById('filter-vehicle');
+  q = q.toLowerCase();
+  for (var i = 0; i < sel.options.length; i++) {
+    sel.options[i].style.display = sel.options[i].text.toLowerCase().includes(q) ? '' : 'none';
+  }
+  if (!q) { sel.selectedIndex = 0; }
+}
+
+function goVehicle() {
+  var sel = document.getElementById('filter-vehicle');
+  window.location = qs({vehicle_id: sel.value, status: document.getElementById('filter-status').value});
+}
+
 function setSyncRange(backFrom, backTo) {
   var d = new Date();
   var to = d.toISOString().split('T')[0];
@@ -56,6 +70,15 @@ document.addEventListener('DOMContentLoaded', function () {
     return parts[0] === df && parts[1] === dt;
   });
   if (!isPreset) { showCustom(); }
+
+  var sv = {{ selected_vehicle_id | tojson }};
+  if (sv) {
+    var sel = document.getElementById('filter-vehicle');
+    var inp = document.getElementById('filter-vehicle-search');
+    for (var i = 0; i < sel.options.length; i++) {
+      if (sel.options[i].value === sv) { inp.value = sel.options[i].text; filterVehicleOptions(inp.value); break; }
+    }
+  }
 });
 </script>
 {% endblock %}
@@ -88,8 +111,9 @@ document.addEventListener('DOMContentLoaded', function () {
 <div class="filters-bar">
   <div class="form-group">
     <label>Транспорт</label>
-    <select id="filter-vehicle" name="vehicle_id" onchange="window.location=qs({vehicle_id: this.value, status: document.getElementById('filter-status').value})">
-      <option value="">Все ТС</option>
+    <input type="text" id="filter-vehicle-search" class="form-input" placeholder="Поиск ТС..." autocomplete="off" oninput="filterVehicleOptions(this.value)">
+    <select id="filter-vehicle" name="vehicle_id" size="6" onchange="goVehicle()">
+      <option value="">— Все ТС —</option>
       {% for v in all_vehicles %}
       <option value="{{ v.id }}" {% if selected_vehicle_id == v.id %}selected{% endif %}>{{ v.plate_number or v.name }}</option>
       {% endfor %}
