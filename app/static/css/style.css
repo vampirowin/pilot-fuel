@@ -840,6 +840,9 @@ tr:hover td {
   color: #93c5fd;
   border: 1px solid rgba(59, 130, 246, 0.4);
 }
+.level-folder .level-header-center {
+  align-items: flex-start;
+}
 .level-folder .level-tag {
   background: rgba(107, 114, 128, 0.2);
   color: #d1d5db;
