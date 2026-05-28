@@ -108,8 +108,12 @@ sync_log           — id, vehicle_id, sync_type, status, records_affected, deta
 - ✅ Site (площадки) CRUD, vehicle-site assignment
 - ✅ User management (role/company/site assignment)
 - ✅ Filtering all queries by role/company/site
-- ✅ Vehicles without sensor page
+- ✅ Vehicles without sensor page (checkboxes + bulk return, доступен company_admin)
 - ✅ Threshold settings
+- ✅ Vehicles page: 3-level collapsible hierarchy (Company → Site → Folder)
+- ✅ Bulk toggle: checkbox-select + "ТС без датчиков" / "Вернуть" actions
+- ✅ Real-time search on site-vehicle page with checkbox persistence across HTMX swaps
+- ✅ Visual hierarchy: amber left-border accents per level (company→site→folder)
 
 ### Phase 7 — Sensor graph
 - ⬜ On-demand `sensors/dip` from Pilot
@@ -160,6 +164,8 @@ pilot-fuel/
 │   │   ├── refuels.html
 │   │   ├── critical.html
 │   │   ├── sync_modal.html
+│   │   ├── sync_preview.html
+│   │   ├── sync_result.html
 │   │   ├── add_refuel_modal.html
 │   │   ├── edit_refuel_modal.html
 │   │   ├── mark_false_modal.html
@@ -187,6 +193,31 @@ pilot-fuel/
 ├── AGENTS.md
 └── run.py
 ```
+
+## Recent Changes
+
+### 2026-05-28 — Vehicles page redesign + Refuel sync overhaul
+
+**Vehicles page:**
+- Все уровни иерархии (Company / Site / Folder) получили `<span class="level-badge">` с цветной подложкой:
+  - **Company** — amber `#fbbf24` на тёмном фоне
+  - **Site** — blue `#93c5fd` (отделяется от amber)
+  - **Folder** — gray `#d1d5db` (третичный уровень)
+- Badge имеют `border-radius: 20px`, `border: 1px solid`, внутренний padding
+- Хедеры выровнены через flex: стрелка слева → badge по центру → счётчик справа
+- Изменения в `vehicles.html` (styles + template) и `vehicles.py` (`render_nested_partial`)
+
+**Refuel sync — новая двухфазная синхронизация:**
+- **Loading indicator** в `sync_modal.html` — спиннер + "Загружаем данные из Pilot..." на время запроса
+- **Time window** изменён с 30 секунд на **±1 час** для поиска дубликатов
+- **Preview endpoint** `POST /api/refuels/sync/preview`:
+  - Запрашивает Pilot API, классифицирует события: new / conflict / false_conflict / identical
+  - Возвращает сводку (ск badges) + таблицу конфликтов с радио "Заменить" / "Пропустить"
+- **Apply endpoint** `POST /api/refuels/sync/apply`:
+  - Перезапрашивает Pilot API с теми же параметрами
+  - Применяет выбор пользователя: новые добавляет, замены обновляют Pilot-поля (сохраняя `actual_amount`, `receipt_number`, `is_false`)
+  - Идентичные записи пропускаются
+- **Новые шаблоны**: `sync_preview.html`, `sync_result.html`
 
 ## Ports
 - pilot-fuel: **9001** (9000 занят zombie PID 32440)

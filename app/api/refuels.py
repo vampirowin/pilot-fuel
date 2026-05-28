@@ -1,4 +1,5 @@
 import asyncio
+import json
 import math
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Request, Depends, HTTPException, Query, Form, Path
@@ -264,8 +265,8 @@ async def sync_refuels(
         existing = await db.execute(
             select(PilotRefuel).where(
                 PilotRefuel.vehicle_id == v.id,
-                PilotRefuel.event_date >= ev_ts - timedelta(seconds=30),
-                PilotRefuel.event_date <= ev_ts + timedelta(seconds=30),
+                PilotRefuel.event_date >= ev_ts - timedelta(hours=1),
+                PilotRefuel.event_date <= ev_ts + timedelta(hours=1),
             )
         )
         if existing.scalar_one_or_none():
@@ -337,6 +338,387 @@ async def sync_refuels(
     if raw_events:
         html += f'<div class="toast toast-info">Всего от Pilot: {len(raw_events)} событий</div>'
     return HTMLResponse(html)
+
+
+@router.post("/api/refuels/sync/preview", response_class=HTMLResponse)
+async def sync_refuels_preview(
+    request: Request,
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    days: int = Query(default=7),
+    date_from: str = Form(default=None),
+    date_to: str = Form(default=None),
+    vehicle_id: str | None = Form(default=None),
+):
+    if user.role not in ("superadmin", "company_admin"):
+        raise HTTPException(status_code=403)
+
+    token = user.pilot_token or request.session.get("token")
+    node_id = user.pilot_node_id or request.session.get("node_id", 0)
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    pilot = PilotService()
+    now_local = datetime.now()
+    if date_from and date_to:
+        try:
+            df = datetime.strptime(date_from, "%Y-%m-%d")
+            dt = datetime.strptime(date_to, "%Y-%m-%d")
+        except ValueError:
+            df = now_local - timedelta(days=days)
+            dt = now_local
+    else:
+        dt = now_local
+        df = now_local - timedelta(days=days)
+
+    start_str = df.strftime("%d.%m.%Y 00:00")
+    stop_str = dt.strftime("%d.%m.%Y 23:59")
+
+    q = select(Vehicle).where(Vehicle.is_active == True, Vehicle.has_fuel_sensor == True)
+    q = apply_vehicle_filter(q, user, Vehicle)
+    if vehicle_id:
+        q = q.where(Vehicle.id == int(vehicle_id))
+    vehicles = (await db.execute(q)).scalars().all()
+    if not vehicles:
+        return HTMLResponse('<div class="modal-overlay" onclick="if(event.target===this)this.remove()"><div class="modal"><div class="modal-body"><div class="empty-state"><p>Нет ТС для синхронизации.</p></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="this.closest(\'.modal-overlay\').remove()">Закрыть</button></div></div></div>')
+
+    veh_ids = [v.pilot_agent_id for v in vehicles if v.pilot_agent_id]
+    if not veh_ids:
+        return HTMLResponse('<div class="modal-overlay" onclick="if(event.target===this)this.remove()"><div class="modal"><div class="modal-body"><div class="empty-state"><p>Нет ТС с agent_id.</p></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="this.closest(\'.modal-overlay\').remove()">Закрыть</button></div></div></div>')
+
+    BATCH_SIZE = 20
+    all_events = []
+    try:
+        for i in range(0, len(veh_ids), BATCH_SIZE):
+            batch = veh_ids[i:i + BATCH_SIZE]
+            for attempt in range(3):
+                try:
+                    batch_events = await pilot.get_refuel_report(token, node_id, batch, start_str, stop_str)
+                    break
+                except Exception:
+                    if attempt == 2:
+                        raise
+                    await asyncio.sleep(1)
+            all_events.extend(batch_events)
+            await asyncio.sleep(0.5)
+    except Exception as e:
+        return HTMLResponse(f'<div class="modal-overlay" onclick="if(event.target===this)this.remove()"><div class="modal"><div class="modal-body"><div class="empty-state"><p>Ошибка Pilot API: {str(e)[:200]}</p></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="this.closest(\'.modal-overlay\').remove()">Закрыть</button></div></div></div>')
+
+    raw_events = all_events
+    if not raw_events:
+        return HTMLResponse('<div class="modal-overlay" onclick="if(event.target===this)this.remove()"><div class="modal"><div class="modal-body"><div class="empty-state"><p>Нет новых событий от Pilot за выбранный период.</p></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="this.closest(\'.modal-overlay\').remove()">Закрыть</button></div></div></div>')
+
+    # Classify each event
+    preview_items = []
+    new_count = 0
+    conflict_count = 0
+    false_conflict_count = 0
+    identical_count = 0
+    item_idx = 0
+
+    for ev in raw_events:
+        ev_name_lower = (ev.get("name") or "").strip().lower()
+        v = None
+        for db_v in vehicles:
+            if db_v.plate_number and db_v.plate_number.strip().lower() in ev_name_lower:
+                v = db_v
+                break
+        if not v:
+            continue
+
+        ev_ts = _parse_timestamp(ev.get("ts"))
+        if not ev_ts:
+            continue
+        if ev_ts.tzinfo is not None:
+            ev_ts = ev_ts.replace(tzinfo=None)
+
+        amount = ev.get("refuel_amount")
+        if not amount or amount <= 0:
+            continue
+
+        # Look for existing PilotRefuel within ±1h
+        existing_pr = (await db.execute(
+            select(PilotRefuel).where(
+                PilotRefuel.vehicle_id == v.id,
+                PilotRefuel.event_date >= ev_ts - timedelta(hours=1),
+                PilotRefuel.event_date <= ev_ts + timedelta(hours=1),
+            )
+        )).scalar_one_or_none()
+
+        item = {
+            "plate": v.plate_number or "—",
+            "event_date": ev_ts.strftime("%d.%m.%Y %H:%M"),
+            "new_amount": amount,
+            "is_false": False,
+        }
+
+        if existing_pr:
+            # Existing record found — check for RefuelEntry
+            existing_entry = (await db.execute(
+                select(RefuelEntry).where(
+                    RefuelEntry.pilot_refuel_id == existing_pr.id,
+                    RefuelEntry.is_deleted == False,
+                )
+            )).scalar_one_or_none()
+
+            old_amount = existing_pr.amount
+            item["old_amount"] = old_amount
+            item["is_false"] = existing_entry.is_false if existing_entry else False
+
+            if old_amount == amount:
+                item["type"] = "identical"
+                identical_count += 1
+            elif item["is_false"]:
+                item["type"] = "false_conflict"
+                false_conflict_count += 1
+            else:
+                item["type"] = "conflict"
+                conflict_count += 1
+
+            # Store IDs for apply step
+            item["existing_entry_id"] = existing_entry.id if existing_entry else None
+            item["existing_pr_id"] = existing_pr.id
+            item["existing_pr_date"] = existing_pr.event_date.isoformat() if existing_pr.event_date else None
+            item["existing_actual_amount"] = existing_entry.actual_amount if existing_entry else None
+            item["existing_receipt"] = existing_entry.receipt_number if existing_entry else None
+            item["existing_comment"] = existing_entry.comment if existing_entry else None
+        else:
+            item["type"] = "new"
+            item["old_amount"] = None
+            item["existing_entry_id"] = None
+            item["existing_pr_id"] = None
+            new_count += 1
+
+        # Store minimal Pilot event for apply step
+        item["vehicle_id"] = v.id
+        item["pilot_agent_id"] = v.pilot_agent_id
+        item["ts"] = ev.get("ts")
+        item["start_level"] = ev.get("start_level")
+        item["end_level"] = ev.get("end_level")
+        item["address"] = (ev.get("address") or "")[:500]
+        item["lat"] = ev.get("lat")
+        item["lon"] = ev.get("lon")
+
+        item["idx"] = item_idx
+        item_idx += 1
+        preview_items.append(item)
+
+    if not preview_items:
+        return HTMLResponse('<div class="modal-overlay" onclick="if(event.target===this)this.remove()"><div class="modal"><div class="modal-body"><div class="empty-state"><p>Нет событий, подходящих для импорта.</p></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="this.closest(\'.modal-overlay\').remove()">Закрыть</button></div></div></div>')
+
+    conflicts = [it for it in preview_items if it["type"] in ("conflict", "false_conflict")]
+
+    return templates.TemplateResponse(request, "sync_preview.html", {
+        "preview_items": preview_items,
+        "conflicts": conflicts,
+        "new_count": new_count,
+        "conflict_count": conflict_count,
+        "false_conflict_count": false_conflict_count,
+        "identical_count": identical_count,
+        "total": len(preview_items),
+        "date_from": date_from or df.strftime("%Y-%m-%d"),
+        "date_to": date_to or dt.strftime("%Y-%m-%d"),
+        "vehicle_id": vehicle_id or "",
+    })
+
+
+@router.post("/api/refuels/sync/apply", response_class=HTMLResponse)
+async def sync_refuels_apply(
+    request: Request,
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    date_from: str = Form(default=None),
+    date_to: str = Form(default=None),
+    vehicle_id: str = Form(default=""),
+    conflict_actions: str = Form(default="{}"),
+):
+    if user.role not in ("superadmin", "company_admin"):
+        raise HTTPException(status_code=403)
+
+    token = user.pilot_token or request.session.get("token")
+    node_id = user.pilot_node_id or request.session.get("node_id", 0)
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    # Re-fetch Pilot data to get fresh events
+    pilot = PilotService()
+    now_local = datetime.now()
+    try:
+        df = datetime.strptime(date_from, "%Y-%m-%d") if date_from else now_local - timedelta(days=7)
+        dt = datetime.strptime(date_to, "%Y-%m-%d") if date_to else now_local
+    except ValueError:
+        df = now_local - timedelta(days=7)
+        dt = now_local
+
+    start_str = df.strftime("%d.%m.%Y 00:00")
+    stop_str = dt.strftime("%d.%m.%Y 23:59")
+
+    q = select(Vehicle).where(Vehicle.is_active == True, Vehicle.has_fuel_sensor == True)
+    q = apply_vehicle_filter(q, user, Vehicle)
+    if vehicle_id:
+        q = q.where(Vehicle.id == int(vehicle_id))
+    vehicles = (await db.execute(q)).scalars().all()
+    if not vehicles:
+        return HTMLResponse('<div class="modal-overlay" onclick="if(event.target===this)this.remove()"><div class="modal"><div class="modal-body"><div class="empty-state"><p>Нет ТС для синхронизации.</p></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="this.closest(\'.modal-overlay\').remove()">Закрыть</button></div></div></div>')
+
+    veh_ids = [v.pilot_agent_id for v in vehicles if v.pilot_agent_id]
+    if not veh_ids:
+        return HTMLResponse('<div class="modal-overlay" onclick="if(event.target===this)this.remove()"><div class="modal"><div class="modal-body"><div class="empty-state"><p>Нет ТС с agent_id.</p></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="this.closest(\'.modal-overlay\').remove()">Закрыть</button></div></div></div>')
+
+    BATCH_SIZE = 20
+    all_events = []
+    try:
+        for i in range(0, len(veh_ids), BATCH_SIZE):
+            batch = veh_ids[i:i + BATCH_SIZE]
+            for attempt in range(3):
+                try:
+                    batch_events = await pilot.get_refuel_report(token, node_id, batch, start_str, stop_str)
+                    break
+                except Exception:
+                    if attempt == 2:
+                        raise
+                    await asyncio.sleep(1)
+            all_events.extend(batch_events)
+            await asyncio.sleep(0.5)
+    except Exception as e:
+        return HTMLResponse(f'<div class="modal-overlay" onclick="if(event.target===this)this.remove()"><div class="modal"><div class="modal-body"><div class="empty-state"><p>Ошибка Pilot API: {str(e)[:200]}</p></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="this.closest(\'.modal-overlay\').remove()">Закрыть</button></div></div></div>')
+
+    try:
+        actions = json.loads(conflict_actions)
+    except (json.JSONDecodeError, TypeError):
+        actions = {}
+
+    n_th, w_th = await _get_thresholds(db)
+    new_count = 0
+    replaced_count = 0
+    skipped_count = 0
+    errors = []
+    item_idx = 0
+
+    for ev in all_events:
+        ev_name_lower = (ev.get("name") or "").strip().lower()
+        v = None
+        for db_v in vehicles:
+            if db_v.plate_number and db_v.plate_number.strip().lower() in ev_name_lower:
+                v = db_v
+                break
+        if not v:
+            continue
+
+        ev_ts = _parse_timestamp(ev.get("ts"))
+        if not ev_ts:
+            continue
+        if ev_ts.tzinfo is not None:
+            ev_ts = ev_ts.replace(tzinfo=None)
+
+        amount = ev.get("refuel_amount")
+        if not amount or amount <= 0:
+            continue
+
+        sidx = str(item_idx)
+        item_idx += 1
+
+        existing_pr = (await db.execute(
+            select(PilotRefuel).where(
+                PilotRefuel.vehicle_id == v.id,
+                PilotRefuel.event_date >= ev_ts - timedelta(hours=1),
+                PilotRefuel.event_date <= ev_ts + timedelta(hours=1),
+            )
+        )).scalar_one_or_none()
+
+        if not existing_pr:
+            # New record
+            pr = PilotRefuel(
+                vehicle_id=v.id,
+                event_date=ev_ts,
+                amount=amount,
+                start_level=ev.get("start_level"),
+                end_level=ev.get("end_level"),
+                address=(ev.get("address") or "")[:500],
+                lat=ev.get("lat"),
+                lon=ev.get("lon"),
+                raw_data=ev,
+            )
+            db.add(pr)
+            await db.flush()
+
+            entry = RefuelEntry(
+                vehicle_id=v.id,
+                pilot_refuel_id=pr.id,
+                event_date=ev_ts,
+                pilot_amount=amount,
+                source="pilot_sync",
+            )
+            db.add(entry)
+            new_count += 1
+            continue
+
+        # Existing record found
+        existing_entry = (await db.execute(
+            select(RefuelEntry).where(
+                RefuelEntry.pilot_refuel_id == existing_pr.id,
+                RefuelEntry.is_deleted == False,
+            )
+        )).scalar_one_or_none()
+
+        old_amount = existing_pr.amount
+        is_false = existing_entry.is_false if existing_entry else False
+
+        if old_amount == amount:
+            # Identical — skip
+            skipped_count += 1
+            continue
+
+        # Check user's choice
+        if actions.get(sidx, "skip") == "skip":
+            skipped_count += 1
+            continue
+
+        # Replace
+        existing_pr.amount = amount
+        existing_pr.start_level = ev.get("start_level")
+        existing_pr.end_level = ev.get("end_level")
+        existing_pr.address = (ev.get("address") or "")[:500]
+        existing_pr.lat = ev.get("lat")
+        existing_pr.lon = ev.get("lon")
+        existing_pr.event_date = ev_ts
+
+        if existing_entry:
+            # Update Pilot-sourced fields, preserve user fields
+            existing_entry.pilot_amount = amount
+            existing_entry.event_date = ev_ts
+
+            pilot_amt = amount
+            actual_amt = existing_entry.actual_amount
+            if pilot_amt and actual_amt and pilot_amt > 0:
+                diff = actual_amt - pilot_amt
+                err = abs(diff) / pilot_amt * 100
+                existing_entry.difference = diff
+                existing_entry.error_percent = err
+                existing_entry.comparison_status = "normal" if err <= n_th else ("small_deviation" if err <= w_th else "unacceptable")
+            elif actual_amt:
+                existing_entry.difference = None
+                existing_entry.error_percent = None
+                existing_entry.comparison_status = "pilot_missing"
+
+        replaced_count += 1
+
+    log = SyncLog(
+        sync_type="refuels",
+        status="completed" if not errors else "partial",
+        records_affected=new_count + replaced_count,
+        details="; ".join(errors) if errors else None,
+        created_by=user.username,
+    )
+    db.add(log)
+    await db.commit()
+
+    return templates.TemplateResponse(request, "sync_result.html", {
+        "new_count": new_count,
+        "replaced_count": replaced_count,
+        "skipped_count": skipped_count,
+        "errors": errors,
+    })
 
 
 async def _get_thresholds(db: AsyncSession) -> tuple[float, float]:

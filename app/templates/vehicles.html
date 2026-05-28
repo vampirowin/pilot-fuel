@@ -2,46 +2,71 @@
 {% block title %}pilot-fuel — Транспорт{% endblock %}
 {% block head %}
 <style>
-.collapsible-header { cursor: pointer; user-select: none; }
+.collapsible-header { cursor: pointer; user-select: none; display: flex; align-items: center; gap: 10px; }
 .collapsible-header:hover { background: var(--bg-card-hover); }
-.collapsible-header .arrow { transition: transform 0.2s; display: inline-block; margin-right: 8px; font-size: 12px; }
+.collapsible-header .arrow { transition: transform 0.2s; flex-shrink: 0; font-size: 12px; }
 .collapsible-header.collapsed .arrow { transform: rotate(-90deg); }
 .collapsible-body { overflow: hidden; transition: max-height 0.3s ease; }
 .collapsible-body.collapsed { max-height: 0 !important; }
 .nested-card { border: 1px solid var(--border); border-radius: 8px; margin: 8px 0; }
-.nested-card .nested-card { margin: 4px 8px; }
+.nested-card .nested-card { margin: 4px 12px; }
 
 /* ── Hierarchy level styling ── */
 .level-company { border-left: 3px solid var(--accent); }
 .level-company > .card-header {
   background: rgba(245, 158, 11, 0.06);
-  font-size: 16px;
-  font-weight: 700;
   padding: 16px 20px;
   border-bottom: 1px solid rgba(245, 158, 11, 0.15);
 }
 .level-company > .card-header:hover { background: rgba(245, 158, 11, 0.1); }
 
-.level-site { border-left: 2px solid rgba(245, 158, 11, 0.3); }
+.level-site { border-left: 3px solid #3b82f6; }
 .level-site > .card-header {
-  background: rgba(255, 255, 255, 0.015);
-  font-size: 13px;
-  font-weight: 600;
-  padding: 10px 16px;
-  border-bottom: 1px solid rgba(42, 42, 80, 0.5);
+  background: rgba(59, 130, 246, 0.05);
+  padding: 12px 18px;
+  border-bottom: 1px solid rgba(59, 130, 246, 0.15);
 }
-.level-site > .card-header:hover { background: rgba(255, 255, 255, 0.03); }
+.level-site > .card-header:hover { background: rgba(59, 130, 246, 0.08); }
 
-.level-folder { border-left: 1px solid rgba(245, 158, 11, 0.12); }
+.level-folder { border-left: 2px solid #6b7280; }
 .level-folder > .collapsible-header {
-  background: transparent;
-  font-size: 12px;
-  font-weight: 500;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--border-light);
-  color: var(--text-secondary);
+  background: rgba(107, 114, 128, 0.03);
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(107, 114, 128, 0.12);
+  color: var(--text-primary);
 }
-.level-folder > .collapsible-header:hover { background: rgba(255, 255, 255, 0.015); }
+.level-folder > .collapsible-header:hover { background: rgba(107, 114, 128, 0.06); }
+
+/* ── Level badges ── */
+.level-badge {
+  display: inline-block;
+  padding: 2px 14px;
+  border-radius: 20px;
+  font-weight: 600;
+  line-height: 1.7;
+}
+.level-badge-company {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.5);
+  font-weight: 700;
+}
+.level-badge-site {
+  background: rgba(59, 130, 246, 0.2);
+  color: #93c5fd;
+  border: 1px solid rgba(59, 130, 246, 0.5);
+}
+.level-badge-folder {
+  background: rgba(107, 114, 128, 0.2);
+  color: #d1d5db;
+  border: 1px solid rgba(107, 114, 128, 0.5);
+}
+.level-count {
+  margin-left: auto;
+  color: var(--text-dim);
+  font-weight: 400;
+  flex-shrink: 0;
+}
 </style>
 {% endblock %}
 {% block content %}
@@ -72,7 +97,8 @@
     <div class="card level-company" style="margin-top: 16px;">
       <div class="card-header collapsible-header" onclick="toggleGroup('{{ cid }}')">
         <span class="arrow">&#9660;</span>
-        {{ cname }} <span style="font-weight: 400; color: var(--text-dim);">({{ ctotal }})</span>
+        <span class="level-badge level-badge-company">{{ cname }}</span>
+        <span class="level-count">({{ ctotal }})</span>
       </div>
       <div class="collapsible-body" id="{{ cid }}">
         {% set sidx = namespace(value=0) %}
@@ -82,7 +108,8 @@
         <div class="nested-card level-site">
           <div class="card-header collapsible-header" onclick="toggleGroup('{{ sid }}')">
             <span class="arrow">&#9660;</span>
-            {{ sname }} <span style="font-weight: 400; color: var(--text-dim);">({{ stotal }})</span>
+            <span class="level-badge level-badge-site">{{ sname }}</span>
+            <span class="level-count">({{ stotal }})</span>
           </div>
           <div class="collapsible-body" id="{{ sid }}">
             {% set fidx = namespace(value=0) %}
@@ -91,7 +118,9 @@
             {% set fid = "f-" ~ cidx.value ~ "-" ~ sidx.value ~ "-" ~ fidx.value %}
             <div class="level-folder" style="margin: 4px 0; border: 1px solid var(--border); border-radius: 6px;">
               <div class="collapsible-header" onclick="toggleGroup('{{ fid }}')">
-                <span class="arrow">&#9660;</span> {{ fname }} <span style="font-weight: 400;">({{ vehicles|length }})</span>
+                <span class="arrow">&#9660;</span>
+                <span class="level-badge level-badge-folder">{{ fname }}</span>
+                <span class="level-count">({{ vehicles|length }})</span>
               </div>
               <div class="collapsible-body" id="{{ fid }}">
                 <div class="table-container">

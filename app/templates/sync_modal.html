@@ -1,12 +1,12 @@
 <div class="modal-overlay" onclick="if(event.target===this)this.remove()">
-  <div class="modal">
+  <div class="modal" id="sync-modal">
     <div class="modal-header">
       <h2>Синхронизация из Pilot</h2>
       <button type="button" class="modal-close" onclick="this.closest('.modal-overlay').remove()">&times;</button>
     </div>
-    <form hx-post="/api/refuels/sync" hx-target="#refuels-list" hx-swap="innerHTML"
-          hx-on::after-request="if(event.detail.successful) this.closest('.modal-overlay').remove()">
-      <div class="modal-body">
+    <form hx-post="/api/refuels/sync/preview" hx-target="#modal-container" hx-swap="innerHTML"
+          hx-on::before-request="document.getElementById('sync-loading').style.display='flex'">
+      <div class="modal-body" id="sync-form-body">
         <div class="form-group">
           <label>Транспорт</label>
           <input type="text" class="form-input" placeholder="Поиск..." oninput="filterSyncVehicles(this.value)" style="margin-bottom:6px">
@@ -42,10 +42,17 @@ function filterSyncVehicles(q){
           </div>
         </div>
       </div>
+      <div id="sync-loading" style="display:none;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;gap:16px">
+        <div class="spinner" style="width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite"></div>
+        <p style="color:var(--text-secondary)">Загружаем данные из Pilot...</p>
+      </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Отмена</button>
         <button type="submit" class="btn btn-primary">Синхронизировать</button>
       </div>
     </form>
   </div>
+  <style>
+@keyframes spin { to { transform: rotate(360deg); } }
+  </style>
 </div>
