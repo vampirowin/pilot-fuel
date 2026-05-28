@@ -83,7 +83,7 @@ def _render_refuel_hierarchy(nested_groups: list, vmap: dict, user_role: str, pa
     for cname, ctotal, sites in nested_groups:
         cidx += 1
         cid = f"rc-{cidx}"
-        html += f'<div class="card level-company" style="margin-top:16px"><div class="card-header collapsible-header" onclick="toggleGroup(\'{cid}\')"><span class="arrow">&#9660;</span><div class="level-header-center"><span class="level-title">{cname}</span><span class="level-tag">Компания</span></div><span class="level-count">{ctotal}</span></div><div class="collapsible-body" id="{cid}">'
+        html += f'<div class="card level-company" style="margin-top:16px"><div class="card-header collapsible-header" onclick="toggleGroup(\'{cid}\')"><span class="arrow">&#9660;</span><span class="level-badge level-badge-company">{cname}</span><span class="level-count">{ctotal}</span></div><div class="collapsible-body" id="{cid}">'
         sidx = 0
         for sname, stotal, folders in sites:
             sidx += 1
@@ -93,7 +93,7 @@ def _render_refuel_hierarchy(nested_groups: list, vmap: dict, user_role: str, pa
                         html += _render_vehicle_group(vid, entries, vmap, page, date_from, date_to, user_role)
             else:
                 sid = f"rs-{cidx}-{sidx}"
-                html += f'<div class="card level-site" style="margin-top:8px"><div class="card-header collapsible-header" onclick="toggleGroup(\'{sid}\')"><span class="arrow">&#9660;</span><div class="level-header-center"><span class="level-title">{sname}</span><span class="level-tag">Площадка</span></div><span class="level-count">{stotal}</span></div><div class="collapsible-body" id="{sid}">'
+                html += f'<div class="card level-site" style="margin-top:8px"><div class="card-header collapsible-header" onclick="toggleGroup(\'{sid}\')"><span class="arrow">&#9660;</span><span class="level-badge level-badge-site">{sname}</span><span class="level-count">{stotal}</span></div><div class="collapsible-body" id="{sid}">'
                 fidx = 0
                 for fname, ftotal, vehicles_list in folders:
                     fidx += 1
@@ -102,7 +102,7 @@ def _render_refuel_hierarchy(nested_groups: list, vmap: dict, user_role: str, pa
                             html += _render_vehicle_group(vid, entries, vmap, page, date_from, date_to, user_role)
                     else:
                         fid = f"rf-{cidx}-{sidx}-{fidx}"
-                        html += f'<div class="level-folder" style="margin:4px 0;border:1px solid var(--border);border-radius:6px"><div class="collapsible-header" onclick="toggleGroup(\'{fid}\')"><span class="arrow">&#9660;</span><div class="level-header-center"><span class="level-title">{fname}</span><span class="level-tag">Тип ТС</span></div><span class="level-count">{ftotal}</span></div><div class="collapsible-body" id="{fid}">'
+                        html += f'<div class="level-folder" style="margin:4px 0;border:1px solid var(--border);border-radius:6px"><div class="collapsible-header" onclick="toggleGroup(\'{fid}\')"><span class="arrow">&#9660;</span><span class="level-badge level-badge-folder">{fname}</span><span class="level-count">{ftotal}</span></div><div class="collapsible-body" id="{fid}">'
                         for vid, plate, entries in vehicles_list:
                             html += _render_vehicle_group(vid, entries, vmap, page, date_from, date_to, user_role)
                         html += '</div></div>'

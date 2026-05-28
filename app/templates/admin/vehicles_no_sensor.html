@@ -22,10 +22,7 @@
     <div class="card level-folder" style="margin-top:16px;">
       <div class="card-header collapsible-header" onclick="toggleGroup('{{ gid }}')">
         <span class="arrow">&#9660;</span>
-        <div class="level-header-center">
-          <span class="level-title">{{ group_name }}</span>
-          <span class="level-tag">Тип ТС</span>
-        </div>
+        <span class="level-badge level-badge-folder">{{ group_name }}</span>
         <span class="level-count">{{ vehicles|length }}</span>
       </div>
       <div class="collapsible-body" id="{{ gid }}">

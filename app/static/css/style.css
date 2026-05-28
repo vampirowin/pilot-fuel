@@ -805,48 +805,32 @@ tr:hover td {
 }
 .level-folder > .collapsible-header:hover { background: rgba(107, 114, 128, 0.06); }
 
-/* ── Centered header content (title + tag column) ── */
-.level-header-center {
+/* ── Level badges (name in colored pill) ── */
+.level-badge {
+  display: inline-block;
+  padding: 2px 14px;
+  border-radius: 20px;
+  font-weight: 600;
+  line-height: 1.7;
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  line-height: 1.3;
-  min-width: 0;
+  text-align: center;
 }
-.level-header-center .level-title {
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
-}
-.level-header-center .level-tag {
-  font-size: 10px;
-  font-weight: 600;
-  padding: 0 8px;
-  border-radius: 8px;
-  line-height: 1.6;
-  letter-spacing: 0.3px;
-}
-
-.level-company .level-tag {
+.level-badge-company {
   background: rgba(245, 158, 11, 0.2);
   color: #fbbf24;
-  border: 1px solid rgba(245, 158, 11, 0.4);
+  border: 1px solid rgba(245, 158, 11, 0.5);
+  font-weight: 700;
 }
-.level-site .level-tag {
+.level-badge-site {
   background: rgba(59, 130, 246, 0.2);
   color: #93c5fd;
-  border: 1px solid rgba(59, 130, 246, 0.4);
+  border: 1px solid rgba(59, 130, 246, 0.5);
 }
-.level-folder .level-header-center {
-  align-items: flex-start;
-}
-.level-folder .level-tag {
+.level-badge-folder {
   background: rgba(107, 114, 128, 0.2);
   color: #d1d5db;
-  border: 1px solid rgba(107, 114, 128, 0.4);
+  border: 1px solid rgba(107, 114, 128, 0.5);
+  text-align: left;
 }
 
 /* ── Level count ── */

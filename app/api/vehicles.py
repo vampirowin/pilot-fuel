@@ -92,7 +92,7 @@ def render_nested_partial(nested_groups: list, can_act: bool) -> str:
     for cname, ctotal, sites in nested_groups:
         cidx += 1
         cid = f"c-{cidx}"
-        html += f'<div class="card level-company" style="margin-top: 16px;"><div class="card-header collapsible-header" onclick="toggleGroup(\'{cid}\')"><span class="arrow">&#9660;</span><div class="level-header-center"><span class="level-title">{cname}</span><span class="level-tag">Компания</span></div><span class="level-count">{ctotal}</span></div><div class="collapsible-body" id="{cid}">'
+        html += f'<div class="card level-company" style="margin-top: 16px;"><div class="card-header collapsible-header" onclick="toggleGroup(\'{cid}\')"><span class="arrow">&#9660;</span><span class="level-badge level-badge-company">{cname}</span><span class="level-count">{ctotal}</span></div><div class="collapsible-body" id="{cid}">'
         for sname, stotal, folders in sites:
             if sname == "__flat__":
                 # Flat mode — render vehicles directly under company
@@ -117,7 +117,7 @@ def render_nested_partial(nested_groups: list, can_act: bool) -> str:
             else:
                 sidx += 1
                 sid = f"s-{cidx}-{sidx}"
-                html += f'<div class="card level-site" style="margin: 8px 0;"><div class="card-header collapsible-header" onclick="toggleGroup(\'{sid}\')"><span class="arrow">&#9660;</span><div class="level-header-center"><span class="level-title">{sname}</span><span class="level-tag">Площадка</span></div><span class="level-count">{stotal}</span></div><div class="collapsible-body" id="{sid}">'
+                html += f'<div class="card level-site" style="margin: 8px 0;"><div class="card-header collapsible-header" onclick="toggleGroup(\'{sid}\')"><span class="arrow">&#9660;</span><span class="level-badge level-badge-site">{sname}</span><span class="level-count">{stotal}</span></div><div class="collapsible-body" id="{sid}">'
                 for fname, vehicles in folders:
                     if fname == "__flat__":
                         # Flat folder — render table directly
@@ -141,7 +141,7 @@ def render_nested_partial(nested_groups: list, can_act: bool) -> str:
                     else:
                         fidx += 1
                         fid = f"f-{cidx}-{sidx}-{fidx}"
-                        html += f'<div class="level-folder" style="margin:4px 0;border:1px solid var(--border);border-radius:6px"><div class="collapsible-header" onclick="toggleGroup(\'{fid}\')"><span class="arrow">&#9660;</span><div class="level-header-center"><span class="level-title">{fname}</span><span class="level-tag">Тип ТС</span></div><span class="level-count">{len(vehicles)}</span></div><div class="collapsible-body" id="{fid}"><div class="table-container"><table><thead><tr>'
+                        html += f'<div class="level-folder" style="margin:4px 0;border:1px solid var(--border);border-radius:6px"><div class="collapsible-header" onclick="toggleGroup(\'{fid}\')"><span class="arrow">&#9660;</span><span class="level-badge level-badge-folder">{fname}</span><span class="level-count">{len(vehicles)}</span></div><div class="collapsible-body" id="{fid}"><div class="table-container"><table><thead><tr>'
                     if can_act:
                         html += '<th style="width:32px;"><input type="checkbox" onchange="var e=this;document.querySelectorAll(\'#bulk-vehicle-form input[name=vehicle_ids]\').forEach(function(c){c.checked=e.checked})"></th>'
                     html += '<th>#</th><th>Госномер</th><th>IMEI</th><th>Датчик</th><th>Заправки</th><th>Компания</th>'
