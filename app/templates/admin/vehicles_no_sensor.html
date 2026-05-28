@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}pilot-fuel — ТС без датчиков{% endblock %}
+{% block head %}
+<style>
+.collapsible-header { cursor: pointer; user-select: none; }
+.collapsible-header:hover { background: var(--bg-card-hover); }
+.collapsible-header .arrow { transition: transform 0.2s; display: inline-block; margin-right: 8px; font-size: 12px; }
+.collapsible-header.collapsed .arrow { transform: rotate(-90deg); }
+.collapsible-body { overflow: hidden; transition: max-height 0.3s ease; }
+.collapsible-body.collapsed { max-height: 0 !important; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>ТС без датчика топлива</h1>
+  <div class="page-header-actions">
+    <span style="color:var(--text-dim);margin-right:12px">Всего: {{ total_count }}</span>
+    <button class="btn btn-primary" hx-post="/api/admin/vehicles-no-sensor/bulk-restore" hx-target="#vehicles-list" hx-swap="innerHTML" hx-include="#no-sensor-form" hx-confirm="Вернуть выбранные ТС в список синхронизации?">
+      Вернуть
+    </button>
+  </div>
+</div>
+
+{% include "vehicles_search.html" %}
+
+<form id="no-sensor-form">
+<div id="vehicles-list">
+  {% if groups %}
+    {% for group_name, vehicles in groups %}
+    {% set gid = "ns-" + loop.index|string %}
+    <div class="card" style="margin-top:16px;">
+      <div class="card-header collapsible-header" onclick="toggleGroup('{{ gid }}')">
+        <span class="arrow">&#9660;</span>
+        {{ group_name }} <span style="font-weight:400;color:var(--text-dim)">({{ vehicles|length }})</span>
+      </div>
+      <div class="collapsible-body" id="{{ gid }}">
+        <div class="table-container"><table>
+          <thead><tr>
+            <th style="width:32px;"><input type="checkbox" onchange="var e=this;document.querySelectorAll('#no-sensor-form input[name=vehicle_ids]').forEach(function(c){c.checked=e.checked})"></th>
+            <th>#</th><th>Госномер</th><th>IMEI</th><th>Действия</th>
+          </tr></thead>
+          <tbody>
+            {% for v in vehicles %}
+            <tr id="v-{{ v.id }}">
+              <td><input type="checkbox" name="vehicle_ids" value="{{ v.id }}"></td>
+              <td style="color:var(--text-dim)">{{ loop.index }}</td>
+              <td><strong>{{ v.plate_number or '—' }}</strong></td>
+              <td style="font-family:monospace;font-size:12px">{{ v.imei or '—' }}</td>
+              <td><button class="btn btn-sm btn-primary" hx-post="/api/vehicles/{{ v.id }}/toggle-sensor" hx-target="#v-{{ v.id }}" hx-swap="outerHTML" hx-confirm="Вернуть «{{ v.plate_number or v.id }}» в список?">Вернуть</button></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table></div>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+  <div class="card"><div class="empty-state"><h3>Нет исключённых ТС</h3><p>Все ТС имеют датчики топлива.</p></div></div>
+  {% endif %}
+</div>
+</form>
+
+<script>
+function toggleGroup(id) {
+  const body = document.getElementById(id);
+  if (!body) return;
+  body.classList.toggle('collapsed');
+  const header = body.previousElementSibling;
+  if (header) header.classList.toggle('collapsed');
+}
+</script>
+{% endblock %}

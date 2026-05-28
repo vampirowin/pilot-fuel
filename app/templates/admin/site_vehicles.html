@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}pilot-fuel — ТС площадки{% endblock %}
+{% block head %}
+<style>
+.search-input { padding:8px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg-card);color:var(--text);font-size:14px;width:280px;outline:none }
+.search-input:focus { border-color:var(--accent) }
+</style>
+{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>ТС площадки — {{ site.name }}</h1>
+  <span style="color:var(--text-dim)">{{ company.name }}</span>
+</div>
+<a href="/admin/companies/{{ company.id }}/sites" class="btn btn-sm btn-secondary" style="margin-bottom:16px">← Назад к площадкам</a>
+
+<div class="card">
+  <h3 style="margin-bottom:12px">Привязать ТС к площадке</h3>
+  <form id="assign-form" method="POST" action="/admin/companies/{{ company.id }}/sites/{{ site.id }}/vehicles/assign">
+    <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px">
+      <input type="text" class="search-input" name="plate" placeholder="Поиск по госномеру..." value="{{ plate or '' }}"
+        hx-get="/api/admin/site-vehicles-search/{{ company.id }}/{{ site.id }}"
+        hx-trigger="keyup changed delay:300ms, search"
+        hx-target="#free-vehicles-list"
+        hx-swap="innerHTML"
+        autocomplete="off">
+      <button type="submit" class="btn btn-primary">Привязать</button>
+    </div>
+    <div id="free-vehicles-list">
+      {% if free_vehicles %}
+      <div class="table-container">
+        <table>
+          <thead><tr><th style="width:40px"><input type="checkbox" id="select-all"></th><th>Госномер</th><th>IMEI</th></tr></thead>
+          <tbody>
+            {% for v in free_vehicles %}
+            <tr>
+              <td><input type="checkbox" name="vehicle_ids" value="{{ v.id }}"></td>
+              <td><strong>{{ v.plate_number or '—' }}</strong></td>
+              <td style="font-family:monospace;font-size:12px">{{ v.imei or '—' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p style="color:var(--text-dim);margin:0">Нет свободных ТС.</p>
+      {% endif %}
+    </div>
+  </form>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <h3 style="margin-bottom:12px">Привязанные ТС ({{ assigned_vehicles|length }})</h3>
+  {% if assigned_vehicles %}
+  <div class="table-container">
+    <table>
+      <thead><tr><th>Госномер</th><th>IMEI</th><th>Действия</th></tr></thead>
+      <tbody>
+        {% for v in assigned_vehicles %}
+        <tr>
+          <td><strong>{{ v.plate_number or '—' }}</strong></td>
+          <td style="font-family:monospace;font-size:12px">{{ v.imei or '—' }}</td>
+          <td>
+            <form method="POST" action="/admin/companies/{{ company.id }}/sites/{{ site.id }}/vehicles/unassign" style="display:inline">
+              <input type="hidden" name="vehicle_id" value="{{ v.id }}">
+              <button class="btn btn-sm btn-danger" onclick="return confirm('Отвязать ТС от площадки?')">Отвязать</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p style="color:var(--text-dim)">Нет привязанных ТС.</p>
+  {% endif %}
+</div>
+
+<script>
+let selectedVehicles = new Set();
+
+document.getElementById('assign-form').addEventListener('change', function(e) {
+  if (e.target.name === 'vehicle_ids') {
+    if (e.target.checked) selectedVehicles.add(e.target.value);
+    else selectedVehicles.delete(e.target.value);
+  }
+});
+
+document.body.addEventListener('htmx:afterSwap', function(e) {
+  if (e.detail.target.id === 'free-vehicles-list') {
+    document.querySelectorAll('#free-vehicles-list input[name=vehicle_ids]').forEach(function(cb) {
+      if (selectedVehicles.has(cb.value)) cb.checked = true;
+    });
+  }
+});
+</script>
+{% endblock %}

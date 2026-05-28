@@ -1,5 +1,4 @@
 import asyncio
-import json
 import math
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Request, Depends, HTTPException, Query, Form, Path
@@ -11,9 +10,10 @@ from app.database import get_db
 from app.models.refuel_entry import RefuelEntry
 from app.models.pilot_refuel import PilotRefuel
 from app.models.vehicle import Vehicle
+from app.models.client_account import ClientAccount
 from app.models.setting import Setting
 from app.models.sync_log import SyncLog
-from app.dependencies import get_current_username
+from app.dependencies import get_current_user, apply_refuel_filter, apply_vehicle_filter
 from app.services.pilot_service import PilotService
 
 router = APIRouter()
@@ -21,7 +21,7 @@ templates = Jinja2Templates(directory="app/templates")
 PER_PAGE = 10
 
 
-def _render_vehicle_group(vehicle_id: int, entries: list, vmap: dict, page: int = 1, date_from: str = "", date_to: str = "") -> str:
+def _render_vehicle_group(vehicle_id: int, entries: list, vmap: dict, page: int = 1, date_from: str = "", date_to: str = "", user_role: str = "user") -> str:
     plate = vmap.get(vehicle_id, {}).get("plate_number", "—")
     add_btn = f'<button class="btn btn-sm btn-secondary" hx-get="/api/refuels/add-form?vehicle_id={vehicle_id}" hx-target="#modal-container" hx-swap="innerHTML">+ Добавить</button>'
     h = f'<div class="card vehicle-group"><h3 class="vehicle-group-title"><span>{plate} <span class="vehicle-group-count">{len(entries)}</span></span>{add_btn}</h3><div class="table-container"><table><thead><tr><th>Дата</th><th>Pilot (л)</th><th>Чек (л)</th><th>Разница</th><th>Погрешность</th><th>Статус</th><th>Действия</th></tr></thead><tbody>'
@@ -52,16 +52,16 @@ def _pagination_html(page: int, total: int, qs: str) -> str:
     qs_part = f"&{qs}" if qs else ""
     prev_url = f"/refuels?page={page-1}{qs_part}" if page > 1 else "#"
     next_url = f"/refuels?page={page+1}{qs_part}" if page < total else "#"
-    return f"""<div class="pagination"><button class="chip {prev_d}" hx-get="{prev_url}" hx-target="#refuels-list" hx-push-url="true" {prev_d}>← Назад</button><span>стр. {page} из {total}</span><button class="chip {next_d}" hx-get="{next_url}" hx-target="#refuels-list" hx-push-url="true" {next_d}>Вперед →</button></div>"""
+    return f'<div class="pagination"><button class="chip {prev_d}" hx-get="{prev_url}" hx-target="#refuels-list" hx-push-url="true" {prev_d}>← Назад</button><span>стр. {page} из {total}</span><button class="chip {next_d}" hx-get="{next_url}" hx-target="#refuels-list" hx-push-url="true" {next_d}>Вперед →</button></div>'
 
 
-def _list_html(grouped: list, vmap: dict, page: int, total: int, qs: str, date_from: str = "", date_to: str = "") -> str:
+def _list_html(grouped: list, vmap: dict, page: int, total: int, qs: str, date_from: str = "", date_to: str = "", user_role: str = "user") -> str:
     if not grouped:
         return '<div class="card"><div class="empty-state"><p>Нет заправок.</p></div></div>'
     start = (page - 1) * PER_PAGE
     h = ""
     for vid, entries in grouped[start:start + PER_PAGE]:
-        h += _render_vehicle_group(vid, entries, vmap, page, date_from, date_to)
+        h += _render_vehicle_group(vid, entries, vmap, page, date_from, date_to, user_role)
     h += _pagination_html(page, total, qs)
     return h
 
@@ -69,7 +69,7 @@ def _list_html(grouped: list, vmap: dict, page: int, total: int, qs: str, date_f
 @router.get("/refuels", response_class=HTMLResponse)
 async def refuels_page(
     request: Request,
-    _=Depends(get_current_username),
+    user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     page: int = Query(default=1, ge=1),
 ):
@@ -84,6 +84,7 @@ async def refuels_page(
     dt_str = date_to_str or today
 
     query = select(RefuelEntry).where(RefuelEntry.is_deleted == False)
+    query = apply_refuel_filter(query, user, RefuelEntry, Vehicle)
     try:
         df = datetime.strptime(df_str, "%Y-%m-%d")
         query = query.where(RefuelEntry.event_date >= df)
@@ -99,11 +100,12 @@ async def refuels_page(
     if status_filter:
         query = query.where(RefuelEntry.comparison_status == status_filter)
     query = query.order_by(desc(RefuelEntry.event_date))
-
     entries = (await db.execute(query)).scalars().all()
-    all_vehicles = (await db.execute(
-        select(Vehicle).where(Vehicle.is_active == True, Vehicle.has_fuel_sensor == True).order_by(Vehicle.plate_number)
-    )).scalars().all()
+
+    all_vehicles_query = select(Vehicle).where(Vehicle.is_active == True, Vehicle.has_fuel_sensor == True)
+    all_vehicles_query = apply_vehicle_filter(all_vehicles_query, user, Vehicle)
+    all_vehicles_result = await db.execute(all_vehicles_query.order_by(Vehicle.plate_number))
+    all_vehicles = all_vehicles_result.scalars().all()
 
     vmap = {v.id: {"plate_number": v.plate_number, "name": v.name} for v in all_vehicles}
     grouped = _group_by_vehicle(entries)
@@ -121,18 +123,15 @@ async def refuels_page(
         qparts["status"] = status_filter
     qs = "&".join(f"{k}={v}" for k, v in qparts.items())
 
-    rendered = _list_html(grouped, vmap, page, total_pages, qs, df_str, dt_str)
-
+    rendered = _list_html(grouped, vmap, page, total_pages, qs, df_str, dt_str, user.role)
     is_hx = request.headers.get("hx-request") == "true"
     if is_hx:
         return HTMLResponse(rendered)
 
-    today_str = today
-    month_start_str = month_start
+    days1_str = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
     days7_str = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
     days14_str = (datetime.now() - timedelta(days=14)).strftime("%Y-%m-%d")
     days30_str = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
-    days1_str = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
 
     return templates.TemplateResponse(request, "refuels.html", {
         "list_html": rendered,
@@ -141,8 +140,8 @@ async def refuels_page(
         "selected_status": status_filter or "",
         "date_from": df_str,
         "date_to": dt_str,
-        "today_str": today_str,
-        "month_start_str": month_start_str,
+        "today_str": today,
+        "month_start_str": month_start,
         "days1_str": days1_str,
         "days7_str": days7_str,
         "days14_str": days14_str,
@@ -155,12 +154,12 @@ async def refuels_page(
 @router.get("/api/refuels/sync-modal", response_class=HTMLResponse)
 async def sync_modal(
     request: Request,
-    _=Depends(get_current_username),
+    user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    all_vehicles = (await db.execute(
-        select(Vehicle).where(Vehicle.is_active == True, Vehicle.has_fuel_sensor == True).order_by(Vehicle.plate_number)
-    )).scalars().all()
+    query = select(Vehicle).where(Vehicle.is_active == True, Vehicle.has_fuel_sensor == True)
+    query = apply_vehicle_filter(query, user, Vehicle)
+    all_vehicles = (await db.execute(query.order_by(Vehicle.plate_number))).scalars().all()
     today = datetime.now().strftime("%Y-%m-%d")
     seven_ago = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
     return templates.TemplateResponse(request, "sync_modal.html", {
@@ -173,15 +172,18 @@ async def sync_modal(
 @router.post("/api/refuels/sync", response_class=HTMLResponse)
 async def sync_refuels(
     request: Request,
-    _=Depends(get_current_username),
+    user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     days: int = Query(default=7),
     date_from: str = Form(default=None),
     date_to: str = Form(default=None),
     vehicle_id: str | None = Form(default=None),
 ):
-    token = request.session.get("token")
-    node_id = request.session.get("node_id", 0)
+    if user.role not in ("superadmin", "company_admin"):
+        raise HTTPException(status_code=403)
+
+    token = user.pilot_token or request.session.get("token")
+    node_id = user.pilot_node_id or request.session.get("node_id", 0)
     if not token:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
@@ -202,6 +204,7 @@ async def sync_refuels(
     stop_str = dt.strftime("%d.%m.%Y 23:59")
 
     q = select(Vehicle).where(Vehicle.is_active == True, Vehicle.has_fuel_sensor == True)
+    q = apply_vehicle_filter(q, user, Vehicle)
     if vehicle_id:
         q = q.where(Vehicle.id == int(vehicle_id))
     vehicles = (await db.execute(q)).scalars().all()
@@ -212,10 +215,6 @@ async def sync_refuels(
     if not veh_ids:
         return HTMLResponse('<div class="card"><div class="empty-state"><p>Нет ТС с agent_id.</p></div></div>')
 
-    ts = datetime.now().strftime('%d.%m %H:%M:%S')
-    with open("sync_debug.log", "a") as lf:
-        lf.write(f"[{ts}] veh_ids={veh_ids}, start={start_str}, stop={stop_str}\n")
-        lf.write(f"[{ts}] vehicle_id param received: '{vehicle_id}' (type={type(vehicle_id).__name__})\n")
     BATCH_SIZE = 20
     all_events = []
     try:
@@ -232,14 +231,8 @@ async def sync_refuels(
             all_events.extend(batch_events)
             await asyncio.sleep(0.5)
     except Exception as e:
-        with open("sync_debug.log", "a") as lf:
-            lf.write(f"[{datetime.now().strftime('%d.%m %H:%M:%S')}] Pilot API error: {e}\n")
         return HTMLResponse(f'<div class="card"><div class="empty-state"><p>Ошибка Pilot API: {str(e)[:200]}</p></div></div>')
     raw_events = all_events
-    with open("sync_debug.log", "a") as lf:
-        lf.write(f"[{datetime.now().strftime('%d.%m %H:%M:%S')}] raw_events count={len(raw_events)}\n")
-        if raw_events:
-            lf.write(f"[{datetime.now().strftime('%d.%m %H:%M:%S')}] first event: {raw_events[0]}\n")
 
     total_new = 0
     errors = []
@@ -307,12 +300,13 @@ async def sync_refuels(
         status="completed" if not errors else "partial",
         records_affected=total_new,
         details="; ".join(errors) if errors else None,
-        created_by=request.session.get("username"),
+        created_by=user.username,
     )
     db.add(log)
     await db.commit()
 
     query = select(RefuelEntry).where(RefuelEntry.is_deleted == False)
+    query = apply_refuel_filter(query, user, RefuelEntry, Vehicle)
     query = query.where(RefuelEntry.event_date >= df, RefuelEntry.event_date <= dt.replace(hour=23, minute=59, second=59))
     if vehicle_id:
         query = query.where(RefuelEntry.vehicle_id == int(vehicle_id))
@@ -323,7 +317,6 @@ async def sync_refuels(
         select(Vehicle).where(Vehicle.is_active == True)
     )).scalars().all()
     vmap = {v.id: {"plate_number": v.plate_number, "name": v.name} for v in vehicles_result}
-
     grouped = _group_by_vehicle(entries)
     total_pages = max(1, math.ceil(len(grouped) / PER_PAGE))
     qf = date_from or df.strftime("%Y-%m-%d")
@@ -332,7 +325,7 @@ async def sync_refuels(
     if vehicle_id:
         qparts["vehicle_id"] = vehicle_id
     qs = "&".join(f"{k}={v}" for k, v in qparts.items())
-    html = _list_html(grouped, vmap, 1, total_pages, qs, qf, qt)
+    html = _list_html(grouped, vmap, 1, total_pages, qs, qf, qt, user.role)
 
     if total_new:
         html += f'<div class="toast toast-success">Загружено {total_new} заправок</div>'
@@ -343,7 +336,6 @@ async def sync_refuels(
         html += f'<div class="toast toast-warning">Pilot: {len(raw_events)} событий, ни одно не совпало. Имена: {names}</div>'
     if raw_events:
         html += f'<div class="toast toast-info">Всего от Pilot: {len(raw_events)} событий</div>'
-
     return HTMLResponse(html)
 
 
@@ -373,17 +365,16 @@ def _calc_comparison(pilot_amount: float | None, actual_amount: float | None, n_
 @router.get("/api/refuels/add-form", response_class=HTMLResponse)
 async def add_refuel_form(
     request: Request,
-    _=Depends(get_current_username),
+    user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     vehicle_id: int = Query(...),
 ):
     vehicle = await db.get(Vehicle, vehicle_id)
-    all_v = (await db.execute(
-        select(Vehicle).where(Vehicle.is_active == True).order_by(Vehicle.plate_number)
-    )).scalars().all()
+    query = select(Vehicle).where(Vehicle.is_active == True)
+    query = apply_vehicle_filter(query, user, Vehicle)
+    all_v = (await db.execute(query.order_by(Vehicle.plate_number))).scalars().all()
     return templates.TemplateResponse(request, "add_refuel_modal.html", {
-        "vehicle": vehicle,
-        "all_vehicles": all_v,
+        "vehicle": vehicle, "all_vehicles": all_v,
         "default_date": datetime.now().strftime("%Y-%m-%d"),
         "default_time": datetime.now().strftime("%H:%M"),
     })
@@ -392,7 +383,7 @@ async def add_refuel_form(
 @router.post("/api/refuels/add", response_class=HTMLResponse)
 async def add_refuel(
     request: Request,
-    _=Depends(get_current_username),
+    user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     vehicle_id: int = Form(...),
     event_date: str = Form(...),
@@ -427,36 +418,24 @@ async def add_refuel(
         pilot_amount = None
 
     entry = RefuelEntry(
-        vehicle_id=vehicle_id,
-        pilot_refuel_id=pilot_refuel_id,
-        event_date=dt,
-        pilot_amount=pilot_amount,
-        actual_amount=actual_amount,
-        receipt_number=receipt_number or None,
-        source="manual",
-        difference=diff,
-        error_percent=err,
-        comparison_status=status,
+        vehicle_id=vehicle_id, pilot_refuel_id=pilot_refuel_id,
+        event_date=dt, pilot_amount=pilot_amount, actual_amount=actual_amount,
+        receipt_number=receipt_number or None, source="manual",
+        difference=diff, error_percent=err, comparison_status=status,
     )
     db.add(entry)
-
-    log = SyncLog(
-        sync_type="refuel_add",
-        status="completed",
-        records_affected=1,
-        details=f"manual add for vehicle {vehicle_id}",
-        created_by=request.session.get("username"),
-    )
+    log = SyncLog(sync_type="refuel_add", status="completed", records_affected=1,
+                  details=f"manual add for vehicle {vehicle_id}", created_by=user.username)
     db.add(log)
     await db.commit()
 
     today = datetime.now().strftime("%Y-%m-%d")
     month_start = datetime.now().replace(day=1).strftime("%Y-%m-%d")
     q = select(RefuelEntry).where(RefuelEntry.is_deleted == False)
+    q = apply_refuel_filter(q, user, RefuelEntry, Vehicle)
     try:
-        df = datetime.strptime(month_start, "%Y-%m-%d")
-        q = q.where(RefuelEntry.event_date >= df)
-        q = q.where(RefuelEntry.event_date <= datetime.now().replace(hour=23, minute=59, second=59))
+        df_p = datetime.strptime(month_start, "%Y-%m-%d")
+        q = q.where(RefuelEntry.event_date >= df_p, RefuelEntry.event_date <= datetime.now().replace(hour=23, minute=59, second=59))
     except ValueError:
         pass
     q = q.order_by(desc(RefuelEntry.event_date))
@@ -470,7 +449,7 @@ async def add_refuel(
     total_pages = max(1, math.ceil(len(grouped) / PER_PAGE))
     qparts = {"date_from": month_start, "date_to": today}
     qs = "&".join(f"{k}={v}" for k, v in qparts.items())
-    html = _list_html(grouped, vmap, 1, total_pages, qs, month_start, today)
+    html = _list_html(grouped, vmap, 1, total_pages, qs, month_start, today, user.role)
     html += '<div class="toast toast-success">Заправка добавлена</div>'
     return HTMLResponse(html)
 
@@ -478,9 +457,9 @@ async def add_refuel(
 @router.get("/api/refuels/{entry_id}/edit", response_class=HTMLResponse)
 async def edit_refuel_form(
     request: Request,
-    _=Depends(get_current_username),
-    db: AsyncSession = Depends(get_db),
     entry_id: int = Path(...),
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
     page: int = Query(default=1),
     date_from: str = Query(default=""),
     date_to: str = Query(default=""),
@@ -489,17 +468,13 @@ async def edit_refuel_form(
     if not entry or entry.is_deleted:
         raise HTTPException(404, "Запись не найдена")
     vehicle = await db.get(Vehicle, entry.vehicle_id)
-    all_v = (await db.execute(
-        select(Vehicle).where(Vehicle.is_active == True).order_by(Vehicle.plate_number)
-    )).scalars().all()
+    query = select(Vehicle).where(Vehicle.is_active == True)
+    query = apply_vehicle_filter(query, user, Vehicle)
+    all_v = (await db.execute(query.order_by(Vehicle.plate_number))).scalars().all()
     return templates.TemplateResponse(request, "edit_refuel_modal.html", {
-        "entry": entry,
-        "vehicle": vehicle,
-        "all_vehicles": all_v,
-        "page": page,
-        "date_from": date_from,
-        "date_to": date_to,
-        "is_admin": request.session.get("is_admin", False),
+        "entry": entry, "vehicle": vehicle, "all_vehicles": all_v,
+        "page": page, "date_from": date_from, "date_to": date_to,
+        "is_admin": user.role == "superadmin",
         "default_date": entry.event_date.strftime("%Y-%m-%d") if entry.event_date else "",
         "default_time": entry.event_date.strftime("%H:%M") if entry.event_date else "",
     })
@@ -508,9 +483,9 @@ async def edit_refuel_form(
 @router.post("/api/refuels/{entry_id}/edit", response_class=HTMLResponse)
 async def edit_refuel(
     request: Request,
-    _=Depends(get_current_username),
-    db: AsyncSession = Depends(get_db),
     entry_id: int = Path(...),
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
     actual_amount: float = Form(...),
     receipt_number: str = Form(default=""),
 ):
@@ -528,42 +503,33 @@ async def edit_refuel(
     else:
         diff = err = None
         status = "pilot_missing" if actual_amount else None
-
     entry.difference = diff
     entry.error_percent = err
     entry.comparison_status = status
 
-    log = SyncLog(
-        sync_type="refuel_edit",
-        status="completed",
-        records_affected=1,
-        details=f"edited entry {entry_id}",
-        created_by=request.session.get("username"),
-    )
+    log = SyncLog(sync_type="refuel_edit", status="completed", records_affected=1,
+                  details=f"edited entry {entry_id}", created_by=user.username)
     db.add(log)
     await db.commit()
 
     today = datetime.now().strftime("%Y-%m-%d")
     month_start = datetime.now().replace(day=1).strftime("%Y-%m-%d")
     q = select(RefuelEntry).where(RefuelEntry.is_deleted == False)
+    q = apply_refuel_filter(q, user, RefuelEntry, Vehicle)
     try:
-        df = datetime.strptime(month_start, "%Y-%m-%d")
-        q = q.where(RefuelEntry.event_date >= df)
-        q = q.where(RefuelEntry.event_date <= datetime.now().replace(hour=23, minute=59, second=59))
+        q = q.where(RefuelEntry.event_date >= datetime.strptime(month_start, "%Y-%m-%d"),
+                    RefuelEntry.event_date <= datetime.now().replace(hour=23, minute=59, second=59))
     except ValueError:
         pass
     q = q.order_by(desc(RefuelEntry.event_date))
     entries = (await db.execute(q)).scalars().all()
-
-    all_v = (await db.execute(
-        select(Vehicle).where(Vehicle.is_active == True, Vehicle.has_fuel_sensor == True)
-    )).scalars().all()
+    all_v = (await db.execute(select(Vehicle).where(Vehicle.is_active == True, Vehicle.has_fuel_sensor == True))).scalars().all()
     vmap = {v.id: {"plate_number": v.plate_number, "name": v.name} for v in all_v}
     grouped = _group_by_vehicle(entries)
     total_pages = max(1, math.ceil(len(grouped) / PER_PAGE))
     qparts = {"date_from": month_start, "date_to": today}
     qs = "&".join(f"{k}={v}" for k, v in qparts.items())
-    html = _list_html(grouped, vmap, 1, total_pages, qs, month_start, today)
+    html = _list_html(grouped, vmap, 1, total_pages, qs, month_start, today, user.role)
     html += '<div class="toast toast-success">Заправка обновлена</div>'
     return HTMLResponse(html)
 
@@ -571,30 +537,27 @@ async def edit_refuel(
 @router.get("/api/refuels/{entry_id}/mark-false-form", response_class=HTMLResponse)
 async def mark_false_form(
     request: Request,
-    _=Depends(get_current_username),
-    db: AsyncSession = Depends(get_db),
     entry_id: int = Path(...),
     page: int = Query(default=1),
     date_from: str = Query(default=""),
     date_to: str = Query(default=""),
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
     entry = await db.get(RefuelEntry, entry_id)
     if not entry or entry.is_deleted:
         raise HTTPException(404, "Запись не найдена")
     return templates.TemplateResponse(request, "mark_false_modal.html", {
-        "entry_id": entry_id,
-        "page": page,
-        "date_from": date_from,
-        "date_to": date_to,
+        "entry_id": entry_id, "page": page, "date_from": date_from, "date_to": date_to,
     })
 
 
 @router.post("/api/refuels/{entry_id}/mark-false", response_class=HTMLResponse)
 async def mark_false(
     request: Request,
-    _=Depends(get_current_username),
-    db: AsyncSession = Depends(get_db),
     entry_id: int = Path(...),
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
     reason: str = Form(...),
     page: int = Form(default=1),
     date_from: str = Form(default=""),
@@ -605,27 +568,21 @@ async def mark_false(
         raise HTTPException(404, "Запись не найдена")
     entry.is_false = True
     entry.false_reason = reason
-    entry.false_marked_by = request.session.get("username")
+    entry.false_marked_by = user.username
     entry.false_marked_at = datetime.now()
-    log = SyncLog(
-        sync_type="mark_false",
-        status="completed",
-        records_affected=1,
-        details=f"marked false: {reason[:200]}",
-        created_by=request.session.get("username"),
-    )
+    log = SyncLog(sync_type="mark_false", status="completed", records_affected=1,
+                  details=f"marked false: {reason[:200]}", created_by=user.username)
     db.add(log)
     await db.commit()
-
-    return await _refresh_list(request, db, page, date_from, date_to)
+    return await _refresh_list(request, db, user, page, date_from, date_to)
 
 
 @router.post("/api/refuels/{entry_id}/unmark-false", response_class=HTMLResponse)
 async def unmark_false(
     request: Request,
-    _=Depends(get_current_username),
-    db: AsyncSession = Depends(get_db),
     entry_id: int = Path(...),
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
     page: int = Form(default=1),
     date_from: str = Form(default=""),
     date_to: str = Form(default=""),
@@ -637,25 +594,19 @@ async def unmark_false(
     entry.false_reason = None
     entry.false_marked_by = None
     entry.false_marked_at = None
-    log = SyncLog(
-        sync_type="unmark_false",
-        status="completed",
-        records_affected=1,
-        details="unmarked false",
-        created_by=request.session.get("username"),
-    )
+    log = SyncLog(sync_type="unmark_false", status="completed", records_affected=1,
+                  details="unmarked false", created_by=user.username)
     db.add(log)
     await db.commit()
-
-    return await _refresh_list(request, db, page, date_from, date_to)
+    return await _refresh_list(request, db, user, page, date_from, date_to)
 
 
 @router.post("/api/refuels/{entry_id}/delete", response_class=HTMLResponse)
 async def delete_refuel(
     request: Request,
-    _=Depends(get_current_username),
-    db: AsyncSession = Depends(get_db),
     entry_id: int = Path(...),
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
     page: int = Form(default=1),
     date_from: str = Form(default=""),
     date_to: str = Form(default=""),
@@ -663,31 +614,25 @@ async def delete_refuel(
     entry = await db.get(RefuelEntry, entry_id)
     if not entry or entry.is_deleted:
         raise HTTPException(404, "Запись не найдена")
-    username = request.session.get("username")
-    is_admin = request.session.get("is_admin", False)
+    is_admin = user.role == "superadmin"
     if not is_admin and entry.source != "manual":
         raise HTTPException(403, "Только админ может удалять синхронизированные записи")
     await db.delete(entry)
-    log = SyncLog(
-        sync_type="delete",
-        status="completed",
-        records_affected=1,
-        details=f"deleted entry {entry_id} by {username}",
-        created_by=username,
-    )
+    log = SyncLog(sync_type="delete", status="completed", records_affected=1,
+                  details=f"deleted entry {entry_id} by {user.username}", created_by=user.username)
     db.add(log)
     await db.commit()
+    return await _refresh_list(request, db, user, page, date_from, date_to)
 
-    return await _refresh_list(request, db, page, date_from, date_to)
 
-
-async def _refresh_list(request: Request, db: AsyncSession, page: int, date_from: str, date_to: str) -> HTMLResponse:
+async def _refresh_list(request: Request, db: AsyncSession, user, page: int, date_from: str, date_to: str) -> HTMLResponse:
     today = datetime.now().strftime("%Y-%m-%d")
     month_start = datetime.now().replace(day=1).strftime("%Y-%m-%d")
     df_str = date_from or month_start
     dt_str = date_to or today
 
     q = select(RefuelEntry).where(RefuelEntry.is_deleted == False)
+    q = apply_refuel_filter(q, user, RefuelEntry, Vehicle)
     try:
         df = datetime.strptime(df_str, "%Y-%m-%d")
         q = q.where(RefuelEntry.event_date >= df)
@@ -715,7 +660,7 @@ async def _refresh_list(request: Request, db: AsyncSession, page: int, date_from
         qparts["date_from"] = df_str
         qparts["date_to"] = dt_str
     qs = "&".join(f"{k}={v}" for k, v in qparts.items())
-    html = _list_html(grouped, vmap, page, total_pages, qs, df_str, dt_str)
+    html = _list_html(grouped, vmap, page, total_pages, qs, df_str, dt_str, user.role)
     return HTMLResponse(html)
 
 
@@ -729,15 +674,6 @@ def _parse_timestamp(val) -> datetime | None:
     if ts > 1e12:
         ts //= 1000
     return datetime.fromtimestamp(ts, tz=timezone.utc)
-
-
-def _parse_float(val) -> float | None:
-    if val is None:
-        return None
-    try:
-        return float(val)
-    except (ValueError, TypeError):
-        return None
 
 
 def _group_by_vehicle(entries: list) -> list:

@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     normal_threshold: float = 3.0
     warning_threshold: float = 10.0
 
+    superadmin_username: str = ""
+    superadmin_password: str = ""
+
     class Config:
         env_file = ".env"
 

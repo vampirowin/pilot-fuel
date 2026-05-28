@@ -8,12 +8,51 @@
 .collapsible-header.collapsed .arrow { transform: rotate(-90deg); }
 .collapsible-body { overflow: hidden; transition: max-height 0.3s ease; }
 .collapsible-body.collapsed { max-height: 0 !important; }
+.nested-card { border: 1px solid var(--border); border-radius: 8px; margin: 8px 0; }
+.nested-card .nested-card { margin: 4px 8px; }
+
+/* ── Hierarchy level styling ── */
+.level-company { border-left: 3px solid var(--accent); }
+.level-company > .card-header {
+  background: rgba(245, 158, 11, 0.06);
+  font-size: 16px;
+  font-weight: 700;
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(245, 158, 11, 0.15);
+}
+.level-company > .card-header:hover { background: rgba(245, 158, 11, 0.1); }
+
+.level-site { border-left: 2px solid rgba(245, 158, 11, 0.3); }
+.level-site > .card-header {
+  background: rgba(255, 255, 255, 0.015);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 10px 16px;
+  border-bottom: 1px solid rgba(42, 42, 80, 0.5);
+}
+.level-site > .card-header:hover { background: rgba(255, 255, 255, 0.03); }
+
+.level-folder { border-left: 1px solid rgba(245, 158, 11, 0.12); }
+.level-folder > .collapsible-header {
+  background: transparent;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-light);
+  color: var(--text-secondary);
+}
+.level-folder > .collapsible-header:hover { background: rgba(255, 255, 255, 0.015); }
 </style>
 {% endblock %}
 {% block content %}
 <div class="page-header">
   <h1>Транспортные средства</h1>
   <div class="page-header-actions">
+    {% if is_superadmin or is_company_admin %}
+    <button class="btn btn-danger" hx-post="/api/vehicles/bulk-remove-sensor" hx-target="#vehicles-table" hx-swap="innerHTML" hx-include="#bulk-vehicle-form" hx-confirm="Убрать выбранные ТС из списка синхронизации топлива?">
+      ТС без датчиков
+    </button>
+    {% endif %}
     <button class="btn btn-primary" hx-post="/api/vehicles/sync" hx-target="#vehicles-table" hx-swap="innerHTML" hx-indicator="#sync-spinner">
       <span class="btn-text">Синхронизировать</span>
       <span class="btn-loading">Синхронизация...</span>
@@ -23,52 +62,76 @@
 
 {% include "vehicles_search.html" %}
 
+<form id="bulk-vehicle-form">
 <div id="vehicles-table">
-  {% if groups %}
-    {% for group_name, vehicles in groups %}
-    {% set group_id = "g-" + loop.index|string %}
-    <div class="card" style="margin-top: 16px;">
-      <div class="card-header collapsible-header" style="padding: 12px 20px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted);" onclick="toggleGroup('{{ group_id }}')">
+  {% if nested_groups %}
+    {% set cidx = namespace(value=0) %}
+    {% for cname, ctotal, sites in nested_groups %}
+    {% set cidx.value = cidx.value + 1 %}
+    {% set cid = "c-" ~ cidx.value %}
+    <div class="card level-company" style="margin-top: 16px;">
+      <div class="card-header collapsible-header" onclick="toggleGroup('{{ cid }}')">
         <span class="arrow">&#9660;</span>
-        {{ group_name }} <span style="font-weight: 400; color: var(--text-dim);">({{ vehicles|length }})</span>
+        {{ cname }} <span style="font-weight: 400; color: var(--text-dim);">({{ ctotal }})</span>
       </div>
-      <div class="collapsible-body" id="{{ group_id }}">
-        <div class="table-container">
-          <table>
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Госномер</th>
-                <th>IMEI</th>
-                <th>Датчики</th>
-                <th>Заправки</th>
-                <th>Собственник</th>
-                <th>Площадка</th>
-                {% if is_admin %}<th style="width: 80px;">Действия</th>{% endif %}
-              </tr>
-            </thead>
-            <tbody>
-              {% for v in vehicles %}
-              <tr id="v-{{ v.id }}">
-                <td style="color: var(--text-dim);">{{ loop.index }}</td>
-                <td><strong>{{ v.plate_number or '—' }}</strong></td>
-                <td style="font-family: monospace; font-size: 12px;">{{ v.imei or '—' }}</td>
-                <td>
-                  <span class="status-badge {% if v.sensor_count > 0 %}status-normal{% else %}status-false-reading{% endif %}">
-                    {{ v.sensor_count }} датч.
-                  </span>
-                </td>
-                <td><a href="/refuels?vehicle_id={{ v.id }}" class="btn btn-sm btn-secondary">Заправки</a></td>
-                <td>{{ v.owner or '—' }}</td>
-                <td>{{ v.location or '—' }}</td>
-                {% if is_admin %}
-                <td><button class="btn btn-sm btn-danger" hx-post="/api/vehicles/{{ v.id }}/toggle-sensor" hx-target="#v-{{ v.id }}" hx-swap="outerHTML" hx-confirm="Пометить «{{ v.plate_number or v.id }}» как ТС без датчика топлива?">Нет датчика</button></td>
-                {% endif %}
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
+      <div class="collapsible-body" id="{{ cid }}">
+        {% set sidx = namespace(value=0) %}
+        {% for sname, stotal, folders in sites %}
+        {% set sidx.value = sidx.value + 1 %}
+        {% set sid = "s-" ~ cidx.value ~ "-" ~ sidx.value %}
+        <div class="nested-card level-site">
+          <div class="card-header collapsible-header" onclick="toggleGroup('{{ sid }}')">
+            <span class="arrow">&#9660;</span>
+            {{ sname }} <span style="font-weight: 400; color: var(--text-dim);">({{ stotal }})</span>
+          </div>
+          <div class="collapsible-body" id="{{ sid }}">
+            {% set fidx = namespace(value=0) %}
+            {% for fname, vehicles in folders %}
+            {% set fidx.value = fidx.value + 1 %}
+            {% set fid = "f-" ~ cidx.value ~ "-" ~ sidx.value ~ "-" ~ fidx.value %}
+            <div class="level-folder" style="margin: 4px 0; border: 1px solid var(--border); border-radius: 6px;">
+              <div class="collapsible-header" onclick="toggleGroup('{{ fid }}')">
+                <span class="arrow">&#9660;</span> {{ fname }} <span style="font-weight: 400;">({{ vehicles|length }})</span>
+              </div>
+              <div class="collapsible-body" id="{{ fid }}">
+                <div class="table-container">
+                  <table>
+                    <thead>
+                      <tr>
+                        {% if is_superadmin or is_company_admin %}<th style="width: 32px;"><input type="checkbox" onchange="var e=this;document.querySelectorAll('#bulk-vehicle-form input[name=vehicle_ids]').forEach(function(c){c.checked=e.checked})"></th>{% endif %}
+                        <th>#</th>
+                        <th>Госномер</th>
+                        <th>IMEI</th>
+                        <th>Датчик</th>
+                        <th>Заправки</th>
+                        <th>Компания</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for v in vehicles %}
+                      <tr id="v-{{ v.id }}">
+                        {% if is_superadmin or is_company_admin %}<td><input type="checkbox" name="vehicle_ids" value="{{ v.id }}"></td>{% endif %}
+                        <td style="color: var(--text-dim);">{{ loop.index }}</td>
+                        <td><strong>{{ v.plate_number or '—' }}</strong></td>
+                        <td style="font-family: monospace; font-size: 12px;">{{ v.imei or '—' }}</td>
+                        <td>
+                          <span class="status-badge {% if v.sensor_count > 0 %}status-normal{% else %}status-false-reading{% endif %}">
+                            {{ v.sensor_count }} датч.
+                          </span>
+                        </td>
+                        <td><a href="/refuels?vehicle_id={{ v.id }}" class="btn btn-sm btn-secondary">Заправки</a></td>
+                        <td>{{ v.company_name or '—' }}</td>
+                      </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
         </div>
+        {% endfor %}
       </div>
     </div>
     {% endfor %}
@@ -82,6 +145,7 @@
   </div>
   {% endif %}
 </div>
+</form>
 
 <script>
 function toggleGroup(id) {

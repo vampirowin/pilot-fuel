@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Integer, String, Boolean, DateTime, Text, func
+from sqlalchemy import Integer, String, Boolean, DateTime, Text, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
 
@@ -9,8 +9,15 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     username: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
+    role: Mapped[str] = mapped_column(String(20), nullable=False, default="user")
+
     pilot_token: Mapped[str | None] = mapped_column(Text, nullable=True)
     pilot_node_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    password_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    client_account_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("client_accounts.id", ondelete="SET NULL"), nullable=True, index=True)
+    site_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("sites.id", ondelete="SET NULL"), nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     last_login: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

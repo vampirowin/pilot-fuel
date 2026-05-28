@@ -9,23 +9,29 @@
 | Backend | FastAPI (async) |
 | ORM | SQLAlchemy 2.0 (async) |
 | Миграции | Alembic |
-| БД | PostgreSQL 16 — новая БД `pilot_fuel` |
+| БД | PostgreSQL 16 — `pilot_fuel` на localhost:5432 |
 | Фронтенд | Jinja2 + HTMX |
 | Графики | Chart.js |
-| Auth | Через Pilot API (логин/пароль → токен) |
+| Auth | Pilot API (логин/пароль → токен) + локальный superadmin |
 | HTTP клиент | httpx (async) |
 | Дизайн | Тёмная тема (новая цветовая схема) |
-| Порт | 9000 |
+| Порт | 9001 |
 
 ## Database Schema
 
 ```
-users              — id, username, pilot_token, node_id, is_admin
-vehicles           — id, pilot_agent_id, imei, plate_number, name, folder, is_active
-fuel_sensors       — id, vehicle_id, pilot_sensor_id, name, tag_id, unit, is_active
-pilot_refuels      — id, vehicle_id, sensor_id, event_date, amount, start_level,
-                     end_level, odometer, address, lat, lon, raw_data (JSONB)
-refuel_entries     — id, vehicle_id, pilot_refuel_id?, event_date,
+client_accounts    — id, name, created_at
+sites              — id, client_account_id (FK), name, created_at
+users              — id, username, role {superadmin|company_admin|user},
+                     pilot_token?, pilot_node_id?, password_hash?,
+                     client_account_id (FK), site_id (FK)
+vehicles           — id, pilot_agent_id, imei, plate_number, name, folder,
+                     sensor_count, has_fuel_sensor,
+                     client_account_id (FK), site_id (FK), is_active
+fuel_sensors       — id, vehicle_id (FK), pilot_sensor_id, name, tag_id, unit, is_active
+pilot_refuels      — id, vehicle_id (FK), sensor_id (FK), event_date, amount,
+                     start_level, end_level, odometer, address, lat, lon, raw_data (JSONB)
+refuel_entries     — id, vehicle_id (FK), pilot_refuel_id (FK), event_date,
                      pilot_amount?, actual_amount?, receipt_number,
                      source{pilot_sync|manual}, difference, error_percent,
                      comparison_status{normal|small_deviation|unacceptable|pilot_missing|false_reading},
@@ -34,18 +40,22 @@ settings           — id, key, value, description
 sync_log           — id, vehicle_id, sync_type, status, records_affected, details
 ```
 
-> `fuel_level_readings` в БД не храним — подгружаем из Pilot API по запросу.
-
 ## Key Decisions
 
-- **Auth**: через Pilot API (как в pilot-monitoring)
-- **БД**: новая `pilot_fuel`, не трогаем `ural_monitor` и `lapa59_db`
-- **Удаление**: гибридное — мягкое (is_deleted) + жёсткое (DELETE)
-- **Ручные заправки без данных Pilot**: статус `pilot_missing` — критическое событие
-- **Fuel level readings**: on-demand из Pilot API, не храним в БД
-- **График датчика**: Chart.js, данные из `sensors/dip`
-- **Кнопки действий в модалке правки**: false/delete вынесены в edit-модалку, в таблице только «Правка» — меньше визуального шума
+- **Multi-tenant**: изоляция по `client_account_id`. Superadmin видит всё.
+- **Суперадмин**: локальный логин/пароль (из `.env`), не имеет доступа к Pilot API. Создаётся через `seed.py`.
+- **Роли**: `superadmin` (всё видит, управляет компаниями/пользователями), `company_admin` (синхронизирует ТС и заправки своей компании), `user` (только просмотр/правка данных своей компании)
+- **Площадки (Site)**: дочерние сущности компании. Пользователь может быть привязан к конкретной площадке (видит только ТС этой площадки) или ко всем.
+- **Owner/location из Pilot не тянем** — показываем название компании как собственника.
+- **Привязка ТС к площадке**: вручную через админку (выбрать площадку → выбрать свободные ТС → привязать).
+- **Удаление**: жёсткое (DELETE). Для pilot_sync записей — только superadmin.
+- **Fuel level readings**: on-demand из Pilot API, не храним в БД.
 - **Репозиторий**: `https://github.com/vampirowin/pilot-fuel` (публичный)
+
+## Суперадмин
+- Логин: `eddikwin` (из `.env`)
+- Пароль: `Iwgtsd6giw!` (из `.env`)
+- Вход: `/admin/login`
 
 ## Existing Projects (not to interfere)
 
@@ -60,98 +70,92 @@ sync_log           — id, vehicle_id, sync_type, status, records_affected, deta
 ## Implementation Status
 
 ### Phase 1 ✅ — Scaffold + DB + Auth
-- ✅ FastAPI project structure created
-- ✅ SQLAlchemy async + Alembic + `pilot_fuel` DB created
-- ✅ All 7 models created (User, Vehicle, FuelSensor, PilotRefuel, RefuelEntry, Setting, SyncLog)
-- ✅ Initial migration applied
+- ✅ FastAPI project structure
+- ✅ SQLAlchemy async + Alembic + `pilot_fuel` DB
+- ✅ All models + initial migration
 - ✅ async PilotService (httpx) — login, get_vehicles, get_fuel_report, get_sensor_dip
-- ✅ Auth via Pilot API (login/logout)
-- ✅ Jinja2 + HTMX + dark amber theme base template
-- ✅ Dashboard page with stats
-- ✅ Vehicles page (list + sync from Pilot API)
-- ✅ Refuels page (list with filters)
-- ✅ Default settings seeded (normal_threshold=3%, warning_threshold=10%)
-- ✅ Port: 9001 (временно; 9000 занят zombie PID 32440)
+- ✅ Auth: Pilot API login + superadmin login
+- ✅ Jinja2 + HTMX + dark amber theme
+- ✅ Dashboard, Vehicles, Refuels pages
+- ✅ Default settings seeded
 
 ### Phase 2 ✅ — Vehicles & Sensors
-- ✅ Sync vehicles from Pilot (`GET /api/v3/vehicles`)
+- ✅ Sync vehicles from Pilot (with client_account_id tagging)
 - ✅ Vehicle search / folder grouping
 - ✅ Admin: toggle sensor, vehicles without sensor
-- ⬜ Get fuel sensors from Pilot
-- ⬜ Sensors page / display per vehicle
 
 ### Phase 3 ✅ — Refuels from Pilot
-- ✅ Batch sync from Pilot (`GET /api/v3/vehicles/fuel`, batch 20, 3 retries)
+- ✅ Batch sync from Pilot (batch 20, 3 retries)
 - ✅ Auto-create refuel_entries
-- ✅ Refuels data table with comparison (diff, error%, thresholds)
-- ✅ Cookie auth for reports.php (PILOTID + node)
-- ✅ Pagination (10 vehicle groups, HTMX, chip-style)
+- ✅ Refuels data table with comparison
+- ✅ Cookie auth for reports.php
+- ✅ Pagination (10 vehicle groups, HTMX)
 
 ### Phase 4 ✅ — Receipt input + Comparison
 - ✅ HTMX form for receipt entry (add/edit modals)
 - ✅ Auto-match with Pilot refuel (±1h)
 - ✅ Calculate diff + error%
-- ✅ Categorize by thresholds (normal, small_deviation, unacceptable, pilot_missing)
-- ✅ Per-vehicle "Add" button on card header
+- ✅ Threshold-based categorization
 
 ### Phase 5 ✅ — Manual entries + Critical events
-- ✅ "Add manually" button + form
+- ✅ Manual entry add
 - ✅ Status `pilot_missing`
-- ✅ Critical events dashboard + counter endpoint
+- ✅ Critical events dashboard + counter
 
-### Phase 6 ✅ — Admin (partial)
-- ✅ Threshold settings UI (admin/settings)
-- ✅ Mark as false / unmark / hard delete
-- ✅ Actions moved into edit modal (cleaner UI)
-- ⬜ Restore deleted entries
-- ⬜ Re-sync (overwrite)
-- ⬜ sync_log view
+### Phase 6 ✅ — Multi-tenant Admin
+- ✅ Superadmin with local auth (eddikwin)
+- ✅ ClientAccount (companies) CRUD
+- ✅ Site (площадки) CRUD, vehicle-site assignment
+- ✅ User management (role/company/site assignment)
+- ✅ Filtering all queries by role/company/site
+- ✅ Vehicles without sensor page
+- ✅ Threshold settings
 
 ### Phase 7 — Sensor graph
-- ⬜ Modal/page: vehicle + period
 - ⬜ On-demand `sensors/dip` from Pilot
 - ⬜ Chart.js fuel level graph
 
 ### Phase 8 — Polish
-- ✅ GitHub repo created + pushed (vampirowin/pilot-fuel)
-- ✅ README.md with full docs
-- ⬜ PWA
-- ⬜ Docker
-- ⬜ Excel export
+- ✅ GitHub repo (vampirowin/pilot-fuel)
+- ✅ README.md
+- ⬜ PWA, Docker, Excel export
 
 ## Workflow Rules
 
-- **Save progress before every fix** — перед каждым исправлением/изменением кода сохранять текущий прогресс: закоммитить изменения в git или сделать бэкап файлов, чтобы можно было откатиться при ошибке.
+- **Save progress before every fix** — перед каждым исправлением/изменением кода сохранять текущий прогресс.
 
 ## Project Structure
 
 ```
 pilot-fuel/
 ├── app/
-│   ├── __init__.py          # FastAPI app factory
-│   ├── config.py            # Settings
-│   ├── database.py          # SQLAlchemy engine + session
+│   ├── __init__.py
+│   ├── config.py
+│   ├── database.py
 │   ├── models/
 │   │   ├── __init__.py
 │   │   ├── user.py
 │   │   ├── vehicle.py
+│   │   ├── client_account.py
+│   │   ├── site.py
 │   │   ├── fuel_sensor.py
 │   │   ├── pilot_refuel.py
 │   │   ├── refuel_entry.py
 │   │   ├── setting.py
 │   │   └── sync_log.py
 │   ├── services/
-│   │   ├── __init__.py
-│   │   └── pilot_service.py  # Async Pilot API client
+│   │   └── pilot_service.py
 │   ├── api/
-│   │   ├── __init__.py
 │   │   ├── auth.py
+│   │   ├── main.py
 │   │   ├── vehicles.py
 │   │   ├── refuels.py
 │   │   └── admin.py
 │   ├── templates/
 │   │   ├── base.html
 │   │   ├── login.html
+│   │   ├── admin_login.html
+│   │   ├── dashboard.html
 │   │   ├── vehicles.html
 │   │   ├── refuels.html
 │   │   ├── critical.html
@@ -159,25 +163,31 @@ pilot-fuel/
 │   │   ├── add_refuel_modal.html
 │   │   ├── edit_refuel_modal.html
 │   │   ├── mark_false_modal.html
-│   │   ├── vehicle_graph.html
+│   │   ├── vehicles_search.html
 │   │   └── admin/
+│   │       ├── companies.html
+│   │       ├── company_edit.html
+│   │       ├── sites.html
+│   │       ├── site_edit.html
+│   │       ├── site_vehicles.html
+│   │       ├── users.html
+│   │       ├── user_edit.html
 │   │       ├── settings.html
 │   │       └── vehicles_no_sensor.html
 │   └── static/
-│       ├── css/
-│       │   └── style.css
-│       └── js/
-│           └── main.js
+│       ├── css/style.css
+│       └── js/main.js
 ├── alembic/
 │   └── versions/
 ├── alembic.ini
 ├── requirements.txt
 ├── .env
+├── seed.py
 ├── MEMORY.md
 ├── AGENTS.md
 └── run.py
 ```
 
 ## Ports
-- pilot-fuel: **9001** (временно; 9000 занят zombie PID 32440)
+- pilot-fuel: **9001** (9000 занят zombie PID 32440)
 - PostgreSQL: 5432 (shared)

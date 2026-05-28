@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}pilot-fuel — Редактировать пользователя{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Редактировать пользователя</h1>
+  <span style="color:var(--text-dim)">{{ target.username }}</span>
+</div>
+<div class="card">
+  <form method="POST" style="max-width:500px">
+    <div class="form-group">
+      <label for="role">Роль</label>
+      <select id="role" name="role" required>
+        <option value="user" {{ 'selected' if target.role == 'user' else '' }}>Пользователь</option>
+        <option value="company_admin" {{ 'selected' if target.role == 'company_admin' else '' }}>Админ компании</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="client_account_id">Компания</label>
+      <select id="client_account_id" name="client_account_id" onchange="loadSites(this.value)">
+        <option value="0">— нет —</option>
+        {% for c in companies %}
+        <option value="{{ c.id }}" {{ 'selected' if target.client_account_id == c.id else '' }}>{{ c.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="site_id">Площадка</label>
+      <select id="site_id" name="site_id">
+        <option value="0">— все площадки —</option>
+        {% for s in sites %}
+        <option value="{{ s.id }}" {{ 'selected' if target.site_id == s.id else '' }}>{{ s.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div style="margin-top:16px">
+      <button type="submit" class="btn btn-primary">Сохранить</button>
+      <a href="/admin/users" class="btn btn-secondary">Отмена</a>
+    </div>
+  </form>
+</div>
+<script>
+async function loadSites(companyId) {
+  const siteSelect = document.getElementById('site_id');
+  siteSelect.innerHTML = '<option value="0">— все площадки —</option>';
+  if (companyId && companyId !== '0') {
+    try {
+      const resp = await fetch('/api/admin/companies/' + companyId + '/sites');
+      const sites = await resp.json();
+      sites.forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s.id;
+        opt.textContent = s.name;
+        siteSelect.appendChild(opt);
+      });
+    } catch(e) {}
+  }
+}
+</script>
+{% endblock %}

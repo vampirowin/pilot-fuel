@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}pilot-fuel — Настройки{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Настройки</h1>
+</div>
+<div class="card" style="max-width:500px">
+  <form method="POST" action="/admin/settings">
+    <div class="form-group">
+      <label for="normal_threshold">Норма (процентов)</label>
+      <input type="number" step="0.1" id="normal_threshold" name="normal_threshold" value="{{ settings.normal_threshold.value if settings.get('normal_threshold') else '3.0' }}" required>
+      <span style="font-size:12px;color:var(--text-dim)">Погрешность до этого значения — норма</span>
+    </div>
+    <div class="form-group">
+      <label for="warning_threshold">Предупреждение (процентов)</label>
+      <input type="number" step="0.1" id="warning_threshold" name="warning_threshold" value="{{ settings.warning_threshold.value if settings.get('warning_threshold') else '10.0' }}" required>
+      <span style="font-size:12px;color:var(--text-dim)">Погрешность до этого значения — расхождение, выше — недопустимо</span>
+    </div>
+    <button type="submit" class="btn btn-primary">Сохранить</button>
+  </form>
+</div>
+{% endblock %}

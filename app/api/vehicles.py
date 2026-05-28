@@ -1,13 +1,14 @@
-from fastapi import APIRouter, Request, Depends, HTTPException
+from fastapi import APIRouter, Request, Depends, HTTPException, Form
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.vehicle import Vehicle
-from app.models.fuel_sensor import FuelSensor
+from app.models.client_account import ClientAccount
+from app.models.site import Site
 from app.services.pilot_service import PilotService
-from app.dependencies import get_current_username
+from app.dependencies import get_current_user, apply_vehicle_filter
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
@@ -22,59 +23,88 @@ def group_by_folder(vehicles: list) -> list:
     return [(f, groups[f]) for f in sorted_folders]
 
 
-def build_vehicle_dict(v: Vehicle) -> dict:
+def build_vehicle_dict(v: Vehicle, company_name: str = "", site_name: str = "") -> dict:
     return {
         "id": v.id,
         "plate_number": v.plate_number,
         "imei": v.imei,
         "folder": v.folder,
         "sensor_count": v.sensor_count,
-        "owner": v.owner,
-        "location": v.location,
+        "company_name": company_name,
+        "site_name": site_name,
     }
 
 
-def render_table_partial(vehicles: list, is_admin: bool = False) -> str:
-    if not vehicles:
-        return '''<div class="card"><div class="empty-state">
-          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
-          <h3>Нет транспортных средств</h3>
-          <p>Нажмите «Синхронизировать», чтобы загрузить список ТС из Pilot.</p>
-        </div></div>'''
+def build_nested_groups(vehicles: list) -> list:
+    tree = {}
+    for v in vehicles:
+        cname = v.get("company_name") or "Без компании"
+        sname = v.get("site_name") or "Без площадки"
+        folder = v.get("folder") or "Без папки"
+        tree.setdefault(cname, {}).setdefault(sname, {}).setdefault(folder, []).append(v)
+    result = []
+    for cname in sorted(tree.keys(), key=lambda x: (x == "Без компании", x)):
+        sites = []
+        ctotal = 0
+        for sname in sorted(tree[cname].keys(), key=lambda x: (x == "Без площадки", x)):
+            folders = []
+            stotal = 0
+            for fname in sorted(tree[cname][sname].keys(), key=lambda x: (x == "Без папки", x)):
+                fvehicles = tree[cname][sname][fname]
+                folders.append((fname, fvehicles))
+                stotal += len(fvehicles)
+            sites.append((sname, stotal, folders))
+            ctotal += stotal
+        result.append((cname, ctotal, sites))
+    return result
 
-    groups = group_by_folder(vehicles)
+
+def render_nested_partial(nested_groups: list, can_act: bool) -> str:
+    if not nested_groups:
+        return '<div class="card"><div class="empty-state"><h3>Нет транспортных средств</h3><p>Нажмите «Синхронизировать», чтобы загрузить список ТС из Pilot.</p></div></div>'
+
+    cidx = 0
+    sidx = 0
+    fidx = 0
     html = ""
-    gidx = 0
-    for group_name, group_vehicles in groups:
-        gidx += 1
-        gid = f"g-{gidx}"
-        html += f'''<div class="card" style="margin-top: 16px;">
-          <div class="card-header collapsible-header" style="padding: 12px 20px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted);" onclick="toggleGroup('{gid}')">
-            <span class="arrow">&#9660;</span>
-            {group_name} <span style="font-weight: 400; color: var(--text-dim);">({len(group_vehicles)})</span>
-          </div>
-          <div class="collapsible-body" id="{gid}">
-            <div class="table-container"><table>
-              <thead><tr>
-                <th>#</th><th>Госномер</th><th>IMEI</th><th>Датчики</th><th>Заправки</th><th>Собственник</th><th>Площадка</th>'''
-        if is_admin:
-            html += '<th style="width: 80px;">Действия</th>'
-        html += '</tr></thead><tbody>'
-        for idx, v in enumerate(group_vehicles, 1):
-            badge = "status-normal" if v.get("sensor_count", 0) > 0 else "status-false-reading"
-            html += f'''<tr id="v-{v["id"]}">
-              <td style="color: var(--text-dim);">{idx}</td>
-              <td><strong>{v.get("plate_number") or "—"}</strong></td>
-              <td style="font-family:monospace;font-size:12px">{v.get("imei") or "—"}</td>
-              <td><span class="status-badge {badge}">{v.get("sensor_count", 0)} датч.</span></td>
-              <td><a href="/refuels?vehicle_id={v["id"]}" class="btn btn-sm btn-secondary">Заправки</a></td>
-              <td>{v.get("owner") or "—"}</td>
-              <td>{v.get("location") or "—"}</td>'''
-            if is_admin:
-                html += f'''<td><button class="btn btn-sm btn-danger" hx-post="/api/vehicles/{v["id"]}/toggle-sensor" hx-target="#v-{v["id"]}" hx-swap="outerHTML" hx-confirm="Пометить «{v.get("plate_number") or v["id"]}» как ТС без датчика топлива?">Нет датчика</button></td>'''
-            html += '</tr>'
-        html += '</tbody></table></div></div></div>'
+    for cname, ctotal, sites in nested_groups:
+        cidx += 1
+        cid = f"c-{cidx}"
+        html += f'<div class="card level-company" style="margin-top: 16px;"><div class="card-header collapsible-header" onclick="toggleGroup(\'{cid}\')"><span class="arrow">&#9660;</span>{cname} <span style="font-weight:400;color:var(--text-dim)">({ctotal})</span></div><div class="collapsible-body" id="{cid}">'
+        for sname, stotal, folders in sites:
+            sidx += 1
+            sid = f"s-{cidx}-{sidx}"
+            html += f'<div class="card level-site" style="margin: 8px 0;"><div class="card-header collapsible-header" onclick="toggleGroup(\'{sid}\')"><span class="arrow">&#9660;</span>{sname} <span style="font-weight:400;color:var(--text-dim)">({stotal})</span></div><div class="collapsible-body" id="{sid}">'
+            for fname, vehicles in folders:
+                fidx += 1
+                fid = f"f-{cidx}-{sidx}-{fidx}"
+                html += f'<div class="level-folder" style="margin:4px 0;border:1px solid var(--border);border-radius:6px"><div class="collapsible-header" onclick="toggleGroup(\'{fid}\')"><span class="arrow">&#9660;</span>{fname} <span style="font-weight:400">({len(vehicles)})</span></div><div class="collapsible-body" id="{fid}"><div class="table-container"><table><thead><tr>'
+                if can_act:
+                    html += '<th style="width:32px;"><input type="checkbox" onchange="var e=this;document.querySelectorAll(\'#bulk-vehicle-form input[name=vehicle_ids]\').forEach(function(c){c.checked=e.checked})"></th>'
+                html += '<th>#</th><th>Госномер</th><th>IMEI</th><th>Датчик</th><th>Заправки</th><th>Компания</th>'
+                if can_act:
+                    html += '<th style="width:100px;">Действия</th>'
+                html += '</tr></thead><tbody>'
+                for idx, v in enumerate(vehicles, 1):
+                    badge = "status-normal" if v.get("sensor_count", 0) > 0 else "status-false-reading"
+                    html += f'<tr id="v-{v["id"]}">'
+                    if can_act:
+                        html += f'<td><input type="checkbox" name="vehicle_ids" value="{v["id"]}"></td>'
+                    html += f'<td style="color:var(--text-dim)">{idx}</td><td><strong>{v.get("plate_number") or "—"}</strong></td><td style="font-family:monospace;font-size:12px">{v.get("imei") or "—"}</td><td><span class="status-badge {badge}">{v.get("sensor_count", 0)} датч.</span></td><td><a href="/refuels?vehicle_id={v["id"]}" class="btn btn-sm btn-secondary">Заправки</a></td><td>{v.get("company_name") or "—"}</td>'
+                    if can_act:
+                        html += f'<td><button class="btn btn-sm btn-danger" hx-post="/api/vehicles/{v["id"]}/toggle-sensor" hx-target="#v-{v["id"]}" hx-swap="outerHTML" hx-confirm="Пометить «{v.get("plate_number") or v["id"]}» как ТС без датчика?">Нет датчика</button></td>'
+                    html += '</tr>'
+                html += '</tbody></table></div></div></div>'
+            html += '</div></div>'
+        html += '</div></div>'
     return html
+
+
+def render_table_partial(vehicles: list, is_superadmin: bool = False, is_company_admin: bool = False) -> str:
+    can_act = is_superadmin or is_company_admin
+    if not vehicles:
+        return '<div class="card"><div class="empty-state"><h3>Нет транспортных средств</h3><p>Нажмите «Синхронизировать», чтобы загрузить список ТС из Pilot.</p></div></div>'
+    return render_nested_partial(build_nested_groups(vehicles), can_act)
 
 
 @router.get("/vehicles", response_class=HTMLResponse)
@@ -82,10 +112,11 @@ async def vehicles_page(
     request: Request,
     plate: str = "",
     imei: str = "",
-    _=Depends(get_current_username),
+    user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     query = select(Vehicle).where(Vehicle.is_active == True, Vehicle.has_fuel_sensor == True)
+    query = apply_vehicle_filter(query, user, Vehicle)
     filters = []
     if plate:
         filters.append(Vehicle.plate_number.ilike(f"%{plate}%"))
@@ -97,14 +128,28 @@ async def vehicles_page(
     result = await db.execute(query)
     db_vehicles = result.scalars().all()
 
-    out = [build_vehicle_dict(v) for v in db_vehicles]
-    is_admin = request.session.get("is_admin", False)
+    company_ids = {v.client_account_id for v in db_vehicles if v.client_account_id}
+    companies = {}
+    if company_ids:
+        for c in (await db.execute(select(ClientAccount).where(ClientAccount.id.in_(company_ids)))).scalars().all():
+            companies[c.id] = c.name
+
+    site_ids = {v.site_id for v in db_vehicles if v.site_id}
+    sites = {}
+    if site_ids:
+        for s in (await db.execute(select(Site).where(Site.id.in_(site_ids)))).scalars().all():
+            sites[s.id] = s.name
+
+    out = [build_vehicle_dict(v, companies.get(v.client_account_id, ""), sites.get(v.site_id, "")) for v in db_vehicles]
+    is_su = user.role == "superadmin"
+    is_ca = user.role == "company_admin"
 
     return templates.TemplateResponse(request, "vehicles.html", {
         "plate": plate,
         "imei": imei,
-        "is_admin": is_admin,
-        "groups": group_by_folder(out) if out else [],
+        "is_superadmin": is_su,
+        "is_company_admin": is_ca,
+        "nested_groups": build_nested_groups(out) if out else [],
     })
 
 
@@ -113,10 +158,11 @@ async def search_vehicles(
     request: Request,
     plate: str = "",
     imei: str = "",
-    _=Depends(get_current_username),
+    user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     query = select(Vehicle).where(Vehicle.is_active == True, Vehicle.has_fuel_sensor == True)
+    query = apply_vehicle_filter(query, user, Vehicle)
     filters = []
     if plate:
         filters.append(Vehicle.plate_number.ilike(f"%{plate}%"))
@@ -128,37 +174,97 @@ async def search_vehicles(
     result = await db.execute(query)
     db_vehicles = result.scalars().all()
 
-    out = [build_vehicle_dict(v) for v in db_vehicles]
-    is_admin = request.session.get("is_admin", False)
-    return HTMLResponse(render_table_partial(out, is_admin))
+    company_ids = {v.client_account_id for v in db_vehicles if v.client_account_id}
+    companies = {}
+    if company_ids:
+        for c in (await db.execute(select(ClientAccount).where(ClientAccount.id.in_(company_ids)))).scalars().all():
+            companies[c.id] = c.name
+
+    site_ids = {v.site_id for v in db_vehicles if v.site_id}
+    sites = {}
+    if site_ids:
+        for s in (await db.execute(select(Site).where(Site.id.in_(site_ids)))).scalars().all():
+            sites[s.id] = s.name
+
+    out = [build_vehicle_dict(v, companies.get(v.client_account_id, ""), sites.get(v.site_id, "")) for v in db_vehicles]
+    is_su = user.role == "superadmin"
+    is_ca = user.role == "company_admin"
+    return HTMLResponse(render_table_partial(out, is_su, is_ca))
 
 
 @router.post("/api/vehicles/{vehicle_id}/toggle-sensor", response_class=HTMLResponse)
 async def toggle_fuel_sensor(
     request: Request,
     vehicle_id: int,
-    _=Depends(get_current_username),
+    user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    if not request.session.get("is_admin"):
+    if user.role not in ("superadmin", "company_admin"):
         raise HTTPException(status_code=403, detail="Forbidden")
     result = await db.execute(select(Vehicle).where(Vehicle.id == vehicle_id))
     v = result.scalar_one_or_none()
     if not v:
         raise HTTPException(status_code=404, detail="Vehicle not found")
+    if user.role == "company_admin" and v.client_account_id != user.client_account_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
     v.has_fuel_sensor = not v.has_fuel_sensor
     await db.commit()
     return HTMLResponse("")
 
 
+@router.post("/api/vehicles/bulk-remove-sensor", response_class=HTMLResponse)
+async def bulk_remove_sensor(
+    request: Request,
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    vehicle_ids: list[int] = Form(default=[]),
+):
+    if user.role not in ("superadmin", "company_admin"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if vehicle_ids:
+        query = select(Vehicle).where(Vehicle.id.in_(vehicle_ids))
+        if user.role == "company_admin":
+            query = query.where(Vehicle.client_account_id == user.client_account_id)
+        vehicles = (await db.execute(query)).scalars().all()
+        for v in vehicles:
+            v.has_fuel_sensor = False
+        await db.commit()
+
+    query = select(Vehicle).where(Vehicle.is_active == True, Vehicle.has_fuel_sensor == True)
+    query = apply_vehicle_filter(query, user, Vehicle)
+    query = query.order_by(Vehicle.folder, Vehicle.plate_number)
+    result = await db.execute(query)
+    db_vehicles = result.scalars().all()
+
+    company_ids = {v.client_account_id for v in db_vehicles if v.client_account_id}
+    companies = {}
+    if company_ids:
+        for c in (await db.execute(select(ClientAccount).where(ClientAccount.id.in_(company_ids)))).scalars().all():
+            companies[c.id] = c.name
+
+    site_ids = {v.site_id for v in db_vehicles if v.site_id}
+    sites = {}
+    if site_ids:
+        for s in (await db.execute(select(Site).where(Site.id.in_(site_ids)))).scalars().all():
+            sites[s.id] = s.name
+
+    out = [build_vehicle_dict(v, companies.get(v.client_account_id, ""), sites.get(v.site_id, "")) for v in db_vehicles]
+    is_su = user.role == "superadmin"
+    is_ca = user.role == "company_admin"
+    return HTMLResponse(render_table_partial(out, is_su, is_ca))
+
+
 @router.post("/api/vehicles/sync", response_class=HTMLResponse)
 async def sync_vehicles(
     request: Request,
-    _=Depends(get_current_username),
+    user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    token = request.session.get("token")
-    node_id = request.session.get("node_id", 0)
+    if user.role not in ("superadmin", "company_admin"):
+        raise HTTPException(status_code=403)
+
+    token = user.pilot_token or request.session.get("token")
+    node_id = user.pilot_node_id or request.session.get("node_id", 0)
     if not token:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
@@ -172,8 +278,6 @@ async def sync_vehicles(
         plate = pv.get("vehiclenumber", "")
         name = pv.get("name", "")
         folder = pv.get("folder", "")
-        owner = pv.get("vv_sobstv", "") or pv.get("owner", "")
-        location = pv.get("vv_ploshadka", "") or pv.get("location", "")
         sensors = pv.get("sensors", {})
         sensor_count = len(sensors) if isinstance(sensors, dict) else 0
 
@@ -184,10 +288,10 @@ async def sync_vehicles(
             existing.plate_number = plate
             existing.name = name
             existing.folder = folder
-            existing.owner = owner
-            existing.location = location
             existing.sensor_count = sensor_count
             existing.is_active = True
+            if user.client_account_id and not existing.client_account_id:
+                existing.client_account_id = user.client_account_id
             vid = existing.id
         else:
             vehicle = Vehicle(
@@ -196,24 +300,15 @@ async def sync_vehicles(
                 plate_number=plate,
                 name=name,
                 folder=folder,
-                owner=owner,
-                location=location,
                 sensor_count=sensor_count,
+                client_account_id=user.client_account_id,
             )
             db.add(vehicle)
             await db.flush()
             vid = vehicle.id
 
-        out.append({
-            "id": vid,
-            "plate_number": plate,
-            "imei": imei,
-            "folder": folder,
-            "sensor_count": sensor_count,
-            "owner": owner,
-            "location": location,
-        })
+        out.append({"id": vid, "plate_number": plate, "imei": imei, "folder": folder, "sensor_count": sensor_count, "company_name": ""})
 
     await db.commit()
-    is_admin = request.session.get("is_admin", False)
-    return HTMLResponse(render_table_partial(out, is_admin))
+    is_su = user.role == "superadmin"
+    return HTMLResponse(render_table_partial(out, is_su))

@@ -1,6 +1,7 @@
 from datetime import datetime
-from fastapi import APIRouter, Request, Depends, HTTPException
+from fastapi import APIRouter, Request, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
@@ -9,35 +10,30 @@ from app.services.pilot_service import PilotService
 from app.dependencies import get_current_username
 
 router = APIRouter()
+templates = Jinja2Templates(directory="app/templates")
 
 
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
     if request.session.get("username"):
         return RedirectResponse(url="/", status_code=302)
-    return HTMLResponse(LOGIN_PAGE)
+    return templates.TemplateResponse(request, "login.html")
 
 
 @router.post("/login")
-async def login(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-):
+async def login(request: Request, db: AsyncSession = Depends(get_db)):
     form = await request.form()
     username = form.get("username", "")
     password = form.get("password", "")
 
     if not username or not password:
-        return HTMLResponse(LOGIN_ERROR_HTML, status_code=400)
+        return HTMLResponse("Логин и пароль обязательны", status_code=400)
 
     service = PilotService()
     try:
         result = await service.login(username, password)
     except Exception as e:
-        return HTMLResponse(
-            LOGIN_ERROR_HTML.replace("Ошибка входа", f"Ошибка: {e}"),
-            status_code=401,
-        )
+        return HTMLResponse(f"Ошибка: {e}", status_code=401)
 
     token = result.get("token")
     node_id = result.get("node_id", 0)
@@ -45,8 +41,6 @@ async def login(
     request.session["username"] = username
     request.session["token"] = token
     request.session["node_id"] = node_id
-    is_admin = username == "admin@milkom.milkom"
-    request.session["is_admin"] = is_admin
 
     stmt = select(User).where(User.username == username)
     user = (await db.execute(stmt)).scalar_one_or_none()
@@ -54,95 +48,76 @@ async def login(
         user.pilot_token = token
         user.pilot_node_id = node_id
         user.last_login = datetime.now()
-        if is_admin:
-            user.is_admin = True
+        request.session["role"] = user.role
+        request.session["client_account_id"] = user.client_account_id
+        request.session["site_id"] = user.site_id
     else:
         user = User(
             username=username,
             pilot_token=token,
             pilot_node_id=node_id,
+            role="user",
             last_login=datetime.now(),
-            is_admin=is_admin,
+        )
+        db.add(user)
+        await db.flush()
+        request.session["role"] = "user"
+        request.session["client_account_id"] = None
+        request.session["site_id"] = None
+    await db.commit()
+
+    return RedirectResponse(url="/", status_code=302)
+
+
+@router.get("/admin/login", response_class=HTMLResponse)
+async def superadmin_login_page(request: Request):
+    if request.session.get("username") and request.session.get("role") == "superadmin":
+        return RedirectResponse(url="/admin/users", status_code=302)
+    from app.config import get_settings
+    return templates.TemplateResponse(request, "admin_login.html")
+
+
+@router.post("/admin/login")
+async def superadmin_login(request: Request, db: AsyncSession = Depends(get_db)):
+    from app.config import get_settings
+    settings = get_settings()
+
+    form = await request.form()
+    username = form.get("username", "")
+    password = form.get("password", "")
+
+    if not username or not password:
+        return HTMLResponse("Логин и пароль обязательны", status_code=400)
+
+    if username != settings.superadmin_username or password != settings.superadmin_password:
+        return HTMLResponse("Неверный логин или пароль", status_code=401)
+
+    stmt = select(User).where(User.username == username)
+    user = (await db.execute(stmt)).scalar_one_or_none()
+    if user:
+        user.last_login = datetime.now()
+        user.password_hash = password
+    else:
+        user = User(
+            username=username,
+            role="superadmin",
+            password_hash=password,
+            last_login=datetime.now(),
         )
         db.add(user)
     await db.commit()
 
-    return RedirectResponse(url="/", status_code=302)
+    request.session["username"] = username
+    request.session["role"] = "superadmin"
+    request.session["token"] = None
+    request.session["node_id"] = None
+    request.session["client_account_id"] = None
+    request.session["site_id"] = None
+
+    return RedirectResponse(url="/admin/users", status_code=302)
 
 
 @router.get("/logout")
 async def logout(request: Request):
     request.session.clear()
     return RedirectResponse(url="/login", status_code=302)
-
-
-LOGIN_PAGE = """<!DOCTYPE html>
-<html lang="ru">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>pilot-fuel — вход</title>
-<script src="https://unpkg.com/htmx.org@2.0.4"></script>
-<link rel="stylesheet" href="/static/css/style.css">
-</head>
-<body class="login-page">
-<div class="login-container">
-  <div class="login-card">
-    <div class="login-icon">
-      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-        <path d="M3 22V8l7-5v14l-7 5zM10 3l7 5v14l-7-5V3zM17 8l4 2v12l-4-2V8z"/>
-      </svg>
-    </div>
-    <h1 class="login-title">pilot-fuel</h1>
-    <p class="login-subtitle">Мониторинг топлива</p>
-    <form action="/login" method="POST" hx-post="/login" hx-target="body" hx-push-url="true">
-      <div class="form-group">
-        <label for="username">Логин Pilot</label>
-        <input type="text" id="username" name="username" required autocomplete="username">
-      </div>
-      <div class="form-group">
-        <label for="password">Пароль</label>
-        <input type="password" id="password" name="password" required autocomplete="current-password">
-      </div>
-      <button type="submit" class="btn btn-primary btn-full">Войти</button>
-    </form>
-  </div>
-</div>
-</body>
-</html>"""
-
-LOGIN_ERROR_HTML = """<!DOCTYPE html>
-<html lang="ru">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>pilot-fuel — вход</title>
-<script src="https://unpkg.com/htmx.org@2.0.4"></script>
-<link rel="stylesheet" href="/static/css/style.css">
-</head>
-<body class="login-page">
-<div class="login-container">
-  <div class="login-card">
-    <div class="login-icon">
-      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-        <path d="M3 22V8l7-5v14l-7 5zM10 3l7 5v14l-7-5V3zM17 8l4 2v12l-4-2V8z"/>
-      </svg>
-    </div>
-    <h1 class="login-title">pilot-fuel</h1>
-    <p class="login-subtitle">Мониторинг топлива</p>
-    <div class="alert alert-error">Ошибка входа. Проверьте логин и пароль.</div>
-    <form action="/login" method="POST" hx-post="/login" hx-target="body" hx-push-url="true">
-      <div class="form-group">
-        <label for="username">Логин Pilot</label>
-        <input type="text" id="username" name="username" required autocomplete="username">
-      </div>
-      <div class="form-group">
-        <label for="password">Пароль</label>
-        <input type="password" id="password" name="password" required autocomplete="current-password">
-      </div>
-      <button type="submit" class="btn btn-primary btn-full">Войти</button>
-    </form>
-  </div>
-</div>
-</body>
-</html>"""

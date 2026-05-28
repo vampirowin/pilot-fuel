@@ -37,8 +37,8 @@
     <a href="/refuels" class="btn btn-primary">Список заправок</a>
     <a href="/critical" class="btn btn-secondary">Критические события</a>
     <a href="/vehicles" class="btn btn-secondary">Транспортные средства</a>
-    {% if request.session.get('is_admin') %}
-    <a href="/admin" class="btn btn-secondary">Администрирование</a>
+    {% if request.session.get('role') == 'superadmin' %}
+    <a href="/admin/companies" class="btn btn-secondary">Администрирование</a>
     {% endif %}
   </div>
 </div>
