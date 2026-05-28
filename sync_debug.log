@@ -1151,3 +1151,4 @@ first event: {'name': 'Forland У335АХ18', 'ts': 1779316021, 'start_level': 37.43
 [28.05 03:48:40] [parse] группа 'среда, 27.05.2026 00:00 - четверг, 28.05.2026 00:0...': словарь, ключей=9
 [28.05 03:48:40] raw_events count=2655
 [28.05 03:48:40] first event: {'name': 'Isuzu е201ес18', 'ts': 1777598630, 'start_level': 142.5365, 'refuel_amount': 177.949, 'end_level': 320.49, 'lat': 56.903587, 'lon': 53.33596, 'address': ''}
+[28.05 11:27:22] [request] POST /api/v3/auth/token -> 200 (112 bytes)

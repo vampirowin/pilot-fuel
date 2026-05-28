@@ -494,23 +494,7 @@ tr:hover td {
   margin-bottom: 0;
 }
 
-.filters-bar select[size] {
-  overflow-y: auto;
-  min-width: 220px;
-}
 
-.filters-bar select[size] option {
-  padding: 5px 8px;
-  font-size: 13px;
-}
-
-.filters-bar select[size] option:hover {
-  background: var(--accent-glow);
-}
-
-.filters-bar .form-input + select[size] {
-  margin-top: 6px;
-}
 
 /* HTMX loading */
 .htmx-request { opacity: 0.6; }
