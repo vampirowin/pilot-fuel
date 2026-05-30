@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Optional
 from sqlalchemy import Integer, String, Boolean, DateTime, Text, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
@@ -10,6 +11,7 @@ class User(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     username: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
     role: Mapped[str] = mapped_column(String(20), nullable=False, default="user")
+    timezone: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, default=None)
 
     pilot_token: Mapped[str | None] = mapped_column(Text, nullable=True)
     pilot_node_id: Mapped[int | None] = mapped_column(Integer, nullable=True)

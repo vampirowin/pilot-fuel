@@ -4,6 +4,13 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
 
 
+SENSOR_STATUSES = {
+    "normal": "В норме",
+    "broken": "Не работает",
+    "stock": "Штатный датчик",
+}
+
+
 class Vehicle(Base):
     __tablename__ = "vehicles"
 
@@ -16,6 +23,7 @@ class Vehicle(Base):
     vehicle_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     sensor_count: Mapped[int] = mapped_column(Integer, default=0)
     has_fuel_sensor: Mapped[bool] = mapped_column(Boolean, default=True, server_default='t')
+    sensor_status: Mapped[str] = mapped_column(String(20), default="normal", server_default="normal")
 
     client_account_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("client_accounts.id", ondelete="SET NULL"), nullable=True, index=True)
     site_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("sites.id", ondelete="SET NULL"), nullable=True)

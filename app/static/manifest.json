@@ -1,0 +1,21 @@
+{
+  "name": "UI fuel — Мониторинг топлива",
+  "short_name": "UI fuel",
+  "description": "Мониторинг топлива из Pilot GPS",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0d0d1a",
+  "theme_color": "#f59e0b",
+  "icons": [
+    {
+      "src": "/static/icons/icon-192.svg",
+      "type": "image/svg+xml",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/static/icons/icon-512.svg",
+      "type": "image/svg+xml",
+      "sizes": "512x512"
+    }
+  ]
+}

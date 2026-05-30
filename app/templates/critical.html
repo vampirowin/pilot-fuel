@@ -31,13 +31,13 @@
         {% set class_map = {'normal': 'status-normal', 'small_deviation': 'status-small-deviation', 'unacceptable': 'status-unacceptable', 'pilot_missing': 'status-pilot-missing', 'false_reading': 'status-false-reading'} %}
         {% set label_map = {'normal': 'Норма', 'small_deviation': 'Расхождение', 'unacceptable': 'Недопустимо', 'pilot_missing': 'Нет в Pilot', 'false_reading': 'Ложная'} %}
         <tr>
-          <td>{{ e.event_date.strftime('%d.%m.%Y %H:%M') }}</td>
-          <td><strong>{{ v.plate_number if v else '—' }}</strong></td>
-          <td>{{ '%.1f'|format(e.pilot_amount) if e.pilot_amount is not none else '—' }}</td>
-          <td>{{ '%.1f'|format(e.actual_amount) if e.actual_amount is not none else '—' }}</td>
-          <td>{{ '%.1f'|format(e.difference) if e.difference is not none else '—' }}</td>
-          <td>{{ '%.1f'|format(e.error_percent) + '%' if e.error_percent is not none else '—' }}</td>
-          <td><span class="status-badge {{ class_map.get(e.comparison_status, '') }}">{{ label_map.get(e.comparison_status, e.comparison_status or '—') }}</span></td>
+          <td data-label="Дата">{{ e.event_date.strftime('%d.%m.%Y %H:%M') }}</td>
+          <td data-label="ТС"><strong>{{ v.plate_number if v else '—' }}</strong></td>
+          <td data-label="Pilot">{{ '%.1f'|format(e.pilot_amount) if e.pilot_amount is not none else '—' }}</td>
+          <td data-label="Чек">{{ '%.1f'|format(e.actual_amount) if e.actual_amount is not none else '—' }}</td>
+          <td data-label="Разница">{{ '%.1f'|format(e.difference) if e.difference is not none else '—' }}</td>
+          <td data-label="Погрешность">{{ '%.1f'|format(e.error_percent) + '%' if e.error_percent is not none else '—' }}</td>
+          <td data-label="Статус"><span class="status-badge {{ class_map.get(e.comparison_status, '') }}">{{ label_map.get(e.comparison_status, e.comparison_status or '—') }}</span></td>
           <td>
             <button class="btn btn-sm btn-secondary" hx-get="/api/refuels/{{ e.id }}/edit" hx-target="#modal-container" hx-swap="innerHTML">Правка</button>
           </td>

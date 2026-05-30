@@ -135,7 +135,7 @@ class PilotService:
                 "trip_types[]": ["1", "2"],
                 "table_on_off": "on",
                 "contr_time": "120",
-                "limit_count": "0",
+                "limit_count": "99999",
                 "contr_time_max": "0",
                 "inspections_report_type": "0",
                 "set_months_range": "1",
@@ -179,6 +179,144 @@ class PilotService:
                     "address": location.get("address") or "",
                 })
         return events
+
+    async def get_fuel_graph_report(
+        self, token: str, node_id: int,
+        veh_ids: list[int],
+        start_date: str, stop_date: str,
+    ) -> dict:
+        """
+        Fetch fuel graph report from Pilot API (report_type=16).
+
+        start_date / stop_date: format DD.MM.YYYY HH:MM
+        Returns dict with combined fuel graph data: {levels, refuels, drains}
+        """
+        veh_str = ",".join(str(v) for v in veh_ids)
+
+        from datetime import datetime
+        start = datetime.strptime(start_date, "%d.%m.%Y %H:%M")
+        stop = datetime.strptime(stop_date, "%d.%m.%Y %H:%M")
+        start_month = f"{start.month:02d}.{start.year}"
+        stop_month = f"{stop.month:02d}.{stop.year}"
+        pre_start = start.strftime("%d.%m.%Y")
+        pre_stop = stop.strftime("%d.%m.%Y")
+
+        cookies = {"PILOTID": token, "node": str(node_id)}
+        data = await self._request(
+            "POST", PILOT_REPORTS_URL,
+            token=None, node_id=0, cookies=cookies,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            data={
+                "download": "0",
+                "start_time": "00:00",
+                "stop_time": "00:00",
+                "veh_id": veh_str,
+                "zones_id": "",
+                "lines_id": "",
+                "stopping_points_id": "",
+                "drivers_id": "",
+                "groups_id": "",
+                "holidays": "",
+                "lang": "ru",
+                "explode": "1",
+                "start_month": start_month,
+                "stop_month": stop_month,
+                "pre_start_date": pre_start,
+                "pre_stop_date": pre_stop,
+                "start_date": start_date,
+                "stop_date": stop_date,
+                "group": "1",
+                "tags[]": "",
+                "level[]": "",
+                "event_group": "",
+                "event_groups[]": "",
+                "map_type": "1",
+                "trailer": "",
+                "last_ibutton_used": "0",
+                "report_type": "16",
+                "vehicle_not_moving_time": "1",
+                "vehicles_has_covered_km": "1",
+                "fillings": "on",
+                "stales": "on",
+                "speed": "on",
+                "rashod": "on",
+                "stops": "on",
+                "run": "on",
+                "planned_stops": "on",
+                "unplanned_stops": "on",
+                "inside_bus_line": "on",
+                "outside_bus_line": "on",
+                "emp_name": "",
+                "reason_for_opening": "",
+                "report_mc_aid": "",
+                "trip_types[]": ["1", "2"],
+                "table_on_off": "on",
+                "contr_time": "120",
+                "limit_count": "99999",
+                "contr_time_max": "0",
+                "inspections_report_type": "0",
+                "set_months_range": "1",
+                "type": "1",
+                "template": "1",
+            },
+        )
+
+        return self._parse_fuel_graph(data)
+
+    def _parse_fuel_graph(self, raw: dict) -> dict:
+        result = {"levels": [], "refuels": [], "drains": [], "sensor_names": []}
+        raw_data = raw.get("data", {})
+        if not isinstance(raw_data, dict):
+            return result
+
+        for date_group, entries in raw_data.items():
+            if not isinstance(entries, dict):
+                continue
+            for veh_name, entry in entries.items():
+                if not isinstance(entry, dict):
+                    continue
+
+                sensors = entry.get("sensors")
+                if isinstance(sensors, dict):
+                    all_keys = [k for k in sensors if k != "Summary" and isinstance(sensors[k], list)]
+                    result["sensor_names"] = [k.split(":-:")[0].strip() if ":-:" in k else k for k in all_keys]
+
+                    summary = sensors.get("Summary")
+                    source = summary if isinstance(summary, list) and len(summary) > 0 else None
+                    if not source:
+                        for sname, sdata in sensors.items():
+                            if isinstance(sdata, list) and len(sdata) > 0 and isinstance(sdata[0], (list, tuple)):
+                                source = sdata
+                                break
+                    if source:
+                        for point in source:
+                            if isinstance(point, (list, tuple)) and len(point) >= 2:
+                                ts = int(point[0])
+                                val = float(point[1]) if point[1] is not None else None
+                                if val is not None:
+                                    result["levels"].append({
+                                        "ts": ts,
+                                        "val": val,
+                                        "name": veh_name,
+                                    })
+
+                fillings = entry.get("fillings", [])
+                if isinstance(fillings, list):
+                    for f in fillings:
+                        if not isinstance(f, dict):
+                            continue
+                        result["refuels"].append({
+                            "ts": int(f.get("unixtimestamp", 0)),
+                            "level": float(f["fuel_start"]) if f.get("fuel_start") else None,
+                            "amount": float(f["fuel"]) if f.get("fuel") else None,
+                            "lat": float(f.get("lat", 0)) if f.get("lat") else None,
+                            "lon": float(f.get("lon", 0)) if f.get("lon") else None,
+                            "name": veh_name,
+                        })
+
+        result["levels"].sort(key=lambda x: x["ts"])
+        result["refuels"].sort(key=lambda x: x["ts"])
+        return result
 
     async def get_sensor_dip_history(
         self, token: str, node_id: int,

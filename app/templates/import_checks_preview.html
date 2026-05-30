@@ -1,24 +1,27 @@
 <div class="modal-overlay" onclick="if(event.target===this)this.remove()">
   <div class="modal" style="max-width:750px">
     <div class="modal-header">
-      <h2>Предпросмотр синхронизации</h2>
+      <h2>Предпросмотр импорта чеков</h2>
       <button type="button" class="modal-close" onclick="this.closest('.modal-overlay').remove()">&times;</button>
     </div>
-    <form hx-post="/api/refuels/sync/apply" hx-target="#modal-container" hx-swap="innerHTML"
+    <form hx-post="/api/refuels/import-checks-apply" hx-target="#modal-container" hx-swap="innerHTML"
           hx-on::after-request="if(event.detail.successful && event.detail.xhr.response) { setTimeout(function(){ location.reload() }, 1500) }">
       <div class="modal-body">
         <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
-          {% if new_count %}
-          <span class="status-badge status-normal">➕ Новых: {{ new_count }}</span>
+          {% if summary.new %}
+          <span class="status-badge status-normal">➕ Новых: {{ summary.new }}</span>
           {% endif %}
-          {% if conflict_count %}
-          <span class="status-badge status-small-deviation">⚠️ Конфликтов: {{ conflict_count }}</span>
+          {% if summary.updated %}
+          <span class="status-badge status-small-deviation">🔄 Обновлено: {{ summary.updated }}</span>
           {% endif %}
-          {% if false_conflict_count %}
-          <span class="status-badge status-false-reading">🚫 Ложных: {{ false_conflict_count }}</span>
+          {% if summary.conflict %}
+          <span class="status-badge status-unacceptable">⚠️ Конфликтов: {{ summary.conflict }}</span>
           {% endif %}
-          {% if identical_count %}
-          <span class="status-badge" style="background:rgba(107,114,128,0.15);color:#9ca3af;border:1px solid rgba(107,114,128,0.3)">⏭ Пропустить (идентичны): {{ identical_count }}</span>
+          {% if summary.identical %}
+          <span class="status-badge" style="background:rgba(107,114,128,0.15);color:#9ca3af;border:1px solid rgba(107,114,128,0.3)">⏭ Идентично: {{ summary.identical }}</span>
+          {% endif %}
+          {% if summary.skipped %}
+          <span class="status-badge" style="background:rgba(107,114,128,0.15);color:#9ca3af;border:1px solid rgba(107,114,128,0.3)">⏭ Пропущено: {{ summary.skipped }}</span>
           {% endif %}
         </div>
 
@@ -33,9 +36,9 @@
             <thead>
               <tr>
                 <th>ТС</th>
-                <th>Площадка</th>
                 <th>Дата/время</th>
-                <th>Pilot (было→стало)</th>
+                <th>Чек (из данных)</th>
+                <th>Текущий чек</th>
                 <th>Статус</th>
                 <th>Действие</th>
               </tr>
@@ -44,28 +47,16 @@
               {% for c in conflicts %}
               <tr>
                 <td><strong>{{ c.plate }}</strong></td>
-                <td style="font-size:12px;color:var(--text-secondary)">{{ c.site_name }}</td>
                 <td style="font-size:12px">{{ c.event_date }}</td>
-                <td style="font-size:12px">
-                  {% if c.old_amount is not none %}
-                  <span style="color:var(--text-dim)">{{ '%.1f'|format(c.old_amount) }}</span> → <strong>{{ '%.1f'|format(c.new_amount) }}</strong>
-                  {% else %}
-                  <strong>{{ '%.1f'|format(c.new_amount) }}</strong>
-                  {% endif %}
-                </td>
-                <td>
-                  {% if c.is_false %}
-                  <span class="status-badge status-false-reading">Ложная</span>
-                  {% else %}
-                  <span class="status-badge status-small-deviation">Расхождение</span>
-                  {% endif %}
-                </td>
+                <td style="font-size:12px"><strong>{{ '%.1f'|format(c.new_amount) }}</strong></td>
+                <td style="font-size:12px">{{ '%.1f'|format(c.old_amount) if c.old_amount is not none else '—' }}</td>
+                <td><span class="status-badge status-unacceptable">Конфликт</span></td>
                 <td>
                   <label style="margin-right:6px;font-size:12px;cursor:pointer">
-                    <input type="radio" name="action_{{ c.idx }}" value="replace"{% if not c.is_false %} checked{% endif %}> Зам
+                    <input type="radio" name="action_{{ c.idx }}" value="replace" checked> Зам
                   </label>
                   <label style="font-size:12px;cursor:pointer">
-                    <input type="radio" name="action_{{ c.idx }}" value="skip"{% if c.is_false %} checked{% endif %}> Проп
+                    <input type="radio" name="action_{{ c.idx }}" value="skip"> Проп
                   </label>
                 </td>
               </tr>
@@ -74,16 +65,15 @@
           </table>
         </div>
         {% else %}
-        <div class="empty-state"><p>Конфликтов нет. Новые записи будут добавлены, идентичные пропущены.</p></div>
+        <div class="empty-state"><p>Конфликтов нет. Новые будут созданы, пустые заполнены, идентичные пропущены.</p></div>
         {% endif %}
-        <input type="hidden" name="date_from" value="{{ date_from }}">
-        <input type="hidden" name="date_to" value="{{ date_to }}">
-        <input type="hidden" name="vehicle_id" value="{{ vehicle_id }}">
+
+        <input type="hidden" name="parsed_json" value="{{ parsed_json }}">
         <input type="hidden" name="conflict_actions" id="conflict-actions" value="">
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Отмена</button>
-        <button type="submit" class="btn btn-primary" onclick="collectActions()">Подтвердить</button>
+        <button type="submit" class="btn btn-primary" onclick="collectActions()">Подтвердить импорт</button>
       </div>
     </form>
   </div>

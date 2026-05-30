@@ -1,0 +1,20 @@
+<div class="modal-overlay" onclick="if(event.target===this)this.remove()">
+  <div class="modal" style="max-width:600px">
+    <div class="modal-header">
+      <h2>Импорт чеков</h2>
+      <button type="button" class="modal-close" onclick="this.closest('.modal-overlay').remove()">&times;</button>
+    </div>
+    <form hx-post="/api/refuels/import-checks-preview" hx-target="#modal-container" hx-swap="innerHTML">
+      <div class="modal-body">
+        <p style="margin-bottom:8px;font-size:13px;color:var(--text-secondary)">Вставьте данные из таблицы (колонки: Машина, Дата/время, Объём). Время в GMT+5.</p>
+        <div class="form-group">
+          <textarea name="data" class="form-input" rows="15" style="font-family:monospace;font-size:12px;resize:vertical" placeholder="Shacman Х549НХ18	15.05.2026 4:29	220&#10;..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Отмена</button>
+        <button type="submit" class="btn btn-primary">Предпросмотр</button>
+      </div>
+    </form>
+  </div>
+</div>

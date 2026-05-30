@@ -1,0 +1,131 @@
+import zoneinfo
+from datetime import datetime, timedelta, timezone
+from fastapi import APIRouter, Request, Depends, Query, HTTPException
+from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.templating import Jinja2Templates
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.database import get_db
+from app.models.vehicle import Vehicle
+from app.models.refuel_entry import RefuelEntry
+from app.dependencies import get_current_user
+from app.services.pilot_service import PilotService
+from app.timezone_utils import format_dt, get_user_timezone, utc_to_tz
+
+router = APIRouter()
+templates = Jinja2Templates(directory="app/templates")
+
+
+@router.get("/api/fuel-graph/modal", response_class=HTMLResponse)
+async def fuel_graph_modal(
+    request: Request,
+    vehicle_id: int = Query(...),
+    imei: str = Query(default=""),
+    date_from: str = Query(default=""),
+    date_to: str = Query(default=""),
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    vehicle = await db.get(Vehicle, vehicle_id)
+    if not vehicle:
+        raise HTTPException(404, "Vehicle not found")
+
+    user_tz = get_user_timezone(user)
+    local_now = datetime.now(timezone.utc).astimezone(user_tz)
+    today = local_now.strftime("%Y-%m-%d")
+    month_start = local_now.replace(day=1).strftime("%Y-%m-%d")
+    days7 = (local_now - timedelta(days=7)).strftime("%Y-%m-%d")
+    days14 = (local_now - timedelta(days=14)).strftime("%Y-%m-%d")
+    days30 = (local_now - timedelta(days=30)).strftime("%Y-%m-%d")
+
+    actual_imei = imei or vehicle.imei or ""
+
+    return templates.TemplateResponse(request, "fuel_graph_modal.html", {
+        "vehicle_id": vehicle_id,
+        "imei": actual_imei,
+        "plate": vehicle.plate_number or vehicle.name or "—",
+        "date_from": date_from or days7,
+        "date_to": date_to or today,
+        "today_str": today,
+        "month_start_str": month_start,
+        "days7_str": days7,
+        "days14_str": days14,
+        "days30_str": days30,
+        "user_timezone": str(user_tz),
+    })
+
+
+@router.get("/api/fuel-graph/data")
+async def fuel_graph_data(
+    request: Request,
+    vehicle_id: int = Query(...),
+    date_from: str = Query(...),
+    date_to: str = Query(...),
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    vehicle = await db.get(Vehicle, vehicle_id)
+    if not vehicle:
+        raise HTTPException(404, "Vehicle not found")
+
+    token = user.pilot_token or request.session.get("token")
+    node_id = user.pilot_node_id or request.session.get("node_id", 0)
+    if not token:
+        return JSONResponse(status_code=401, content={"error": "Not authenticated"})
+
+    try:
+        df = datetime.strptime(date_from, "%Y-%m-%d")
+        dt = datetime.strptime(date_to, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+    except ValueError:
+        raise HTTPException(400, "Invalid date format, use YYYY-MM-DD")
+
+    msk_tz = zoneinfo.ZoneInfo("Europe/Moscow")
+    start_str = utc_to_tz(df, msk_tz).strftime("%d.%m.%Y 00:00")
+    stop_str = utc_to_tz(dt, msk_tz).strftime("%d.%m.%Y 23:59")
+
+    pilot = PilotService()
+
+    # Fetch report 16 for continuous fuel level + refuel events
+    dip_data = []
+    report_events = {"levels": [], "refuels": [], "drains": []}
+    if vehicle.pilot_agent_id:
+        try:
+            report = await pilot.get_fuel_graph_report(
+                token, node_id, [vehicle.pilot_agent_id], start_str, stop_str
+            )
+            dip_data = report.get("levels", [])
+            report_events = report
+        except Exception:
+            report_events = {"levels": [], "refuels": [], "drains": []}
+
+    # Fetch manual refuel entries from DB for marker overlay
+    db_refuels = []
+    try:
+        q = select(RefuelEntry).where(
+            RefuelEntry.vehicle_id == vehicle_id,
+            RefuelEntry.is_deleted == False,
+            RefuelEntry.event_date >= df,
+            RefuelEntry.event_date <= dt,
+        )
+        db_entries = (await db.execute(q.order_by(RefuelEntry.event_date))).scalars().all()
+        for e in db_entries:
+            db_refuels.append({
+                "ts": int(e.event_date.timestamp()),
+                "amount": e.actual_amount or e.pilot_amount or 0,
+                "pilot_amount": e.pilot_amount,
+                "actual_amount": e.actual_amount,
+                "source": e.source,
+                "status": e.comparison_status or "",
+            })
+    except Exception:
+        db_refuels = []
+
+    return {
+        "dip": dip_data,
+        "report_refuels": report_events.get("refuels", []),
+        "report_drains": report_events.get("drains", []),
+        "sensor_names": report_events.get("sensor_names", []),
+        "db_refuels": db_refuels,
+        "plate": vehicle.plate_number or vehicle.name or "—",
+        "imei": vehicle.imei or "",
+    }

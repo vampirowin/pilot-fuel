@@ -1,0 +1,368 @@
+<div class="modal-overlay" onclick="if(event.target===this)this.remove()">
+  <div class="modal" id="fuel-graph-modal" style="width: 800px; max-width: 95vw;">
+    <div class="modal-header">
+      <h2>График топлива — {{ plate }}</h2>
+      <button type="button" class="modal-close" onclick="this.closest('.modal-overlay').remove()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="period-selector" style="margin-bottom: 12px;">
+        <div class="period-chips" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">
+          <button type="button" class="chip" onclick="fg.setPeriod(0,0)">Сегодня</button>
+          <button type="button" class="chip" onclick="fg.setPeriod(1,0)">Вчера</button>
+          <button type="button" class="chip" onclick="fg.setPeriod(6,0)">7 дней</button>
+          <button type="button" class="chip" onclick="fg.setPeriod(13,0)">14 дней</button>
+          <button type="button" class="chip" onclick="fg.setPeriod(29,0)">30 дней</button>
+          <button type="button" class="chip chip-custom" onclick="document.getElementById('fg-custom-range').style.display='flex'">Свой</button>
+          <span style="flex:1"></span>
+          <button type="button" class="chip" onclick="fg.zoomIn()" title="Приблизить">+</button>
+          <button type="button" class="chip" onclick="fg.zoomOut()" title="Отдалить">−</button>
+          <button type="button" class="chip" onclick="fg.resetZoom()" title="Сбросить масштаб">Сбросить</button>
+        </div>
+        <div id="fg-custom-range" style="display:none;align-items:center;gap:6px">
+          <input type="date" id="fg-date-from" value="{{ date_from }}" style="flex:1">
+          <span style="color:var(--text-dim)">—</span>
+          <input type="date" id="fg-date-to" value="{{ date_to }}" style="flex:1">
+          <button type="button" class="btn btn-sm btn-primary" onclick="fg.build()">Построить</button>
+        </div>
+      </div>
+      <div class="graph-chart-container" style="position:relative;width:100%;height:400px">
+        <canvas id="fuel-graph-canvas" width="100%" height="400" style="width:100%;height:100%"></canvas>
+      </div>
+      <div id="fg-legend" style="display:flex;gap:16px;margin-top:8px;font-size:13px;color:var(--text-secondary);flex-wrap:wrap"></div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Закрыть</button>
+    </div>
+  </div>
+</div>
+<script>
+var fg = (function() {
+  var chart = null;
+  var canvas = document.getElementById('fuel-graph-canvas');
+    var vehId = {{ vehicle_id }};
+  var userTz = '{{ user_timezone }}';
+  var defaultFrom = '{{ date_from }}';
+  var defaultTo = '{{ date_to }}';
+  var zoomMin = null, zoomMax = null;
+
+  function daysAgo(n) {
+    var d = new Date();
+    d.setDate(d.getDate() - n);
+    return d.toISOString().split('T')[0];
+  }
+  function todayStr() { return new Date().toISOString().split('T')[0]; }
+
+  function setPeriod(backFrom, backTo) {
+    var to = backTo === 0 ? todayStr() : daysAgo(backTo);
+    var from = backFrom === 0 ? todayStr() : daysAgo(backFrom);
+    document.getElementById('fg-date-from').value = from;
+    document.getElementById('fg-date-to').value = to;
+    build();
+  }
+
+  var colorGreen = 'rgba(34,197,94,1)';
+  var colorRed = 'rgba(239,68,68,1)';
+  var colorBlue = 'rgba(59,130,246,1)';
+  var colorOrange = 'rgba(249,115,22,1)';
+  var colorFill = 'rgba(59,130,246,0.1)';
+
+  function build() {
+    var from = document.getElementById('fg-date-from').value;
+    var to = document.getElementById('fg-date-to').value;
+    if (!from || !to) return;
+
+    var url = '/api/fuel-graph/data?vehicle_id=' + vehId + '&date_from=' + from + '&date_to=' + to;
+
+    fetch(url)
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        zoomMin = null; zoomMax = null;
+        console.log('Fuel graph data:', JSON.stringify(data).substring(0, 500));
+        var segs = renderChart(data);
+        renderLegend(data, segs);
+      })
+      .catch(function(err) {
+        console.error('Fuel graph error:', err);
+      });
+  }
+
+  function renderChart(data) {
+    var dip = data.dip || [];
+    var reportRefuels = data.report_refuels || [];
+    var reportDrains = data.report_drains || [];
+    var dbRefuels = data.db_refuels || [];
+
+    var labels = [];
+    var levelValues = [];
+
+    if (chart) { chart.destroy(); chart = null; }
+
+    if (dip.length === 0) {
+      var ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.font = '16px sans-serif';
+      ctx.fillStyle = '#888';
+      ctx.textAlign = 'center';
+      ctx.fillText('Нет данных об уровне топлива', canvas.width / 2, canvas.height / 2);
+      document.getElementById('fg-legend').innerHTML = '';
+      return [];
+    }
+
+    dip.forEach(function(p) {
+      var d = new Date((p.ts || 0) * 1000);
+      labels.push(d.toLocaleString('ru-RU', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',timeZone:userTz}));
+      var val = (p.val !== null && p.val !== undefined) ? p.val : null;
+      levelValues.push(val);
+    });
+
+    // Collect refuel events with fuel level from dip
+    // Use reportRefuels as primary source; only use dbRefuels with actual_amount
+    var refuelSources = [];
+    reportRefuels.forEach(function(ev) { refuelSources.push(ev); });
+    dbRefuels.forEach(function(ev) {
+      if (ev.actual_amount !== null && ev.actual_amount !== undefined) {
+        refuelSources.push(ev);
+      }
+    });
+    var refuelSegments = [];
+    refuelSources.forEach(function(ev) {
+      var ts = ev.ts || 0;
+      var amount = ev.amount || 0;
+      var bestIdx = -1, bestDist = Infinity;
+      for (var i = 0; i < dip.length; i++) {
+        var d = Math.abs((dip[i].ts || 0) - ts);
+        if (d < bestDist) { bestDist = d; bestIdx = i; }
+      }
+      if (bestIdx >= 0 && bestDist < 3600 && amount > 0) {
+        refuelSegments.push({
+          ts: ts,
+          amount: amount,
+          dipIdx: bestIdx,
+        });
+      }
+    });
+
+    var drainTimestamps = {};
+    reportDrains.forEach(function(ev) {
+      var ts = ev.ts || 0;
+      var key = Math.round(ts / 60);
+      if (!drainTimestamps[key] || ev.amount > drainTimestamps[key].amount) {
+        drainTimestamps[key] = {ts: ts, amount: ev.amount, label: 'Слив ' + (ev.amount ? ev.amount.toFixed(1) + 'л' : '')};
+      }
+    });
+
+    try {
+      chart = new Chart(canvas, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Уровень топлива',
+            data: levelValues,
+            borderColor: colorBlue,
+            backgroundColor: colorFill,
+            fill: true,
+            tension: 0.3,
+            pointRadius: 1,
+            pointHitRadius: 5,
+            borderWidth: 2,
+          }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'nearest', axis: 'x', intersect: false },
+          scales: {
+            x: {
+              ticks: { maxTicksLimit: 10, color: '#888', font: {size: 10} },
+              grid: { color: 'rgba(255,255,255,0.05)' },
+            },
+            y: {
+              beginAtZero: true,
+              ticks: { color: '#888', font: {size: 11}, callback: function(v) { return v + ' л'; } },
+              grid: { color: 'rgba(255,255,255,0.08)' },
+            },
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: function(item) {
+                  var raw = item.raw;
+                  if (raw === null || raw === undefined) return '';
+                  return raw.toFixed(1) + ' л';
+                },
+                afterBody: function(items) {
+                  var idx = items[0].dataIndex;
+                  var dipPoint = dip[idx];
+                  if (!dipPoint) return '';
+                  var lines = [];
+                  var ts = dipPoint.ts || 0;
+                  refuelSegments.forEach(function(seg) {
+                    if (Math.abs(seg.ts - ts) < 120) lines.push('\u2191 Заправка ' + seg.amount.toFixed(1) + 'л');
+                  });
+                  Object.values(drainTimestamps).forEach(function(ev) {
+                    if (Math.abs(ev.ts - ts) < 120) lines.push('\u2193 ' + ev.label);
+                  });
+                  return lines.length ? '\n' + lines.join('\n') : '';
+                }
+              }
+            },
+          },
+        },
+        plugins: [{
+          afterDraw: function(ch) {
+            var ctx2 = ch.ctx;
+            var xAxis = ch.scales.x;
+            var yAxis = ch.scales.y;
+
+            function idxByTs(ts) {
+              var best = -1, bestDist = Infinity;
+              for (var i = 0; i < dip.length; i++) {
+                var d = Math.abs((dip[i].ts || 0) - ts);
+                if (d < bestDist) { bestDist = d; best = i; }
+              }
+              return best;
+            }
+
+            function drawMarker(ev, color, symbol) {
+              var idx = idxByTs(ev.ts);
+              if (idx < 0) return;
+              var x = xAxis.getPixelForValue(idx);
+              if (isNaN(x)) return;
+              var y = yAxis.top + 10;
+              ctx2.save();
+              ctx2.fillStyle = color;
+              ctx2.font = 'bold 16px sans-serif';
+              ctx2.textAlign = 'center';
+              ctx2.fillText(symbol, x, y);
+              ctx2.font = '10px sans-serif';
+              ctx2.fillStyle = color;
+              ctx2.fillText((ev.amount || 0).toFixed(0) + 'л', x, y + 14);
+              ctx2.restore();
+            }
+
+            // Draw refuel segments — full-height pale green band with volume label
+            refuelSegments.forEach(function(seg) {
+              var si = seg.dipIdx;
+              if (si < 0) return;
+              var x = xAxis.getPixelForValue(si);
+              if (isNaN(x)) return;
+
+              var topY = yAxis.top;
+              var bottomY = yAxis.bottom;
+              var midY = (topY + bottomY) / 2;
+
+              ctx2.save();
+
+              // Full-height pale green band
+              ctx2.fillStyle = 'rgba(34,197,94,0.12)';
+              ctx2.fillRect(x - 14, topY, 28, bottomY - topY);
+
+              // Volume label centered vertically
+              ctx2.textAlign = 'center';
+              ctx2.font = 'bold 11px sans-serif';
+              var txt = '+' + seg.amount.toFixed(0) + 'л';
+              var tw = ctx2.measureText(txt).width;
+              ctx2.fillStyle = 'rgba(21,128,61,0.85)';
+              if (ctx2.roundRect) {
+                ctx2.beginPath();
+                ctx2.roundRect(x - tw/2 - 4, midY - 8, tw + 8, 16, 4);
+                ctx2.fill();
+              } else {
+                ctx2.fillRect(x - tw/2 - 4, midY - 8, tw + 8, 16);
+              }
+              ctx2.fillStyle = '#fff';
+              ctx2.fillText(txt, x, midY + 4);
+
+              ctx2.restore();
+            });
+
+            Object.values(drainTimestamps).forEach(function(ev) { drawMarker(ev, colorRed, '\u2193'); });
+          }
+        }],
+      });
+      canvas.onwheel = function(e) {
+        e.preventDefault();
+        if (!chart) return;
+        var rect = canvas.getBoundingClientRect();
+        var px = e.clientX - rect.left;
+        var idx = Math.round(chart.scales.x.getValueForPixel(px));
+        var min = chart.scales.x.min || 0;
+        var max = chart.scales.x.max || (chart.data.labels.length - 1);
+        var range = max - min;
+        var factor = e.deltaY > 0 ? 1.3 : 0.7;
+        var left = Math.max(0, idx - min);
+        var right = Math.max(0, max - idx);
+        var total = left + right;
+        zoomMin = Math.max(0, Math.round(idx - range * factor * (left / (total || 1))));
+        zoomMax = Math.min(chart.data.labels.length - 1, Math.round(idx + range * factor * (right / (total || 1))));
+        applyZoom();
+      };
+    } catch (e) {
+      console.error('Chart render error:', e);
+    }
+    return refuelSegments;
+  }
+
+  function applyZoom() {
+    if (!chart) return;
+    chart.options.scales.x.min = zoomMin;
+    chart.options.scales.x.max = zoomMax;
+    chart.update();
+  }
+
+  function renderLegend(data, segs) {
+    var el = document.getElementById('fg-legend');
+    var parts = [];
+    var dbR = data.db_refuels || [];
+    var totalDb = dbR.reduce(function(s, e) { return s + (e.actual_amount || e.pilot_amount || 0); }, 0);
+    parts.push('<span style="color:' + colorBlue + '">\u2500 Линия: уровень топлива</span>');
+    if (segs && segs.length > 0) {
+      parts.push('<span style="color:#15803d">\u2588 Заправка (сегмент): ' + segs.length + '</span>');
+    }
+    if (data.report_refuels && data.report_refuels.length) {
+    parts.push('<span style="color:' + colorGreen + '">\u2191 Заправки (Pilot): ' + data.report_refuels.length + '</span>');
+    }
+    if (data.report_drains && data.report_drains.length) {
+      parts.push('<span style="color:' + colorRed + '">\u2193 Сливы (Pilot): ' + data.report_drains.length + '</span>');
+    }
+    if (dbR.length) {
+      parts.push('<span style="color:' + colorOrange + '">\u25CF Заправки (БД): ' + dbR.length + ', ' + totalDb.toFixed(0) + 'л</span>');
+    }
+    if (data.sensor_names && data.sensor_names.length) {
+      parts.push('<span style="color:#888">\u25A0 Датчики: ' + data.sensor_names.join(', ') + '</span>');
+    }
+    el.innerHTML = parts.join('');
+  }
+
+  // Auto-build on load
+  setTimeout(build, 100);
+
+  function zoomIn() {
+    if (!chart) return;
+    var min = chart.scales.x.min || 0;
+    var max = chart.scales.x.max || (chart.data.labels.length - 1);
+    var c = (min + max) / 2;
+    var h = (max - min) / 2 * 0.7;
+    zoomMin = Math.max(0, Math.round(c - h));
+    zoomMax = Math.min(chart.data.labels.length - 1, Math.round(c + h));
+    applyZoom();
+  }
+
+  function zoomOut() {
+    if (!chart) return;
+    var min = chart.scales.x.min || 0;
+    var max = chart.scales.x.max || (chart.data.labels.length - 1);
+    var c = (min + max) / 2;
+    var h = (max - min) / 2 * 1.5;
+    zoomMin = Math.max(0, Math.round(c - h));
+    zoomMax = Math.min(chart.data.labels.length - 1, Math.round(c + h));
+    applyZoom();
+  }
+
+  function resetZoom() { zoomMin = null; zoomMax = null; applyZoom(); }
+
+  return { setPeriod: setPeriod, build: build, todayStr: todayStr, zoomIn: zoomIn, zoomOut: zoomOut, resetZoom: resetZoom };
+})();
+</script>

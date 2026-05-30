@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     session_lifetime_hours: int = 48
     app_port: int = 9001
     app_host: str = "0.0.0.0"
+    timezone: str = "Europe/Moscow"
 
     # Default fuel sensor semantic IDs (Pilot system)
     fuel_sensor_semantic_ids: list[int] = [1, 2, 3, 4]

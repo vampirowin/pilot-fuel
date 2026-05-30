@@ -11,9 +11,11 @@
 | **Авторизация** | Вход через Pilot API или локальный суперадмин |
 | **Панель управления** | Статистика, счётчики критических, графики (Chart.js) |
 | **Транспорт** | Иерархия Компания → Площадка → Тип ТС с коллапсами, цветные бейджи, поиск, bulk-операции |
-| **Заправки** | Иерархия Компания → Площадка → Тип ТС → ТС, данные Pilot vs чек, погрешность, статус |
-| **Синхронизация** | Двухфазная (preview + apply): классификация конфликтов (new/conflict/identical), замена/пропуск |
-| **Ручной ввод** | Добавление заправок с авто-подбором Pilot, отслеживание `created_by` |
+| **Заправки** | Иерархия Компания → Площадка → Тип ТС → ТС, данные Pilot vs чек, погрешность, статус, сортировка, поиск по номеру |
+| **Синхронизация** | Двухфазная (preview + apply): классификация (new/conflict/identical/info), замена/пропуск, детали новых записей |
+| **Ручной ввод** | Добавление заправок с авто-подбором Pilot, отслеживание `created_by` с tooltip при наведении |
+| **Импорт чеков** | Из буфера обмена (табуляция), предпросмотр, классификация new/update/identical/conflict |
+| **Профиль** | Выбор часового пояса (13 российских + основные мировые) |
 | **Фильтры** | По компании (superadmin), площадке, типу ТС, статусу, дате, госномеру |
 | **Разметка «Ложная»** | Отметка ошибочных показаний в модалке |
 | **Пороги точности** | Настраиваемые: норма, предупреждение, критично |
@@ -164,7 +166,10 @@ sync_log           — id, vehicle_id, sync_type, status, records_affected, deta
 
 | Маршрут | Описание |
 |---|---|
+| `GET /profile` | Профиль пользователя (часовой пояс) |
+| `POST /profile` | Сохранить часовой пояс |
 | `POST /api/vehicles/sync` | Синхронизация ТС из Pilot |
+| `POST /api/vehicles/{id}/delete` | Удаление ТС (админ, каскад) |
 | `GET /api/vehicles/search` | Поиск ТС (HTMX) |
 | `POST /api/vehicles/{id}/toggle-sensor` | Переключить датчик ТС |
 | `POST /api/vehicles/bulk-remove-sensor` | Bulk: убрать датчики |
@@ -174,7 +179,12 @@ sync_log           — id, vehicle_id, sync_type, status, records_affected, deta
 | `GET/POST /api/refuels/{id}/edit` | Редактирование |
 | `POST /api/refuels/{id}/mark-false` | Отметить ложной |
 | `POST /api/refuels/{id}/unmark-false` | Снять отметку |
-| `POST /api/refuels/{id}/delete` | Удалить |
+| `POST /api/refuels/{id}/delete` | Удалить заправку |
+| `GET /api/refuels/{id}/detail` | Детали заправки (модалка) |
+| `GET /api/refuels/import-checks-form` | Форма импорта чеков |
+| `POST /api/refuels/import-checks-preview` | Предпросмотр импорта |
+| `POST /api/refuels/import-checks-apply` | Применить импорт |
+| `GET /api/fuel-graph/modal` | График топлива (Chart.js) |
 | `GET /api/critical-count` | Счётчик критических |
 | `GET /api/admin/vehicles-no-sensor` | ТС без датчиков |
 | `GET /api/admin/vehicles-no-sensor/search` | Поиск среди ТС без датчиков |

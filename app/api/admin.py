@@ -9,6 +9,7 @@ from app.models.user import User
 from app.models.client_account import ClientAccount
 from app.models.site import Site
 from app.models.setting import Setting
+from app.models.refuel_entry import RefuelEntry
 from app.dependencies import get_current_username, get_current_user, require_superadmin
 from app.services.pilot_service import PilotService
 
@@ -572,6 +573,31 @@ async def update_settings(
         else:
             db.add(Setting(key=key, value=val))
     await db.commit()
+
+    # Recalculate comparison_status for all entries with new thresholds
+    entries = (await db.execute(
+        select(RefuelEntry).where(RefuelEntry.is_deleted == False)
+    )).scalars().all()
+    for e in entries:
+        if e.is_false:
+            continue
+        if e.pilot_amount and e.actual_amount and e.pilot_amount > 0:
+            diff = e.actual_amount - e.pilot_amount
+            err = abs(diff) / e.pilot_amount * 100
+            e.difference = diff
+            e.error_percent = err
+            if err <= normal_threshold:
+                e.comparison_status = "normal"
+            elif err <= warning_threshold:
+                e.comparison_status = "small_deviation"
+            else:
+                e.comparison_status = "unacceptable"
+        elif e.actual_amount is not None:
+            e.difference = None
+            e.error_percent = None
+            e.comparison_status = "pilot_missing"
+    await db.commit()
+
     return RedirectResponse(url="/admin/settings", status_code=302)
 
 

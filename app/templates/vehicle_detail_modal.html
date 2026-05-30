@@ -1,0 +1,55 @@
+<div class="modal-overlay" onclick="if(event.target===this)this.remove()">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Детали ТС — {{ vehicle.plate_number or vehicle.name or '—' }}</h2>
+      <button type="button" class="modal-close" onclick="this.closest('.modal-overlay').remove()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="detail-grid">
+        <div class="detail-row">
+          <span class="detail-label">Госномер</span>
+          <span class="detail-value">{{ vehicle.plate_number or '—' }}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Название</span>
+          <span class="detail-value">{{ vehicle.name or '—' }}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">IMEI</span>
+          <span class="detail-value" style="font-family:monospace">{{ vehicle.imei or '—' }}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Pilot Agent ID</span>
+          <span class="detail-value">{{ vehicle.pilot_agent_id or '—' }}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Датчик топлива</span>
+          <span class="detail-value">{{ 'Есть' if vehicle.has_fuel_sensor else 'Нет' }}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Компания</span>
+          <span class="detail-value">{{ vehicle.client_account_id or '—' }}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Площадка</span>
+          <span class="detail-value">{{ vehicle.site_id or '—' }}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Папка</span>
+          <span class="detail-value">{{ vehicle.folder or '—' }}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Всего заправок</span>
+          <span class="detail-value">{{ total_refuels }}</span>
+        </div>
+      </div>
+      <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-sm btn-secondary" hx-get="/api/fuel-graph/modal?vehicle_id={{ vehicle.id }}&imei={{ vehicle.imei or '' }}" hx-target="#modal-container" hx-swap="innerHTML">График топлива</button>
+        <a href="/refuels?vehicle_id={{ vehicle.id }}" class="btn btn-sm btn-secondary">Заправки</a>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Закрыть</button>
+    </div>
+  </div>
+</div>

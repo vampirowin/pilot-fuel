@@ -10,6 +10,31 @@
         <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:rgba(34,197,94,0.1);border-radius:8px">
           <span style="font-size:20px">➕</span>
           <span><strong>{{ new_count }}</strong> новых заправок добавлено</span>
+          <span style="margin-left:auto;font-size:12px;cursor:pointer;color:var(--accent)" onclick="document.getElementById('new-details').style.display=document.getElementById('new-details').style.display==='none'?'block':'none'">Подробнее ▼</span>
+        </div>
+        <div id="new-details" style="display:none;padding:8px 0">
+          <div class="table-container" style="max-height:250px;overflow-y:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th>ТС</th>
+                  <th>Площадка</th>
+                  <th>Дата/время</th>
+                  <th>Литры</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for e in new_entries %}
+                <tr>
+                  <td><strong>{{ e.plate }}</strong></td>
+                  <td style="font-size:12px;color:var(--text-secondary)">{{ e.site_name }}</td>
+                  <td style="font-size:12px">{{ e.event_date }}</td>
+                  <td>{{ '%.1f'|format(e.amount) }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
         </div>
         {% endif %}
         {% if replaced_count %}

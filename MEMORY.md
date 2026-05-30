@@ -196,6 +196,33 @@ pilot-fuel/
 
 ## Recent Changes
 
+### 2026-05-30 — Scroll preservation, sync improvements, tooltip for created_by
+
+**Scroll preservation (refuels page):**
+- Заменён `HX-Redirect` на `HX-Trigger: refuelsChanged` во всех 5 POST-хендлерах (add, edit, mark_false, unmark_false, delete)
+- Добавлен listener `refuelsChanged` в `refuels.html`, который через `htmx.ajax('GET', ...)` обновляет только `#refuels-list` без `select`
+- Скролл, фильтры, поиск — всё сохраняется после модальных действий
+
+**Sync preview — колонка "Площадка":**
+- Добавлена загрузка `sites` map в `sync_refuels_preview` и `sync_refuels_apply`
+- В `sync_preview.html` добавлена колонка `Площадка` в таблицу конфликтов
+
+**Sync result — детали новых записей:**
+- В `sync_refuels_apply` собирается `new_entries` список (plate, event_date, amount, site_name)
+- В `sync_result.html` под сводкой — раскрываемая таблица новых записей по клику "Подробнее ▼"
+
+**Pilot API limit:**
+- `limit_count` изменён с `"0"` на `"99999"` в обоих report_type (38 и 16)
+
+**Debug логирование:**
+- В `sync_refuels_preview` добавлен лог количества сырых событий и классификации
+
+**Tooltip created_by для всех записей:**
+- Показывается `title` attribute на `<tr>` для всех типов записей:
+  - `manual` с `created_by` → `"Добавил: {username}, {datetime}"`
+  - `pilot_sync` → `"Синхронизировано из Pilot, {datetime}"`
+  - Остальные с `created_by` или `created_at`
+
 ### 2026-05-28 — Vehicles page redesign + Refuel sync overhaul
 
 **Vehicles page:**

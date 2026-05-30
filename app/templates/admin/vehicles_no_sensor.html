@@ -34,10 +34,10 @@
           <tbody>
             {% for v in vehicles %}
             <tr id="v-{{ v.id }}">
-              <td><input type="checkbox" name="vehicle_ids" value="{{ v.id }}"></td>
-              <td style="color:var(--text-dim)">{{ loop.index }}</td>
-              <td><strong>{{ v.plate_number or '—' }}</strong></td>
-              <td style="font-family:monospace;font-size:12px">{{ v.imei or '—' }}</td>
+              <td data-label=""><input type="checkbox" name="vehicle_ids" value="{{ v.id }}"></td>
+              <td data-label="#" style="color:var(--text-dim)">{{ loop.index }}</td>
+              <td data-label="Госномер"><strong>{{ v.plate_number or '—' }}</strong></td>
+              <td data-label="IMEI" style="font-family:monospace;font-size:12px">{{ v.imei or '—' }}</td>
               <td><button class="btn btn-sm btn-primary" hx-post="/api/vehicles/{{ v.id }}/toggle-sensor" hx-target="#v-{{ v.id }}" hx-swap="outerHTML" hx-confirm="Вернуть «{{ v.plate_number or v.id }}» в список?">Вернуть</button></td>
             </tr>
             {% endfor %}

@@ -1,7 +1,9 @@
+import logging
+
 from fastapi import APIRouter, Request, Depends, HTTPException, Form
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import select, or_
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.vehicle import Vehicle
@@ -9,6 +11,9 @@ from app.models.client_account import ClientAccount
 from app.models.site import Site
 from app.services.pilot_service import PilotService
 from app.dependencies import get_current_user, apply_vehicle_filter
+from app.models.vehicle import SENSOR_STATUSES
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
@@ -26,10 +31,14 @@ def group_by_folder(vehicles: list) -> list:
 def build_vehicle_dict(v: Vehicle, company_name: str = "", site_name: str = "") -> dict:
     return {
         "id": v.id,
-        "plate_number": v.plate_number,
+        "pilot_agent_id": v.pilot_agent_id,
         "imei": v.imei,
+        "plate_number": v.plate_number,
+        "name": v.name,
         "folder": v.folder,
         "sensor_count": v.sensor_count,
+        "has_fuel_sensor": v.has_fuel_sensor,
+        "sensor_status": v.sensor_status,
         "company_name": company_name,
         "site_name": site_name,
     }
@@ -50,13 +59,22 @@ def build_nested_groups(vehicles: list) -> list:
         sites = []
 
         if all_sites_placeholder:
-            # Flatten site level — collect all vehicles across all placeholder sites
-            flat_vehicles = []
+            # Flatten site level but keep folder grouping
+            folder_groups = {}
             for sname in site_names:
-                for folder_vehicles in tree[cname][sname].values():
-                    flat_vehicles.extend(folder_vehicles)
-            ctotal = len(flat_vehicles)
-            sites.append(("__flat__", 0, [flat_vehicles]))
+                for fname, fvehicles in tree[cname][sname].items():
+                    folder_groups.setdefault(fname, []).extend(fvehicles)
+            sorted_folders = sorted(folder_groups.items(), key=lambda x: (x[0] == "Без папки", x[0]))
+            all_placeholder = all(f == "Без папки" for f, _ in sorted_folders)
+            if all_placeholder:
+                flat = []
+                for _, v in sorted_folders:
+                    flat.extend(v)
+                ctotal = len(flat)
+                sites.append(("__flat__", 0, [("__flat__", flat)]))
+            else:
+                ctotal = sum(len(v) for _, v in sorted_folders)
+                sites.append(("__flat__", 0, sorted_folders))
         else:
             for sname in sorted(site_names, key=lambda x: (x == "Без площадки", x)):
                 folder_names = list(tree[cname][sname].keys())
@@ -81,6 +99,47 @@ def build_nested_groups(vehicles: list) -> list:
     return result
 
 
+def _sensor_status_badge(v: dict) -> str:
+    status = v.get("sensor_status", "normal")
+    label = SENSOR_STATUSES.get(status, status)
+    css = {"normal": "status-normal", "broken": "status-unacceptable", "stock": "status-small-deviation"}
+    cls = css.get(status, "")
+    return f'<span class="status-badge {cls}">{label}</span>'
+
+
+def _sensor_status_select(v: dict) -> str:
+    current = v.get("sensor_status", "normal")
+    opts = "".join(
+        f'<option value="{k}" {"selected" if k == current else ""}>{label}</option>'
+        for k, label in SENSOR_STATUSES.items()
+    )
+    return f'<select name="status" class="sensor-status-select status-{current}" data-vehicle-id="{v["id"]}" hx-post="/api/vehicles/{v["id"]}/sensor-status" hx-trigger="change" hx-swap="innerHTML" hx-target="closest td">{opts}</select>'
+
+
+def _sensor_cell(v: dict, editable: bool) -> str:
+    if editable:
+        return _sensor_status_select(v)
+    return _sensor_status_badge(v)
+
+
+def _vehicle_row(v: dict, idx: int, can_act: bool) -> str:
+    sensor = _sensor_cell(v, can_act)
+    cells = ""
+    if can_act:
+        cells += f'<td data-label=""><input type="checkbox" form="bulk-vehicle-form" name="vehicle_ids" value="{v["id"]}"></td>'
+    cells += f'<td data-label="#" style="color:var(--text-dim)">{idx}</td>'
+    cells += f'<td data-label="Госномер"><strong>{v.get("plate_number") or "—"}</strong></td>'
+    cells += f'<td data-label="Датчик" class="sensor-cell">{sensor}</td>'
+    cells += f'<td data-label="Заправки"><a href="/refuels?vehicle_id={v["id"]}" class="btn btn-sm btn-secondary">Заправки</a></td>'
+    cells += f'<td data-label="Компания">{v.get("company_name") or "—"}</td>'
+    cells += f'<td data-label="График"><button class="btn btn-sm btn-secondary" hx-get="/api/fuel-graph/modal?vehicle_id={v["id"]}&imei={v.get("imei") or ""}" hx-target="#modal-container" hx-swap="innerHTML">График</button></td>'
+    if can_act:
+        cells += f'<td data-label="Действия"><button class="btn btn-sm btn-danger" hx-post="/api/vehicles/{v["id"]}/delete" hx-target="#vehicles-table" hx-swap="innerHTML" hx-confirm="Удалить ТС {v.get("plate_number") or "—"} и все его заправки?">Удалить</button></td>'
+    else:
+        cells += '<td data-label="Действия"></td>'
+    return f'<tr id="v-{v["id"]}">{cells}</tr>'
+
+
 def render_nested_partial(nested_groups: list, can_act: bool) -> str:
     if not nested_groups:
         return '<div class="card"><div class="empty-state"><h3>Нет транспортных средств</h3><p>Нажмите «Синхронизировать», чтобы загрузить список ТС из Pilot.</p></div></div>'
@@ -95,69 +154,48 @@ def render_nested_partial(nested_groups: list, can_act: bool) -> str:
         html += f'<div class="card level-company" style="margin-top: 16px;"><div class="card-header collapsible-header" onclick="toggleGroup(\'{cid}\')"><span class="arrow">&#9660;</span><span class="level-badge level-badge-company">{cname}</span><span class="level-count">{ctotal}</span></div><div class="collapsible-body" id="{cid}">'
         for sname, stotal, folders in sites:
             if sname == "__flat__":
-                # Flat mode — render vehicles directly under company
-                all_vehicles = folders[0]
-                html += '<div class="table-container" style="margin-top:12px"><table><thead><tr>'
-                if can_act:
-                    html += '<th style="width:32px;"><input type="checkbox" onchange="var e=this;document.querySelectorAll(\'#bulk-vehicle-form input[name=vehicle_ids]\').forEach(function(c){c.checked=e.checked})"></th>'
-                html += '<th>#</th><th>Госномер</th><th>IMEI</th><th>Датчик</th><th>Заправки</th><th>Компания</th>'
-                if can_act:
-                    html += '<th style="width:100px;">Действия</th>'
-                html += '</tr></thead><tbody>'
-                for idx, v in enumerate(all_vehicles, 1):
-                    badge = "status-normal" if v.get("sensor_count", 0) > 0 else "status-false-reading"
-                    html += f'<tr id="v-{v["id"]}">'
-                    if can_act:
-                        html += f'<td><input type="checkbox" name="vehicle_ids" value="{v["id"]}"></td>'
-                    html += f'<td style="color:var(--text-dim)">{idx}</td><td><strong>{v.get("plate_number") or "—"}</strong></td><td style="font-family:monospace;font-size:12px">{v.get("imei") or "—"}</td><td><span class="status-badge {badge}">{v.get("sensor_count", 0)} датч.</span></td><td><a href="/refuels?vehicle_id={v["id"]}" class="btn btn-sm btn-secondary">Заправки</a></td><td>{v.get("company_name") or "—"}</td>'
-                    if can_act:
-                        html += f'<td><button class="btn btn-sm btn-danger" hx-post="/api/vehicles/{v["id"]}/toggle-sensor" hx-target="#v-{v["id"]}" hx-swap="outerHTML" hx-confirm="Пометить «{v.get("plate_number") or v["id"]}» как ТС без датчика?">Нет датчика</button></td>'
-                    html += '</tr>'
-                html += '</tbody></table></div>'
+                for fname, vehicles in folders:
+                    if fname == "__flat__":
+                        html += '<div class="table-container" style="margin-top:12px"><table><thead><tr>'
+                        if can_act:
+                            html += '<th style="width:32px;"><input type="checkbox" onchange="var e=this;document.querySelectorAll(\'#bulk-vehicle-form input[name=vehicle_ids]\').forEach(function(c){c.checked=e.checked})"></th>'
+                        html += '<th>#</th><th>Госномер</th><th>Датчик</th><th>Заправки</th><th>Компания</th><th>График</th><th>Действия</th></tr></thead><tbody>'
+                        for idx, v in enumerate(vehicles, 1):
+                            html += _vehicle_row(v, idx, can_act)
+                        html += '</tbody></table></div>'
+                    else:
+                        fidx += 1
+                        fid = f"f-{cidx}-{sidx}-{fidx}"
+                        html += f'<div class="level-folder" style="margin:4px 0;border:1px solid var(--border);border-radius:6px"><div class="collapsible-header" onclick="toggleGroup(\'{fid}\')"><span class="arrow">&#9660;</span><span class="level-badge level-badge-folder">{fname}</span><span class="level-count">{len(vehicles)}</span></div><div class="collapsible-body" id="{fid}"><div class="table-container"><table><thead><tr>'
+                        if can_act:
+                            html += '<th style="width:32px;"><input type="checkbox" onchange="var e=this;document.querySelectorAll(\'#bulk-vehicle-form input[name=vehicle_ids]\').forEach(function(c){c.checked=e.checked})"></th>'
+                        html += '<th>#</th><th>Госномер</th><th>Датчик</th><th>Заправки</th><th>Компания</th><th>График</th><th>Действия</th></tr></thead><tbody>'
+                        for idx, v in enumerate(vehicles, 1):
+                            html += _vehicle_row(v, idx, can_act)
+                        html += '</tbody></table></div></div></div>'
             else:
                 sidx += 1
                 sid = f"s-{cidx}-{sidx}"
                 html += f'<div class="card level-site" style="margin: 8px 0;"><div class="card-header collapsible-header" onclick="toggleGroup(\'{sid}\')"><span class="arrow">&#9660;</span><span class="level-badge level-badge-site">{sname}</span><span class="level-count">{stotal}</span></div><div class="collapsible-body" id="{sid}">'
                 for fname, vehicles in folders:
                     if fname == "__flat__":
-                        # Flat folder — render table directly
                         html += '<div class="table-container"><table><thead><tr>'
                         if can_act:
                             html += '<th style="width:32px;"><input type="checkbox" onchange="var e=this;document.querySelectorAll(\'#bulk-vehicle-form input[name=vehicle_ids]\').forEach(function(c){c.checked=e.checked})"></th>'
-                        html += '<th>#</th><th>Госномер</th><th>IMEI</th><th>Датчик</th><th>Заправки</th><th>Компания</th>'
-                        if can_act:
-                            html += '<th style="width:100px;">Действия</th>'
-                        html += '</tr></thead><tbody>'
+                        html += '<th>#</th><th>Госномер</th><th>Датчик</th><th>Заправки</th><th>Компания</th><th>График</th><th>Действия</th></tr></thead><tbody>'
                         for idx, v in enumerate(vehicles, 1):
-                            badge = "status-normal" if v.get("sensor_count", 0) > 0 else "status-false-reading"
-                            html += f'<tr id="v-{v["id"]}">'
-                            if can_act:
-                                html += f'<td><input type="checkbox" name="vehicle_ids" value="{v["id"]}"></td>'
-                            html += f'<td style="color:var(--text-dim)">{idx}</td><td><strong>{v.get("plate_number") or "—"}</strong></td><td style="font-family:monospace;font-size:12px">{v.get("imei") or "—"}</td><td><span class="status-badge {badge}">{v.get("sensor_count", 0)} датч.</span></td><td><a href="/refuels?vehicle_id={v["id"]}" class="btn btn-sm btn-secondary">Заправки</a></td><td>{v.get("company_name") or "—"}</td>'
-                            if can_act:
-                                html += f'<td><button class="btn btn-sm btn-danger" hx-post="/api/vehicles/{v["id"]}/toggle-sensor" hx-target="#v-{v["id"]}" hx-swap="outerHTML" hx-confirm="Пометить «{v.get("plate_number") or v["id"]}» как ТС без датчика?">Нет датчика</button></td>'
-                            html += '</tr>'
+                            html += _vehicle_row(v, idx, can_act)
                         html += '</tbody></table></div>'
                     else:
                         fidx += 1
                         fid = f"f-{cidx}-{sidx}-{fidx}"
                         html += f'<div class="level-folder" style="margin:4px 0;border:1px solid var(--border);border-radius:6px"><div class="collapsible-header" onclick="toggleGroup(\'{fid}\')"><span class="arrow">&#9660;</span><span class="level-badge level-badge-folder">{fname}</span><span class="level-count">{len(vehicles)}</span></div><div class="collapsible-body" id="{fid}"><div class="table-container"><table><thead><tr>'
-                    if can_act:
-                        html += '<th style="width:32px;"><input type="checkbox" onchange="var e=this;document.querySelectorAll(\'#bulk-vehicle-form input[name=vehicle_ids]\').forEach(function(c){c.checked=e.checked})"></th>'
-                    html += '<th>#</th><th>Госномер</th><th>IMEI</th><th>Датчик</th><th>Заправки</th><th>Компания</th>'
-                    if can_act:
-                        html += '<th style="width:100px;">Действия</th>'
-                    html += '</tr></thead><tbody>'
-                    for idx, v in enumerate(vehicles, 1):
-                        badge = "status-normal" if v.get("sensor_count", 0) > 0 else "status-false-reading"
-                        html += f'<tr id="v-{v["id"]}">'
                         if can_act:
-                            html += f'<td><input type="checkbox" name="vehicle_ids" value="{v["id"]}"></td>'
-                        html += f'<td style="color:var(--text-dim)">{idx}</td><td><strong>{v.get("plate_number") or "—"}</strong></td><td style="font-family:monospace;font-size:12px">{v.get("imei") or "—"}</td><td><span class="status-badge {badge}">{v.get("sensor_count", 0)} датч.</span></td><td><a href="/refuels?vehicle_id={v["id"]}" class="btn btn-sm btn-secondary">Заправки</a></td><td>{v.get("company_name") or "—"}</td>'
-                        if can_act:
-                            html += f'<td><button class="btn btn-sm btn-danger" hx-post="/api/vehicles/{v["id"]}/toggle-sensor" hx-target="#v-{v["id"]}" hx-swap="outerHTML" hx-confirm="Пометить «{v.get("plate_number") or v["id"]}» как ТС без датчика?">Нет датчика</button></td>'
-                        html += '</tr>'
-                    html += '</tbody></table></div></div></div>'
+                            html += '<th style="width:32px;"><input type="checkbox" onchange="var e=this;document.querySelectorAll(\'#bulk-vehicle-form input[name=vehicle_ids]\').forEach(function(c){c.checked=e.checked})"></th>'
+                        html += '<th>#</th><th>Госномер</th><th>Датчик</th><th>Заправки</th><th>Компания</th><th>График</th><th>Действия</th></tr></thead><tbody>'
+                        for idx, v in enumerate(vehicles, 1):
+                            html += _vehicle_row(v, idx, can_act)
+                        html += '</tbody></table></div></div></div>'
                 html += '</div></div>'
         html += '</div></div>'
     return html
@@ -174,19 +212,13 @@ def render_table_partial(vehicles: list, is_superadmin: bool = False, is_company
 async def vehicles_page(
     request: Request,
     plate: str = "",
-    imei: str = "",
     user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     query = select(Vehicle).where(Vehicle.is_active == True, Vehicle.has_fuel_sensor == True)
     query = apply_vehicle_filter(query, user, Vehicle)
-    filters = []
     if plate:
-        filters.append(Vehicle.plate_number.ilike(f"%{plate}%"))
-    if imei:
-        filters.append(Vehicle.imei.ilike(f"%{imei}%"))
-    if filters:
-        query = query.where(or_(*filters))
+        query = query.where(Vehicle.plate_number.ilike(f"%{plate}%"))
     query = query.order_by(Vehicle.folder, Vehicle.plate_number)
     result = await db.execute(query)
     db_vehicles = result.scalars().all()
@@ -209,7 +241,6 @@ async def vehicles_page(
 
     return templates.TemplateResponse(request, "vehicles.html", {
         "plate": plate,
-        "imei": imei,
         "is_superadmin": is_su,
         "is_company_admin": is_ca,
         "nested_groups": build_nested_groups(out) if out else [],
@@ -220,19 +251,13 @@ async def vehicles_page(
 async def search_vehicles(
     request: Request,
     plate: str = "",
-    imei: str = "",
     user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     query = select(Vehicle).where(Vehicle.is_active == True, Vehicle.has_fuel_sensor == True)
     query = apply_vehicle_filter(query, user, Vehicle)
-    filters = []
     if plate:
-        filters.append(Vehicle.plate_number.ilike(f"%{plate}%"))
-    if imei:
-        filters.append(Vehicle.imei.ilike(f"%{imei}%"))
-    if filters:
-        query = query.where(or_(*filters))
+        query = query.where(Vehicle.plate_number.ilike(f"%{plate}%"))
     query = query.order_by(Vehicle.folder, Vehicle.plate_number)
     result = await db.execute(query)
     db_vehicles = result.scalars().all()
@@ -255,24 +280,28 @@ async def search_vehicles(
     return HTMLResponse(render_table_partial(out, is_su, is_ca))
 
 
-@router.post("/api/vehicles/{vehicle_id}/toggle-sensor", response_class=HTMLResponse)
-async def toggle_fuel_sensor(
+@router.post("/api/vehicles/{vehicle_id}/sensor-status", response_class=HTMLResponse)
+async def update_sensor_status(
     request: Request,
     vehicle_id: int,
+    status: str = Form("normal"),
     user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     if user.role not in ("superadmin", "company_admin"):
         raise HTTPException(status_code=403, detail="Forbidden")
+    if status not in SENSOR_STATUSES:
+        raise HTTPException(status_code=400, detail="Invalid status")
     result = await db.execute(select(Vehicle).where(Vehicle.id == vehicle_id))
     v = result.scalar_one_or_none()
     if not v:
         raise HTTPException(status_code=404, detail="Vehicle not found")
     if user.role == "company_admin" and v.client_account_id != user.client_account_id:
         raise HTTPException(status_code=403, detail="Forbidden")
-    v.has_fuel_sensor = not v.has_fuel_sensor
+    v.sensor_status = status
     await db.commit()
-    return HTMLResponse("")
+    dv = build_vehicle_dict(v)
+    return HTMLResponse(_sensor_status_select(dv))
 
 
 @router.post("/api/vehicles/bulk-remove-sensor", response_class=HTMLResponse)
@@ -334,6 +363,11 @@ async def sync_vehicles(
     service = PilotService()
     pilot_vehicles = await service.get_vehicles(token, node_id)
 
+    import logging
+    logger = logging.getLogger(__name__)
+    for i, pv in enumerate(pilot_vehicles[:3]):
+        logger.info(f"Pilot vehicle {i}: keys={list(pv.keys())}, folder={repr(pv.get('folder', ''))}")
+
     out = []
     for pv in pilot_vehicles:
         agent_id = pv.get("agentid") or pv.get("id")
@@ -342,7 +376,7 @@ async def sync_vehicles(
         name = pv.get("name", "")
         folder = pv.get("folder", "")
         sensors = pv.get("sensors", {})
-        sensor_count = len(sensors) if isinstance(sensors, dict) else 0
+        sensor_count = len(sensors) if isinstance(sensors, (dict, list)) else 0
 
         stmt = select(Vehicle).where(Vehicle.pilot_agent_id == agent_id)
         existing = (await db.execute(stmt)).scalar_one_or_none()
@@ -370,8 +404,51 @@ async def sync_vehicles(
             await db.flush()
             vid = vehicle.id
 
-        out.append({"id": vid, "plate_number": plate, "imei": imei, "folder": folder, "sensor_count": sensor_count, "company_name": ""})
+        sensor_status = existing.sensor_status if existing else "normal"
+        out.append({"id": vid, "plate_number": plate, "imei": imei, "folder": folder, "sensor_count": sensor_count, "sensor_status": sensor_status, "company_name": ""})
 
     await db.commit()
     is_su = user.role == "superadmin"
     return HTMLResponse(render_table_partial(out, is_su))
+
+
+@router.post("/api/vehicles/{vehicle_id}/delete", response_class=HTMLResponse)
+async def delete_vehicle(
+    request: Request,
+    vehicle_id: int,
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if user.role not in ("superadmin", "company_admin"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    result = await db.execute(select(Vehicle).where(Vehicle.id == vehicle_id))
+    v = result.scalar_one_or_none()
+    if not v:
+        raise HTTPException(status_code=404, detail="Vehicle not found")
+    if user.role == "company_admin" and v.client_account_id != user.client_account_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    await db.delete(v)
+    await db.commit()
+
+    query = select(Vehicle).where(Vehicle.is_active == True, Vehicle.has_fuel_sensor == True)
+    query = apply_vehicle_filter(query, user, Vehicle)
+    query = query.order_by(Vehicle.folder, Vehicle.plate_number)
+    result = await db.execute(query)
+    db_vehicles = result.scalars().all()
+
+    company_ids = {v.client_account_id for v in db_vehicles if v.client_account_id}
+    companies = {}
+    if company_ids:
+        for c in (await db.execute(select(ClientAccount).where(ClientAccount.id.in_(company_ids)))).scalars().all():
+            companies[c.id] = c.name
+
+    site_ids = {v.site_id for v in db_vehicles if v.site_id}
+    sites = {}
+    if site_ids:
+        for s in (await db.execute(select(Site).where(Site.id.in_(site_ids)))).scalars().all():
+            sites[s.id] = s.name
+
+    out = [build_vehicle_dict(v, companies.get(v.client_account_id, ""), sites.get(v.site_id, "")) for v in db_vehicles]
+    is_su = user.role == "superadmin"
+    is_ca = user.role == "company_admin"
+    return HTMLResponse(render_table_partial(out, is_su, is_ca))
