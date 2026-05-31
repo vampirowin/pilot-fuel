@@ -136,7 +136,7 @@ async def fuel_graph_data(
         db_entries = (await db.execute(q.order_by(RefuelEntry.event_date))).scalars().all()
         for e in db_entries:
             db_refuels.append({
-                "ts": int(e.event_date.timestamp()),
+                "ts": int(e.event_date.replace(tzinfo=timezone.utc).timestamp()),
                 "amount": e.actual_amount or e.pilot_amount or 0,
                 "pilot_amount": e.pilot_amount,
                 "actual_amount": e.actual_amount,
