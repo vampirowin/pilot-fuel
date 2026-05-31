@@ -13,7 +13,7 @@ from app.models.refuel_entry import RefuelEntry
 from app.models.sync_log import SyncLog
 from app.models.setting import Setting
 from app.services.pilot_service import PilotService
-from app.api.refuels import _match_vehicle, _parse_timestamp
+from app.api.refuels import _match_vehicle, _parse_timestamp, _get_effective_thresholds, _calc_comparison
 
 logger = logging.getLogger(__name__)
 
@@ -124,27 +124,22 @@ async def _sync_company(admin: User) -> dict:
             all_events.extend(batch_events)
             await asyncio.sleep(0.5)
 
-        n_th, w_th = 3.0, 10.0
-        rows = (await db.execute(
-            select(Setting).where(Setting.key.in_(["normal_threshold", "warning_threshold"]))
-        )).scalars().all()
-        for s in rows:
-            if s.key == "normal_threshold":
-                n_th = float(s.value)
-            elif s.key == "warning_threshold":
-                w_th = float(s.value)
-
         total_events = len(all_events)
         new_count = 0
         updated_count = 0
         errors = []
         vehicle_updates = []
+        thresh_cache = {}
 
         for ev in all_events:
             v = _match_vehicle(ev, vehicles)
             if not v:
                 errors.append(ev.get("name", "?")[:30])
                 continue
+
+            if v.id not in thresh_cache:
+                thresh_cache[v.id] = await _get_effective_thresholds(db, v.id)
+            n_pct, w_pct, n_abs, w_abs, enable_abs = thresh_cache[v.id]
 
             ev_ts = _parse_timestamp(ev.get("ts"))
             if not ev_ts:
@@ -183,15 +178,10 @@ async def _sync_company(admin: User) -> dict:
                     existing_entry.pilot_amount = amount
                     existing_entry.event_date = ev_ts
                     if existing_entry.actual_amount:
-                        diff = existing_entry.actual_amount - amount
-                        err_pct = abs(diff) / amount * 100 if amount > 0 else 0
+                        diff, err, status = _calc_comparison(amount, existing_entry.actual_amount, n_pct, w_pct, n_abs, w_abs, enable_abs)
                         existing_entry.difference = diff
-                        existing_entry.error_percent = err_pct
-                        existing_entry.comparison_status = (
-                            "normal" if err_pct <= n_th else
-                            "small_deviation" if err_pct <= w_th else
-                            "unacceptable"
-                        )
+                        existing_entry.error_percent = err
+                        existing_entry.comparison_status = status
                     else:
                         existing_entry.difference = None
                         existing_entry.error_percent = None

@@ -1,0 +1,42 @@
+<div class="modal-overlay" onclick="if(event.target===this)this.remove()">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Пороги точности — {{ plate }}</h2>
+      <button type="button" class="modal-close" onclick="this.closest('.modal-overlay').remove()">&times;</button>
+    </div>
+    <form hx-post="/api/vehicles/{{ vehicle_id }}/thresholds" hx-target="#modal-container" hx-swap="innerHTML">
+      <div class="modal-body">
+        <p style="color:var(--text-dim);margin-bottom:12px">Если поля пустые — используются глобальные настройки.</p>
+        <div class="form-group">
+          <label for="n_pct">Норма, процент</label>
+          <input type="number" step="0.1" id="n_pct" name="normal_threshold_pct" value="{{ n_pct }}" placeholder="Глобальный: {{ global_n_pct }}">
+        </div>
+        <div class="form-group">
+          <label for="w_pct">Предупреждение, процент</label>
+          <input type="number" step="0.1" id="w_pct" name="warning_threshold_pct" value="{{ w_pct }}" placeholder="Глобальный: {{ global_w_pct }}">
+        </div>
+        <div class="form-group" style="margin-top:16px">
+          <label>
+            <input type="checkbox" name="enable_abs" value="1" {% if enable_abs %}checked{% endif %} onchange="document.getElementById('abs-fields').style.display=this.checked?'block':'none'">
+            Учитывать абсолютную разницу (литры)
+          </label>
+          <span style="font-size:12px;color:var(--text-dim)">Для маленьких баков: если разница в литрах мала — статус снижается</span>
+        </div>
+        <div id="abs-fields" style="display:{{ 'block' if enable_abs else 'none' }}">
+          <div class="form-group">
+            <label for="n_abs">Норма, литров</label>
+            <input type="number" step="0.1" id="n_abs" name="normal_threshold_abs" value="{{ n_abs }}">
+          </div>
+          <div class="form-group">
+            <label for="w_abs">Предупреждение, литров</label>
+            <input type="number" step="0.1" id="w_abs" name="warning_threshold_abs" value="{{ w_abs }}">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Отмена</button>
+        <button type="submit" class="btn btn-primary">Сохранить</button>
+      </div>
+    </form>
+  </div>
+</div>

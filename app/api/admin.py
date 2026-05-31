@@ -12,6 +12,7 @@ from app.models.setting import Setting
 from app.models.refuel_entry import RefuelEntry
 from app.dependencies import get_current_username, get_current_user, require_superadmin
 from app.services.pilot_service import PilotService
+from app.api.refuels import _get_effective_thresholds, _calc_comparison
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
@@ -566,24 +567,23 @@ async def update_settings(
             db.add(Setting(key=key, value=val))
     await db.commit()
 
-    # Recalculate comparison_status for all entries with new thresholds
+    # Recalculate comparison_status for all entries with per-vehicle thresholds
     entries = (await db.execute(
         select(RefuelEntry).where(RefuelEntry.is_deleted == False)
     )).scalars().all()
+    thresh_cache = {}
     for e in entries:
         if e.is_false:
             continue
+        vid = e.vehicle_id
+        if vid not in thresh_cache:
+            thresh_cache[vid] = await _get_effective_thresholds(db, vid)
+        n_pct, w_pct, n_abs, w_abs, enable_abs = thresh_cache[vid]
         if e.pilot_amount and e.actual_amount and e.pilot_amount > 0:
-            diff = e.actual_amount - e.pilot_amount
-            err = abs(diff) / e.pilot_amount * 100
+            diff, err, status = _calc_comparison(e.pilot_amount, e.actual_amount, n_pct, w_pct, n_abs, w_abs, enable_abs)
             e.difference = diff
             e.error_percent = err
-            if err <= normal_threshold:
-                e.comparison_status = "normal"
-            elif err <= warning_threshold:
-                e.comparison_status = "small_deviation"
-            else:
-                e.comparison_status = "unacceptable"
+            e.comparison_status = status
         elif e.actual_amount is not None:
             e.difference = None
             e.error_percent = None

@@ -78,7 +78,7 @@ def build_refuel_hierarchy(entries: list, vmap: dict) -> list:
     return result
 
 
-def _render_refuel_hierarchy(nested_groups: list, vmap: dict, user, page: int = 1, date_from: str = "", date_to: str = "") -> str:
+def _render_refuel_hierarchy(nested_groups: list, vmap: dict, user, page: int = 1, date_from: str = "", date_to: str = "", n_th: float = 3.0, w_th: float = 10.0) -> str:
     if not nested_groups:
         return '<div class="card"><div class="empty-state"><p>Нет заправок.</p></div></div>'
     html = ""
@@ -93,7 +93,7 @@ def _render_refuel_hierarchy(nested_groups: list, vmap: dict, user, page: int = 
             if sname == "__flat__":
                 for fname, ftotal, vehicles_list in folders:
                     for vid, plate, entries in vehicles_list:
-                        html += _render_vehicle_group(vid, entries, vmap, page, date_from, date_to, user)
+                        html += _render_vehicle_group(vid, entries, vmap, page, date_from, date_to, user, n_th, w_th)
             else:
                 sid = f"rs-{cidx}-{sidx}"
                 html += f'<div class="card level-site" style="margin-top:8px"><div class="card-header collapsible-header" onclick="toggleGroup(\'{sid}\')"><span class="arrow">&#9660;</span><span class="level-badge level-badge-site">{sname}</span><span class="level-count">{stotal}</span></div><div class="collapsible-body" id="{sid}">'
@@ -102,19 +102,19 @@ def _render_refuel_hierarchy(nested_groups: list, vmap: dict, user, page: int = 
                     fidx += 1
                     if fname == "__flat__":
                         for vid, plate, entries in vehicles_list:
-                            html += _render_vehicle_group(vid, entries, vmap, page, date_from, date_to, user)
+                            html += _render_vehicle_group(vid, entries, vmap, page, date_from, date_to, user, n_th, w_th)
                     else:
                         fid = f"rf-{cidx}-{sidx}-{fidx}"
                         html += f'<div class="level-folder" style="margin:4px 0;border:1px solid var(--border);border-radius:6px"><div class="collapsible-header" onclick="toggleGroup(\'{fid}\')"><span class="arrow">&#9660;</span><span class="level-badge level-badge-folder">{fname}</span><span class="level-count">{ftotal}</span></div><div class="collapsible-body" id="{fid}">'
                         for vid, plate, entries in vehicles_list:
-                            html += _render_vehicle_group(vid, entries, vmap, page, date_from, date_to, user)
+                            html += _render_vehicle_group(vid, entries, vmap, page, date_from, date_to, user, n_th, w_th)
                         html += '</div></div>'
                 html += '</div></div>'
         html += '</div></div>'
     return html
 
 
-def _render_vehicle_group(vehicle_id: int, entries: list, vmap: dict, page: int = 1, date_from: str = "", date_to: str = "", user = None) -> str:
+def _render_vehicle_group(vehicle_id: int, entries: list, vmap: dict, page: int = 1, date_from: str = "", date_to: str = "", user = None, n_th: float = 3.0, w_th: float = 10.0) -> str:
     plate = vmap.get(vehicle_id, {}).get("plate_number", "—")
     imei_val = vmap.get(vehicle_id, {}).get("imei", "")
     add_btn = f'<button class="btn btn-sm btn-secondary" hx-get="/api/refuels/add-form?vehicle_id={vehicle_id}&page={page}&date_from={date_from}&date_to={date_to}" hx-target="#modal-container" hx-swap="innerHTML">+ Добавить</button>'
@@ -155,9 +155,6 @@ def _render_vehicle_group(vehicle_id: int, entries: list, vmap: dict, page: int 
     df_total = total_actual - total_pilot
     err_pct = abs(df_total) / total_pilot * 100 if total_pilot > 0 else None
 
-    n_th = get_settings().normal_threshold
-    w_th = get_settings().warning_threshold
-
     false_count = sum(1 for e in entries if e.is_false)
     if not real_entries:
         overall_sc = "status-false-reading"
@@ -194,13 +191,13 @@ def _pagination_html(page: int, total: int, qs: str) -> str:
     return f'<div class="pagination"><button class="chip {prev_d}" hx-get="{prev_url}" hx-target="#refuels-list" hx-push-url="true" {prev_d}>← Назад</button><span>стр. {page} из {total}</span><button class="chip {next_d}" hx-get="{next_url}" hx-target="#refuels-list" hx-push-url="true" {next_d}>Вперед →</button></div>'
 
 
-def _list_html(grouped: list, vmap: dict, page: int, total: int, qs: str, date_from: str = "", date_to: str = "", user = None) -> str:
+def _list_html(grouped: list, vmap: dict, page: int, total: int, qs: str, date_from: str = "", date_to: str = "", user = None, n_th: float = 3.0, w_th: float = 10.0) -> str:
     if not grouped:
         return '<div class="card"><div class="empty-state"><p>Нет заправок.</p></div></div>'
     start = (page - 1) * PER_PAGE
     h = ""
     for vid, entries in grouped[start:start + PER_PAGE]:
-        h += _render_vehicle_group(vid, entries, vmap, page, date_from, date_to, user)
+        h += _render_vehicle_group(vid, entries, vmap, page, date_from, date_to, user, n_th, w_th)
     h += _pagination_html(page, total, qs)
     return h
 
@@ -308,8 +305,9 @@ async def refuels_page(
     page_groups = grouped[start:start + PER_PAGE]
     page_entries = [e for _, ve in page_groups for e in ve]
 
+    n_th, w_th, _, _, _ = await _get_effective_thresholds(db)
     nested = build_refuel_hierarchy(page_entries, vmap)
-    rendered = _render_refuel_hierarchy(nested, vmap, user, page, df_str, dt_str)
+    rendered = _render_refuel_hierarchy(nested, vmap, user, page, df_str, dt_str, n_th, w_th)
 
     qparts = {}
     if vehicle_id:
@@ -447,13 +445,17 @@ async def sync_refuels(
 
     total_new = 0
     errors = []
-    n_th, w_th = await _get_thresholds(db)
+    thresh_cache = {}
 
     for ev in raw_events:
         v = _match_vehicle(ev, vehicles)
         if not v:
             errors.append(f"ТС не найден: {ev.get('name', '?')}")
             continue
+
+        if v.id not in thresh_cache:
+            thresh_cache[v.id] = await _get_effective_thresholds(db, v.id)
+        n_pct, w_pct, n_abs, w_abs, enable_abs = thresh_cache[v.id]
 
         ev_ts = _parse_timestamp(ev.get("ts"))
         if not ev_ts:
@@ -493,7 +495,7 @@ async def sync_refuels(
                 orphan_entry.pilot_refuel_id = existing_pr.id
                 orphan_entry.pilot_amount = existing_pr.amount
                 orphan_entry.event_date = ev_ts
-                diff, err, status = _calc_comparison(existing_pr.amount, orphan_entry.actual_amount, n_th, w_th)
+                diff, err, status = _calc_comparison(existing_pr.amount, orphan_entry.actual_amount, n_pct, w_pct, n_abs, w_abs, enable_abs)
                 orphan_entry.difference = diff
                 orphan_entry.error_percent = err
                 orphan_entry.comparison_status = status
@@ -531,7 +533,7 @@ async def sync_refuels(
             existing_manual_entry.pilot_refuel_id = pr.id
             existing_manual_entry.pilot_amount = amount
             existing_manual_entry.event_date = ev_ts
-            diff, err, status = _calc_comparison(amount, existing_manual_entry.actual_amount, n_th, w_th)
+            diff, err, status = _calc_comparison(amount, existing_manual_entry.actual_amount, n_pct, w_pct, n_abs, w_abs, enable_abs)
             existing_manual_entry.difference = diff
             existing_manual_entry.error_percent = err
             existing_manual_entry.comparison_status = status
@@ -577,7 +579,8 @@ async def sync_refuels(
     if vehicle_id:
         qparts["vehicle_id"] = vehicle_id
     qs = "&".join(f"{k}={v}" for k, v in qparts.items())
-    html = _list_html(grouped, vmap, 1, total_pages, qs, qf, qt, user)
+    n_th, w_th, _, _, _ = await _get_effective_thresholds(db)
+    html = _list_html(grouped, vmap, 1, total_pages, qs, qf, qt, user, n_th, w_th)
 
     if total_new:
         html += f'<div class="toast toast-success">Загружено {total_new} заправок</div>'
@@ -670,7 +673,6 @@ async def sync_refuels_preview(
     except (json.JSONDecodeError, TypeError):
         actions = {}
 
-    n_th, w_th = await _get_thresholds(db)
     new_count = 0
     replaced_count = 0
     skipped_count = 0
@@ -678,12 +680,17 @@ async def sync_refuels_preview(
     item_idx = 0
     new_entries = []
     unmatched = 0
+    thresh_cache = {}
 
     for ev in all_events:
         v = _match_vehicle(ev, vehicles)
         if not v:
             unmatched += 1
             continue
+
+        if v.id not in thresh_cache:
+            thresh_cache[v.id] = await _get_effective_thresholds(db, v.id)
+        n_pct, w_pct, n_abs, w_abs, enable_abs = thresh_cache[v.id]
 
         ev_ts = _parse_timestamp(ev.get("ts"))
         if not ev_ts:
@@ -739,7 +746,7 @@ async def sync_refuels_preview(
                 existing_manual.pilot_refuel_id = pr.id
                 existing_manual.pilot_amount = amount
                 existing_manual.event_date = ev_ts
-                diff, err, status = _calc_comparison(amount, existing_manual.actual_amount, n_th, w_th)
+                diff, err, status = _calc_comparison(amount, existing_manual.actual_amount, n_pct, w_pct, n_abs, w_abs, enable_abs)
                 existing_manual.difference = diff
                 existing_manual.error_percent = err
                 existing_manual.comparison_status = status
@@ -808,7 +815,7 @@ async def sync_refuels_preview(
             orphan_manual.pilot_refuel_id = existing_pr.id
             orphan_manual.pilot_amount = amount
             orphan_manual.event_date = ev_ts
-            diff, err, status = _calc_comparison(amount, orphan_manual.actual_amount, n_th, w_th)
+            diff, err, status = _calc_comparison(amount, orphan_manual.actual_amount, n_pct, w_pct, n_abs, w_abs, enable_abs)
             orphan_manual.difference = diff
             orphan_manual.error_percent = err
             orphan_manual.comparison_status = status
@@ -842,11 +849,10 @@ async def sync_refuels_preview(
             pilot_amt = amount
             actual_amt = existing_entry.actual_amount
             if pilot_amt and actual_amt and pilot_amt > 0:
-                diff = actual_amt - pilot_amt
-                err = abs(diff) / pilot_amt * 100
+                diff, err, status = _calc_comparison(pilot_amt, actual_amt, n_pct, w_pct, n_abs, w_abs, enable_abs)
                 existing_entry.difference = diff
                 existing_entry.error_percent = err
-                existing_entry.comparison_status = "normal" if err <= n_th else ("small_deviation" if err <= w_th else "unacceptable")
+                existing_entry.comparison_status = status
             elif actual_amt:
                 existing_entry.difference = None
                 existing_entry.error_percent = None
@@ -874,22 +880,51 @@ async def sync_refuels_preview(
     })
 
 
-async def _get_thresholds(db: AsyncSession) -> tuple[float, float]:
-    n, w = 3.0, 10.0
+async def _get_effective_thresholds(db: AsyncSession, vehicle_id: int | None = None) -> tuple[float, float, float, float, bool]:
+    n_pct, w_pct = 3.0, 10.0
+    n_abs, w_abs = 0.0, 0.0
+    enable_abs = False
+
     rows = (await db.execute(select(Setting).where(Setting.key.in_(["normal_threshold", "warning_threshold"])))).scalars().all()
     for s in rows:
         if s.key == "normal_threshold":
-            n = float(s.value)
+            n_pct = float(s.value)
         elif s.key == "warning_threshold":
-            w = float(s.value)
-    return n, w
+            w_pct = float(s.value)
+
+    if vehicle_id is not None:
+        v = (await db.execute(select(Vehicle).where(Vehicle.id == vehicle_id))).scalar_one_or_none()
+        if v:
+            if v.normal_threshold_pct is not None:
+                n_pct = v.normal_threshold_pct
+            if v.warning_threshold_pct is not None:
+                w_pct = v.warning_threshold_pct
+            if v.enable_abs_threshold:
+                enable_abs = True
+                if v.normal_threshold_abs is not None:
+                    n_abs = v.normal_threshold_abs
+                if v.warning_threshold_abs is not None:
+                    w_abs = v.warning_threshold_abs
+
+    return n_pct, w_pct, n_abs, w_abs, enable_abs
 
 
-def _calc_comparison(pilot_amount: float | None, actual_amount: float | None, n_th: float, w_th: float) -> tuple:
+def _calc_comparison(pilot_amount: float | None, actual_amount: float | None, n_pct: float, w_pct: float, n_abs: float = 0.0, w_abs: float = 0.0, enable_abs: bool = False) -> tuple:
     if pilot_amount is not None and actual_amount is not None and pilot_amount > 0:
         diff = actual_amount - pilot_amount
         err = abs(diff) / pilot_amount * 100
-        status = "normal" if err <= n_th else ("small_deviation" if err <= w_th else "unacceptable")
+        abs_diff = abs(diff)
+
+        if enable_abs and abs_diff <= n_abs:
+            status = "normal"
+        elif enable_abs and abs_diff <= w_abs:
+            status = "small_deviation"
+        elif err <= n_pct:
+            status = "normal"
+        elif err <= w_pct:
+            status = "small_deviation"
+        else:
+            status = "unacceptable"
     else:
         diff = None
         err = None
@@ -952,7 +987,7 @@ async def add_refuel(
     else:
         dt = utcnow()
 
-    n_th, w_th = await _get_thresholds(db)
+    n_pct, w_pct, n_abs, w_abs, enable_abs = await _get_effective_thresholds(db, vehicle_id)
 
     nearby = await db.execute(
         select(PilotRefuel).where(
@@ -964,7 +999,7 @@ async def add_refuel(
     nearby_refuel = nearby.scalar_one_or_none()
 
     if nearby_refuel:
-        diff, err, status = _calc_comparison(nearby_refuel.amount, actual_amount_val, n_th, w_th)
+        diff, err, status = _calc_comparison(nearby_refuel.amount, actual_amount_val, n_pct, w_pct, n_abs, w_abs, enable_abs)
         pilot_refuel_id = nearby_refuel.id
         pilot_amount = nearby_refuel.amount
     else:
@@ -1035,13 +1070,13 @@ async def edit_refuel(
         if user.site_id and v.site_id != user.site_id:
             raise HTTPException(404, "Запись не найдена")
 
-    n_th, w_th = await _get_thresholds(db)
+    n_pct, w_pct, n_abs, w_abs, enable_abs = await _get_effective_thresholds(db, entry.vehicle_id)
     entry.actual_amount = actual_amount_val
     entry.receipt_number = receipt_number or None
 
     pilot_amount = entry.pilot_amount
     if entry.pilot_refuel_id and pilot_amount is not None:
-        diff, err, status = _calc_comparison(pilot_amount, actual_amount_val, n_th, w_th)
+        diff, err, status = _calc_comparison(pilot_amount, actual_amount_val, n_pct, w_pct, n_abs, w_abs, enable_abs)
     else:
         diff = err = None
         status = "pilot_missing" if actual_amount_val is None else None
@@ -1358,11 +1393,11 @@ async def import_checks_apply(
     except (json.JSONDecodeError, TypeError):
         return HTMLResponse('<div class="modal-overlay" onclick="if(event.target===this)this.remove()"><div class="modal"><div class="modal-body"><div class="empty-state"><p>Ошибка данных</p></div></div></div></div>')
 
-    n_th, w_th = await _get_thresholds(db)
     new_count = 0
     updated_count = 0
     skipped_count = 0
     errors = []
+    thresh_cache = {}
 
     for item in items:
         itype = item["type"]
@@ -1370,6 +1405,10 @@ async def import_checks_apply(
         amount = item["new_amount"]
         vehicle_id = item["vehicle_id"]
         utc_dt = datetime.fromisoformat(item["utc_dt"])
+
+        if vehicle_id not in thresh_cache:
+            thresh_cache[vehicle_id] = await _get_effective_thresholds(db, vehicle_id)
+        n_pct, w_pct, n_abs, w_abs, enable_abs = thresh_cache[vehicle_id]
 
         if itype == "conflict":
             if actions.get(sidx, "skip") == "skip":
@@ -1393,7 +1432,7 @@ async def import_checks_apply(
             nearby_refuel = nearby.scalar_one_or_none()
 
             if nearby_refuel:
-                diff, err, status = _calc_comparison(nearby_refuel.amount, amount, n_th, w_th)
+                diff, err, status = _calc_comparison(nearby_refuel.amount, amount, n_pct, w_pct, n_abs, w_abs, enable_abs)
                 pilot_refuel_id = nearby_refuel.id
                 pilot_amount = nearby_refuel.amount
             else:
@@ -1426,10 +1465,14 @@ async def import_checks_apply(
             if not entry or entry.is_deleted:
                 skipped_count += 1
                 continue
+            # Get thresholds for this entry's vehicle
+            if entry.vehicle_id not in thresh_cache:
+                thresh_cache[entry.vehicle_id] = await _get_effective_thresholds(db, entry.vehicle_id)
+            n_pct, w_pct, n_abs, w_abs, enable_abs = thresh_cache[entry.vehicle_id]
             entry.actual_amount = amount
             # Recalc comparison
             if entry.pilot_refuel_id and entry.pilot_amount is not None:
-                diff, err, status = _calc_comparison(entry.pilot_amount, amount, n_th, w_th)
+                diff, err, status = _calc_comparison(entry.pilot_amount, amount, n_pct, w_pct, n_abs, w_abs, enable_abs)
                 entry.difference = diff
                 entry.error_percent = err
                 entry.comparison_status = status

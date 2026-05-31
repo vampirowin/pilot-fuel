@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Integer, String, Boolean, DateTime, ForeignKey, func
+from sqlalchemy import Integer, String, Boolean, DateTime, ForeignKey, Float, func
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
 
@@ -24,6 +24,12 @@ class Vehicle(Base):
     sensor_count: Mapped[int] = mapped_column(Integer, default=0)
     has_fuel_sensor: Mapped[bool] = mapped_column(Boolean, default=True, server_default='t')
     sensor_status: Mapped[str] = mapped_column(String(20), default="normal", server_default="normal")
+
+    enable_abs_threshold: Mapped[bool] = mapped_column(Boolean, default=False, server_default='f')
+    normal_threshold_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    warning_threshold_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    normal_threshold_abs: Mapped[float | None] = mapped_column(Float, nullable=True)
+    warning_threshold_abs: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     client_account_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("client_accounts.id", ondelete="SET NULL"), nullable=True, index=True)
     site_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("sites.id", ondelete="SET NULL"), nullable=True)

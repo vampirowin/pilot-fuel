@@ -9,9 +9,12 @@ from app.database import get_db
 from app.models.vehicle import Vehicle
 from app.models.client_account import ClientAccount
 from app.models.site import Site
+from app.models.refuel_entry import RefuelEntry
 from app.services.pilot_service import PilotService
 from app.dependencies import get_current_user, apply_vehicle_filter
 from app.models.vehicle import SENSOR_STATUSES
+from app.api.refuels import _get_effective_thresholds, _calc_comparison
+from app.models.setting import Setting
 
 logger = logging.getLogger(__name__)
 
@@ -238,46 +241,88 @@ async def vehicles_page(
     out = [build_vehicle_dict(v, companies.get(v.client_account_id, ""), sites.get(v.site_id, "")) for v in db_vehicles]
     is_su = user.role == "superadmin"
     is_ca = user.role == "company_admin"
-
-    return templates.TemplateResponse(request, "vehicles.html", {
-        "plate": plate,
-        "is_superadmin": is_su,
-        "is_company_admin": is_ca,
-        "nested_groups": build_nested_groups(out) if out else [],
-    })
+    return HTMLResponse(render_table_partial(out, is_su, is_ca))
 
 
-@router.get("/api/vehicles/search", response_class=HTMLResponse)
-async def search_vehicles(
+@router.get("/api/vehicles/{vehicle_id}/thresholds", response_class=HTMLResponse)
+async def vehicle_thresholds_form(
     request: Request,
-    plate: str = "",
+    vehicle_id: int,
     user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    query = select(Vehicle).where(Vehicle.is_active == True, Vehicle.has_fuel_sensor == True)
-    query = apply_vehicle_filter(query, user, Vehicle)
-    if plate:
-        query = query.where(Vehicle.plate_number.ilike(f"%{plate}%"))
-    query = query.order_by(Vehicle.folder, Vehicle.plate_number)
-    result = await db.execute(query)
-    db_vehicles = result.scalars().all()
+    v = await db.get(Vehicle, vehicle_id)
+    if not v:
+        raise HTTPException(404, "ТС не найдено")
+    if user.role not in ("superadmin", "company_admin"):
+        raise HTTPException(403)
+    if user.role == "company_admin" and v.client_account_id != user.client_account_id:
+        raise HTTPException(404, "ТС не найдено")
 
-    company_ids = {v.client_account_id for v in db_vehicles if v.client_account_id}
-    companies = {}
-    if company_ids:
-        for c in (await db.execute(select(ClientAccount).where(ClientAccount.id.in_(company_ids)))).scalars().all():
-            companies[c.id] = c.name
+    global_n_pct, global_w_pct, _, _, _ = await _get_effective_thresholds(db)
 
-    site_ids = {v.site_id for v in db_vehicles if v.site_id}
-    sites = {}
-    if site_ids:
-        for s in (await db.execute(select(Site).where(Site.id.in_(site_ids)))).scalars().all():
-            sites[s.id] = s.name
+    return templates.TemplateResponse(request, "vehicle_thresholds_modal.html", {
+        "vehicle_id": v.id,
+        "plate": v.plate_number or v.name or "—",
+        "global_n_pct": f"{global_n_pct:.1f}",
+        "global_w_pct": f"{global_w_pct:.1f}",
+        "n_pct": f"{v.normal_threshold_pct:.1f}" if v.normal_threshold_pct is not None else "",
+        "w_pct": f"{v.warning_threshold_pct:.1f}" if v.warning_threshold_pct is not None else "",
+        "enable_abs": v.enable_abs_threshold,
+        "n_abs": f"{v.normal_threshold_abs:.1f}" if v.normal_threshold_abs is not None else "",
+        "w_abs": f"{v.warning_threshold_abs:.1f}" if v.warning_threshold_abs is not None else "",
+    })
 
-    out = [build_vehicle_dict(v, companies.get(v.client_account_id, ""), sites.get(v.site_id, "")) for v in db_vehicles]
-    is_su = user.role == "superadmin"
-    is_ca = user.role == "company_admin"
-    return HTMLResponse(render_table_partial(out, is_su, is_ca))
+
+@router.post("/api/vehicles/{vehicle_id}/thresholds", response_class=HTMLResponse)
+async def vehicle_thresholds_save(
+    request: Request,
+    vehicle_id: int,
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    normal_threshold_pct: str = Form(default=""),
+    warning_threshold_pct: str = Form(default=""),
+    enable_abs: str = Form(default=""),
+    normal_threshold_abs: str = Form(default=""),
+    warning_threshold_abs: str = Form(default=""),
+):
+    v = await db.get(Vehicle, vehicle_id)
+    if not v:
+        raise HTTPException(404, "ТС не найдено")
+    if user.role not in ("superadmin", "company_admin"):
+        raise HTTPException(403)
+    if user.role == "company_admin" and v.client_account_id != user.client_account_id:
+        raise HTTPException(404, "ТС не найдено")
+
+    v.normal_threshold_pct = float(normal_threshold_pct) if normal_threshold_pct.strip() else None
+    v.warning_threshold_pct = float(warning_threshold_pct) if warning_threshold_pct.strip() else None
+    v.enable_abs_threshold = enable_abs == "1"
+    v.normal_threshold_abs = float(normal_threshold_abs) if v.enable_abs_threshold and normal_threshold_abs.strip() else None
+    v.warning_threshold_abs = float(warning_threshold_abs) if v.enable_abs_threshold and warning_threshold_abs.strip() else None
+
+    # Recalculate all entries for this vehicle
+    n_pct, w_pct, n_abs, w_abs, en_abs = await _get_effective_thresholds(db, v.id)
+    entries = (await db.execute(
+        select(RefuelEntry).where(
+            RefuelEntry.vehicle_id == v.id,
+            RefuelEntry.is_deleted == False,
+        )
+    )).scalars().all()
+    for e in entries:
+        if e.is_false:
+            continue
+        if e.pilot_amount and e.actual_amount and e.pilot_amount > 0:
+            diff, err, status = _calc_comparison(e.pilot_amount, e.actual_amount, n_pct, w_pct, n_abs, w_abs, en_abs)
+            e.difference = diff
+            e.error_percent = err
+            e.comparison_status = status
+        elif e.actual_amount is not None:
+            e.difference = None
+            e.error_percent = None
+            e.comparison_status = "pilot_missing"
+    await db.commit()
+
+    return HTMLResponse('<div class="modal-overlay" onclick="if(event.target===this)this.remove()"><div class="modal"><div class="modal-body"><div class="empty-state"><p>Пороги сохранены</p></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="this.closest(\'.modal-overlay\').remove()">OK</button></div></div></div>')
 
 
 @router.post("/api/vehicles/{vehicle_id}/sensor-status", response_class=HTMLResponse)
