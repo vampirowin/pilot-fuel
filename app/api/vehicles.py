@@ -137,7 +137,7 @@ def _vehicle_row(v: dict, idx: int, can_act: bool) -> str:
     cells += f'<td data-label="Компания">{v.get("company_name") or "—"}</td>'
     cells += f'<td data-label="График"><button class="btn btn-sm btn-secondary" hx-get="/api/fuel-graph/modal?vehicle_id={v["id"]}&imei={v.get("imei") or ""}" hx-target="#modal-container" hx-swap="innerHTML">График</button></td>'
     if can_act:
-        cells += f'<td data-label="Действия"><button class="btn btn-sm btn-danger" hx-post="/api/vehicles/{v["id"]}/delete" hx-target="#vehicles-table" hx-swap="innerHTML" hx-confirm="Удалить ТС {v.get("plate_number") or "—"} и все его заправки?">Удалить</button></td>'
+        cells += f'<td data-label="Действия"><button class="btn btn-sm btn-secondary" hx-get="/api/vehicles/{v["id"]}/thresholds" hx-target="#modal-container" hx-swap="innerHTML">Пороги</button> <button class="btn btn-sm btn-danger" hx-post="/api/vehicles/{v["id"]}/delete" hx-target="#vehicles-table" hx-swap="innerHTML" hx-confirm="Удалить ТС {v.get("plate_number") or "—"} и все его заправки?">Удалить</button></td>'
     else:
         cells += '<td data-label="Действия"></td>'
     return f'<tr id="v-{v["id"]}">{cells}</tr>'
