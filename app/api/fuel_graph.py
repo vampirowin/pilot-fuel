@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.vehicle import Vehicle
 from app.models.refuel_entry import RefuelEntry
+from app.models.pilot_refuel import PilotRefuel
 from app.models.user import User
 from app.dependencies import get_current_user
 from app.services.pilot_service import PilotService
@@ -135,6 +136,14 @@ async def fuel_graph_data(
         )
         db_entries = (await db.execute(q.order_by(RefuelEntry.event_date))).scalars().all()
         for e in db_entries:
+            lat = lon = None
+            address = ""
+            if e.pilot_refuel_id:
+                pr = await db.get(PilotRefuel, e.pilot_refuel_id)
+                if pr:
+                    lat = pr.lat
+                    lon = pr.lon
+                    address = pr.address or ""
             db_refuels.append({
                 "ts": int(e.event_date.replace(tzinfo=timezone.utc).timestamp()),
                 "amount": e.actual_amount or e.pilot_amount or 0,
@@ -142,6 +151,9 @@ async def fuel_graph_data(
                 "actual_amount": e.actual_amount,
                 "source": e.source,
                 "status": e.comparison_status or "",
+                "lat": lat,
+                "lon": lon,
+                "address": address,
             })
     except Exception:
         db_refuels = []

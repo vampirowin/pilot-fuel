@@ -46,6 +46,11 @@
       </div>
       <div id="fg-stats" style="display:flex;gap:12px;margin-top:6px;font-size:12px;color:var(--text-dim,#888);flex-wrap:wrap"></div>
       <div id="fg-legend" style="display:flex;gap:16px;margin-top:4px;font-size:13px;color:var(--text-secondary);flex-wrap:wrap"></div>
+      <div id="fg-map-container" style="display:none;margin-top:8px;border-radius:8px;overflow:hidden;border:1px solid var(--border);position:relative">
+        <div id="fg-map" style="height:200px;width:100%"></div>
+        <div id="fg-map-info" style="padding:5px 10px;font-size:12px;color:var(--text-secondary);background:var(--card-alt,#1a1a2e)"></div>
+        <button type="button" onclick="fg.closeMap()" style="position:absolute;top:4px;right:4px;z-index:1000;background:rgba(0,0,0,0.5);color:#fff;border:none;border-radius:4px;width:26px;height:26px;cursor:pointer;font-size:15px;line-height:1;display:flex;align-items:center;justify-content:center">&times;</button>
+      </div>
     </div>
     <div class="modal-footer">
       <button type="button" class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Закрыть</button>
@@ -65,6 +70,9 @@ var fg = (function() {
   var abortController = null;
   var wheelHandler = null;
   var dragState = null;
+  var markers = [];
+  var mapInstance = null;
+  var leafletLoaded = false;
 
   function daysAgo(n) {
     var d = new Date();
@@ -203,7 +211,7 @@ var fg = (function() {
       var ts = ev.ts || 0, amount = ev.amount || 0;
       if (amount <= 0) return null;
       var idx = findNearestIdx(ts, dip, maxDist);
-      return idx >= 0 ? { ts: ts, amount: amount, dipIdx: idx } : null;
+      return idx >= 0 ? { ts: ts, amount: amount, dipIdx: idx, raw: ev } : null;
     }).filter(Boolean);
 
     var dbRefuelSegments = dbRefuels.map(function(ev) {
@@ -211,7 +219,7 @@ var fg = (function() {
       var ts = ev.ts || 0, amount = ev.actual_amount || 0;
       if (amount <= 0) return null;
       var idx = findNearestIdx(ts, dip, maxDist);
-      return idx >= 0 ? { ts: ts, amount: amount, dipIdx: idx, source: ev.source || 'manual' } : null;
+      return idx >= 0 ? { ts: ts, amount: amount, dipIdx: idx, raw: ev } : null;
     }).filter(Boolean);
 
     var drainSegments = reportDrains.map(function(ev) {
@@ -317,6 +325,7 @@ var fg = (function() {
             var ctx2 = ch.ctx;
             var xAxis = ch.scales.x;
             var yAxis = ch.scales.y;
+            markers.length = 0;
 
             // Refuel green bands
             mergedRefuels.forEach(function(seg) {
@@ -341,6 +350,37 @@ var fg = (function() {
               ctx2.textAlign = 'center';
               ctx2.fillText(txt, x, midY + 4);
               ctx2.restore();
+              markers.push({ x: x, y: midY, type: 'pilot', data: seg.raw });
+            });
+
+            // DB refuel orange dots at level position, offset right if overlapping a Pilot refuel
+            mergedDbRefuels.forEach(function(seg) {
+              var x = xAxis.getPixelForValue(seg.dipIdx);
+              if (isNaN(x)) return;
+              var levelVal = dip[seg.dipIdx] ? dip[seg.dipIdx].val : null;
+              if (levelVal === null || levelVal === undefined) return;
+              var y = yAxis.getPixelForValue(levelVal);
+              // offset right if overlapping a Pilot refuel band
+              var offsetX = 0;
+              for (var ri = 0; ri < mergedRefuels.length; ri++) {
+                var rx = xAxis.getPixelForValue(mergedRefuels[ri].dipIdx);
+                if (Math.abs(rx - x) < 20) { offsetX = 16; break; }
+              }
+              x += offsetX;
+              ctx2.save();
+              ctx2.beginPath();
+              ctx2.arc(x, y, 6, 0, 2 * Math.PI);
+              ctx2.fillStyle = colorOrange;
+              ctx2.fill();
+              ctx2.strokeStyle = '#fff';
+              ctx2.lineWidth = 2;
+              ctx2.stroke();
+              ctx2.fillStyle = colorOrange;
+              ctx2.font = 'bold 11px sans-serif';
+              ctx2.textAlign = 'center';
+              ctx2.fillText((seg.amount || 0).toFixed(0) + 'л', x, y - 10);
+              ctx2.restore();
+              markers.push({ x: x, y: y, type: 'db', data: seg.raw });
             });
 
             // DB refuel orange dots at level position, offset right if overlapping a Pilot refuel
@@ -456,6 +496,30 @@ var fg = (function() {
         dragState = { down: onDown, move: onMove, up: onUp, touchStart: onTouchStart, touchMove: onTouchMove, touchEnd: onTouchEnd };
       })();
 
+      // Click on marker → show location map
+      var clickStartPos = null;
+      canvas.addEventListener('mousedown', function(e) {
+        clickStartPos = { x: e.clientX, y: e.clientY };
+      });
+      canvas.addEventListener('mouseup', function(e) {
+        if (!clickStartPos || !chart || !markers.length) { clickStartPos = null; return; }
+        var dx = e.clientX - clickStartPos.x;
+        var dy = e.clientY - clickStartPos.y;
+        clickStartPos = null;
+        if (Math.abs(dx) > 5 || Math.abs(dy) > 5) return; // was a drag
+        var rect = canvas.getBoundingClientRect();
+        var mx = e.clientX - rect.left;
+        var my = e.clientY - rect.top;
+        var hit = null, hitDist = 20;
+        for (var mi = 0; mi < markers.length; mi++) {
+          var m = markers[mi];
+          var d = Math.sqrt((m.x - mx) * (m.x - mx) + (m.y - my) * (m.y - my));
+          if (d < hitDist) { hitDist = d; hit = m; }
+        }
+        if (!hit) { closeMap(); return; }
+        showMarkerMap(hit);
+      });
+
     } catch (e) {
       showError('Ошибка рендеринга графика');
       return;
@@ -504,6 +568,48 @@ var fg = (function() {
 
   function resetZoom() { zoomMin = null; zoomMax = null; applyZoom(); }
 
+  function closeMap() {
+    var container = document.getElementById('fg-map-container');
+    container.style.display = 'none';
+    if (mapInstance) { mapInstance.remove(); mapInstance = null; }
+  }
+
+  function loadLeaflet(callback) {
+    if (leafletLoaded) { callback(); return; }
+    var link = document.createElement('link');
+    link.rel = 'stylesheet'; link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+    document.head.appendChild(link);
+    var script = document.createElement('script');
+    script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    script.onload = function() { leafletLoaded = true; callback(); };
+    document.body.appendChild(script);
+  }
+
+  function showMarkerMap(marker) {
+    var data = marker.data;
+    var lat = data.lat, lon = data.lon;
+    if (lat == null || lon == null) return;
+
+    var container = document.getElementById('fg-map-container');
+    var infoEl = document.getElementById('fg-map-info');
+    var dateStr = data.ts ? new Date(data.ts * 1000).toLocaleString('ru-RU', { timeZone: userTz }) : '—';
+    var label = marker.type === 'pilot' ? '\u0417\u0430\u043F\u0440\u0430\u0432\u043A\u0430 (Pilot)' : '\u0427\u0435\u043A (\u0411\u0414)';
+    var amount = (data.amount || 0).toFixed(1);
+    var addr = data.address || '';
+    infoEl.textContent = label + ' \u2014 ' + amount + '\u043B \u2022 ' + dateStr + (addr ? ' \u2022 ' + addr : '');
+    container.style.display = 'block';
+
+    loadLeaflet(function() {
+      if (mapInstance) mapInstance.remove();
+      mapInstance = L.map('fg-map', { zoomControl: false, attributionControl: false }).setView([lat, lon], 15);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+      }).addTo(mapInstance);
+      L.marker([lat, lon]).addTo(mapInstance);
+      setTimeout(function() { mapInstance.invalidateSize(); }, 200);
+    });
+  }
+
   function renderLegend(data) {
     var el = document.getElementById('fg-legend');
     var items = [];
@@ -538,7 +644,8 @@ var fg = (function() {
 
   return {
     setPeriod: setPeriod, build: build, todayStr: todayStr,
-    zoomIn: zoomIn, zoomOut: zoomOut, resetZoom: resetZoom
+    zoomIn: zoomIn, zoomOut: zoomOut, resetZoom: resetZoom,
+    closeMap: closeMap,
   };
 })();
 </script>
