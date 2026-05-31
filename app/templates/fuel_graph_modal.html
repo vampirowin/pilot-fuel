@@ -207,7 +207,8 @@ var fg = (function() {
     }).filter(Boolean);
 
     var dbRefuelSegments = dbRefuels.map(function(ev) {
-      var ts = ev.ts || 0, amount = ev.actual_amount || ev.pilot_amount || 0;
+      if (ev.actual_amount === null || ev.actual_amount === undefined) return null;
+      var ts = ev.ts || 0, amount = ev.actual_amount || 0;
       if (amount <= 0) return null;
       var idx = findNearestIdx(ts, dip, maxDist);
       return idx >= 0 ? { ts: ts, amount: amount, dipIdx: idx, source: ev.source || 'manual' } : null;
@@ -468,7 +469,7 @@ var fg = (function() {
       '<span>\u2500 min: ' + dataMin.toFixed(0) + ' \u043B, max: ' + dataMax.toFixed(0) + ' \u043B</span>',
       reportRefuels.length ? '<span style="color:' + colorGreen + '">\u2191 \u0437\u0430\u043F\u0440.: ' + totalPilot.toFixed(0) + ' \u043B</span>' : '',
       reportDrains.length ? '<span style="color:' + colorRed + '">\u2193 \u0441\u043B\u0438\u0432: ' + totalDrain.toFixed(0) + ' \u043B</span>' : '',
-      dbRefuels.length ? '<span style="color:' + colorOrange + '">\u25C6 \u0447\u0435\u043A\u0438: ' + totalDb.toFixed(0) + ' \u043B</span>' : '',
+      mergedDbRefuels.length ? '<span style="color:' + colorOrange + '">\u25C6 \u0447\u0435\u043A\u0438: ' + totalDb.toFixed(0) + ' \u043B</span>' : '',
     ].filter(Boolean).join('');
   }
 
