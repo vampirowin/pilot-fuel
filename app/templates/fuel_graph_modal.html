@@ -342,13 +342,20 @@ var fg = (function() {
               ctx2.restore();
             });
 
-            // DB refuel orange dots at level position
+            // DB refuel orange dots at level position, offset right if overlapping a Pilot refuel
             mergedDbRefuels.forEach(function(seg) {
               var x = xAxis.getPixelForValue(seg.dipIdx);
               if (isNaN(x)) return;
               var levelVal = dip[seg.dipIdx] ? dip[seg.dipIdx].val : null;
               if (levelVal === null || levelVal === undefined) return;
               var y = yAxis.getPixelForValue(levelVal);
+              // offset right if overlapping a Pilot refuel band
+              var offsetX = 0;
+              for (var ri = 0; ri < mergedRefuels.length; ri++) {
+                var rx = xAxis.getPixelForValue(mergedRefuels[ri].dipIdx);
+                if (Math.abs(rx - x) < 20) { offsetX = 16; break; }
+              }
+              x += offsetX;
               ctx2.save();
               // filled orange circle
               ctx2.beginPath();
