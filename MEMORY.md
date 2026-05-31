@@ -26,7 +26,9 @@ users              — id, username, role {superadmin|company_admin|user},
                      pilot_token?, pilot_node_id?, password_hash?,
                      client_account_id (FK), site_id (FK)
 vehicles           — id, pilot_agent_id, imei, plate_number, name, folder,
-                     sensor_count, has_fuel_sensor,
+                     sensor_count, has_fuel_sensor, sensor_status,
+                     enable_abs_threshold, normal_threshold_pct, warning_threshold_pct,
+                     normal_threshold_abs, warning_threshold_abs,
                      client_account_id (FK), site_id (FK), is_active
 fuel_sensors       — id, vehicle_id (FK), pilot_sensor_id, name, tag_id, unit, is_active
 pilot_refuels      — id, vehicle_id (FK), sensor_id (FK), event_date, amount,
@@ -275,6 +277,26 @@ pilot-fuel/
 - Пагинация в заправках также сортирует группы по plate
 
 **sync_debug.log**: удалён из отслеживания git, добавлен в .gitignore
+
+### 2026-05-31 — Per-vehicle thresholds + UI fixes
+
+**Per-vehicle threshold system:**
+- Добавлены колонки в `vehicles`: `enable_abs_threshold`, `normal_threshold_pct`, `warning_threshold_pct`, `normal_threshold_abs`, `warning_threshold_abs` (Float, nullable)
+- Функция `_get_effective_thresholds(db, vehicle_id)` — каскад: Vehicle override → Settings → хардкод 3/10/0/0
+- `_calc_comparison` переписана: если `enable_abs=True` и `abs_diff <= n_abs` → normal, `<= w_abs` → small_deviation, иначе по процентам
+- Per-vehicle thresholds с кешем `thresh_cache[v.id]` во всех циклах (sync, preview, scheduler, admin recalculation)
+- Все 9 вызовов `_calc_comparison` + 6 вызовов `_get_thresholds` → `_get_effective_thresholds`
+- Миграция `257bf9a1d963_add_vehicle_threshold_columns`
+
+**UI:**
+- Модалка `/api/vehicles/{id}/thresholds` (GET + POST) — 4 поля процентов с плейсхолдерами глобальных, чекбокс enable_abs, 2 поля литров (условный показ)
+- При сохранении — рекалькуляция всех записей этого ТС
+- Кнопка «Пороги» в колонке Действия на странице `/vehicles` (для superadmin/company_admin)
+
+**Bugfixes:**
+- **Навигация /vehicles**: при `hx-boost` возвращалась только таблица → сайдбар исчезал. Теперь `hx-boosted` проверяется, возвращается полная `TemplateResponse`
+- **Overall status**: читал `get_settings()` из config.py вместо БД — исправлено прямым `select(Setting)`
+- **Кнопка «Пороги» в HTMX-партиалах**: была только в Jinja2-шаблоне, отсутствовала в Python-функции `_vehicle_row` → не показывалась при поиске/обновлении
 
 ## Ports
 - UI fuel: **9001** (9000 занят zombie PID 32440)

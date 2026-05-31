@@ -10,7 +10,7 @@
 |---|---|
 | **Авторизация** | Вход через Pilot API или локальный суперадмин |
 | **Панель управления** | Статистика, счётчики критических, графики (Chart.js) |
-| **Транспорт** | Иерархия Компания → Площадка → Тип ТС с коллапсами, цветные бейджи, поиск, bulk-операции |
+| **Транспорт** | Иерархия Компания → Площадка → Тип ТС с коллапсами, цветные бейджи, поиск, bulk-операции, статус датчика, per-vehicle пороги |
 | **Заправки** | Иерархия Компания → Площадка → Тип ТС → ТС, данные Pilot vs чек, погрешность, статус, сортировка, поиск по номеру |
 | **Синхронизация** | Ручная (preview + apply) и автоматическая ежедневная (APScheduler, 03:00 MSK) |
 | **Автосинхронизация** | APScheduler, force-overwrite, перелогин при 401 (если сохранён пароль), логирование в SyncLog с vehicle_updates |
@@ -147,7 +147,10 @@ sites              — id, client_account_id (FK), name
 users              — id, username, role, pilot_token, pilot_node_id, pilot_password,
                      client_account_id (FK), site_id (FK), is_active, timezone
 vehicles           — id, pilot_agent_id, imei, plate_number, name, folder,
-                     sensor_count, has_fuel_sensor, client_account_id (FK), site_id (FK)
+                     sensor_count, has_fuel_sensor, sensor_status,
+                     enable_abs_threshold, normal_threshold_pct, warning_threshold_pct,
+                     normal_threshold_abs, warning_threshold_abs,
+                     client_account_id (FK), site_id (FK), is_active
 fuel_sensors       — id, vehicle_id (FK), pilot_sensor_id, name, tag_id, unit, is_active
 pilot_refuels      — id, vehicle_id (FK), event_date, amount, start_level, end_level,
                      address, lat, lon, raw_data (JSONB)
@@ -187,6 +190,8 @@ sync_log           — id, vehicle_id, sync_type, status, records_affected, deta
 | `GET /api/vehicles/search` | Поиск ТС (HTMX) |
 | `POST /api/vehicles/{id}/toggle-sensor` | Переключить датчик ТС |
 | `POST /api/vehicles/bulk-remove-sensor` | Bulk: убрать датчики |
+| `GET/POST /api/vehicles/{id}/thresholds` | Per-vehicle пороги (модалка) |
+| `POST /api/vehicles/{id}/sensor-status` | Смена статуса датчика |
 | `POST /api/refuels/sync/preview` | Предпросмотр синхронизации |
 | `POST /api/refuels/sync/apply` | Применить синхронизацию |
 | `POST /api/refuels/add` | Ручная заправка |
@@ -210,14 +215,24 @@ sync_log           — id, vehicle_id, sync_type, status, records_affected, deta
 
 ## Пороги точности
 
+### Глобальные (админ-панель `/admin/settings`)
+
 | Статус | Условие |
 |---|---|
 | ✅ **Норма** | Погрешность ≤ 3% |
 | ⚠️ **Расхождение** | 3% < погрешность ≤ 10% |
 | 🚨 **Недопустимо** | Погрешность > 10% |
-| ❓ **Нет в Pilot** | Только ручная заправка |
 
-Настраиваются в админ-панели.
+### Per-vehicle override
+
+Для каждого ТС можно задать свои проценты или включить **проверку по абсолютной разнице** (литры):
+
+- Приоритет: absolute normal → absolute warning → процент normal → процент warning → unacceptable
+- Если включён absolute и разница в литрах ≤ `norm_abs` → норма, ≤ `warn_abs` → расхождение
+- Если absolute выключен или литровый порог превышен → сравнивается по процентам
+- Null-поля → fallback на глобальные настройки
+
+Настраивается через кнопку **«Пороги»** на странице `/vehicles` (superadmin/company_admin).
 
 ---
 
