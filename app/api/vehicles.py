@@ -314,6 +314,7 @@ async def vehicle_thresholds_save(
     v.warning_threshold_abs = float(warning_threshold_abs) if v.enable_abs_threshold and warning_threshold_abs.strip() else None
 
     # Recalculate all entries for this vehicle
+    await db.flush()
     n_pct, w_pct, n_abs, w_abs, en_abs = await _get_effective_thresholds(db, v.id)
     entries = (await db.execute(
         select(RefuelEntry).where(
