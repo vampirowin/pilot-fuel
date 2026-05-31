@@ -15,6 +15,7 @@ class User(Base):
 
     pilot_token: Mapped[str | None] = mapped_column(Text, nullable=True)
     pilot_node_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    pilot_password: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     password_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
 

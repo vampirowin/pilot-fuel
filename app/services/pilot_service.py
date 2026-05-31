@@ -258,6 +258,7 @@ class PilotService:
                 "vehicle_not_moving_time": "1",
                 "vehicles_has_covered_km": "1",
                 "fillings": "on",
+                "spills": "on",
                 "speed": "on",
                 "rashod": "on",
                 "stops": "on",
@@ -334,8 +335,20 @@ class PilotService:
                             "name": veh_name,
                         })
 
+                spills = entry.get("spills", [])
+                if isinstance(spills, list):
+                    for s in spills:
+                        if not isinstance(s, dict):
+                            continue
+                        result["drains"].append({
+                            "ts": int(s.get("unixtimestamp", 0)),
+                            "amount": float(s["fuel"]) if s.get("fuel") else None,
+                            "name": veh_name,
+                        })
+
         result["levels"].sort(key=lambda x: x["ts"])
         result["refuels"].sort(key=lambda x: x["ts"])
+        result["drains"].sort(key=lambda x: x["ts"])
         return result
 
     async def get_sensor_dip_history(

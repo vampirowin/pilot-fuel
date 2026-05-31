@@ -11,3 +11,4 @@ pydantic>=2.0.0
 pydantic-settings>=2.0.0
 itsdangerous>=2.2.0
 aiofiles>=24.0.0
+apscheduler>=3.11.0

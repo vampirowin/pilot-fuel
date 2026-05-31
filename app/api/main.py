@@ -1,12 +1,15 @@
 from fastapi import APIRouter, Request, Depends, Query
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from app.dependencies import get_current_user, apply_vehicle_filter, apply_refuel_filter
 from app.database import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, desc
 from app.models.refuel_entry import RefuelEntry
 from app.models.vehicle import Vehicle
+from app.models.sync_log import SyncLog
+from app.models.user import User
+from app.models.client_account import ClientAccount
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
@@ -76,8 +79,9 @@ async def critical_page(
     sorted_groups = sorted(grouped.items(), key=lambda x: (vmap.get(x[0]).plate_number or "") if vmap.get(x[0]) else "")
 
     is_hx = request.headers.get("hx-request") == "true"
+    is_boosted = request.headers.get("hx-boosted") == "true"
 
-    if is_hx:
+    if is_hx and not is_boosted:
         rendered = _render_critical_groups(sorted_groups, vmap)
         return HTMLResponse(rendered)
 
@@ -135,3 +139,77 @@ async def critical_count(
     cq = apply_refuel_filter(cq, user, RefuelEntry, Vehicle)
     count = (await db.execute(cq)).scalar() or 0
     return HTMLResponse(str(count))
+
+
+@router.get("/sync-logs", response_class=HTMLResponse)
+async def sync_logs_page(
+    request: Request,
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    query = select(SyncLog).where(SyncLog.sync_type == "auto_refuels")
+    if user.role != "superadmin":
+        query = query.where(SyncLog.created_by == user.username)
+    query = query.order_by(desc(SyncLog.started_at)).limit(100)
+    logs = (await db.execute(query)).scalars().all()
+
+    # build company name lookup: username → company name
+    company_map = {}
+    if user.role == "superadmin":
+        admin_rows = (await db.execute(
+            select(User, ClientAccount.name).join(
+                ClientAccount, User.client_account_id == ClientAccount.id, isouter=True
+            ).where(
+                User.role == "company_admin",
+                User.is_active == True,
+            )
+        )).all()
+        company_map = {a.User.username: a.name or a.User.username for a in admin_rows}
+
+    admins = []
+    if user.role == "superadmin":
+        token_admins = (await db.execute(
+            select(User, ClientAccount.name).join(
+                ClientAccount, User.client_account_id == ClientAccount.id, isouter=True
+            ).where(
+                User.role == "company_admin",
+                User.is_active == True,
+                User.pilot_token.isnot(None),
+            ).order_by(ClientAccount.name)
+        )).all()
+        admins = [{"id": a.User.id, "company": a.name or a.User.username, "username": a.User.username} for a in token_admins]
+
+    return templates.TemplateResponse(request, "sync_logs.html", {
+        "logs": logs,
+        "is_superadmin": user.role == "superadmin",
+        "admins": admins,
+        "company_map": company_map,
+    })
+
+
+@router.post("/api/sync-logs/trigger", response_class=HTMLResponse)
+async def trigger_sync(
+    request: Request,
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    admin_ids: str = Query(default=""),
+):
+    if user.role not in ("superadmin", "company_admin"):
+        return HTMLResponse('<div class="toast toast-error">Нет прав</div>')
+
+    from app.scheduler import trigger_sync_all
+    ids = [int(x) for x in admin_ids.split(",") if x.strip().isdigit()] if admin_ids else []
+    results = await trigger_sync_all(admin_user_ids=ids if ids else None)
+
+    lines = []
+    for r in results:
+        if r.get("status") == "error":
+            lines.append(f'<div class="toast toast-error">{r["username"]}: {r.get("error", "?")}</div>')
+        elif r.get("status") == "skipped":
+            lines.append(f'<div class="toast toast-info">{r["username"]}: пропущено ({r.get("reason", "?")})</div>')
+        else:
+            lines.append(f'<div class="toast toast-success">{r["username"]}: new={r.get("new", 0)}, updated={r.get("updated", 0)}</div>')
+
+    return templates.TemplateResponse(request, "sync_trigger_modal.html", {
+        "results": results,
+    })

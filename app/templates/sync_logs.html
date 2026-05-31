@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block title %}UI fuel — Лог синхронизации{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Лог автосинхронизации</h1>
+  <div class="page-header-actions">
+    {% if is_superadmin %}
+    <button class="btn btn-primary" onclick="openSyncModal()">Запустить синхронизацию</button>
+    {% endif %}
+  </div>
+</div>
+
+<div id="modal-container"></div>
+
+{% if is_superadmin and admins %}
+<div id="sync-modal-data" style="display:none" data-admins='{{ admins | tojson }}'></div>
+{% endif %}
+
+<div class="card" style="margin-top:16px">
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>Дата</th>
+          <th>Компания</th>
+          <th>Статус</th>
+          <th>Записей</th>
+          <th>Детали</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for log in logs %}
+        {% set status_map = {'completed': 'status-normal', 'partial': 'status-small-deviation', 'error': 'status-unacceptable'} %}
+        {% set label_map = {'completed': 'OK', 'partial': 'Частично', 'error': 'Ошибка'} %}
+        <tr class="log-row" onclick="toggleDetail('log-detail-{{ log.id }}')" style="cursor:pointer">
+          <td data-label="Дата">{{ log.started_at.strftime('%d.%m.%Y %H:%M') if log.started_at else '—' }}</td>
+          <td data-label="Компания">{{ company_map.get(log.created_by, log.created_by) or '—' }}</td>
+          <td data-label="Статус"><span class="status-badge {{ status_map.get(log.status, '') }}">{{ label_map.get(log.status, log.status or '—') }}</span></td>
+          <td data-label="Записей">{{ log.records_affected or 0 }}</td>
+          <td data-label="Детали" style="max-width:300px;white-space:normal;font-size:0.85rem">{{ log.details or '—' }}</td>
+        </tr>
+        <tr id="log-detail-{{ log.id }}" style="display:none">
+          <td colspan="5" style="padding:8px 16px;background:var(--card-alt, #1a1a2e)">
+          <div style="margin-bottom:6px">
+            <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation();toggleDetail('log-vu-{{ log.id }}')">Подробнее &#9660;</button>
+          </div>
+          <div id="log-vu-{{ log.id }}" style="display:none">
+            {% set dj = log.details_json or {} %}
+            {% set vu = dj.get('vehicle_updates', []) %}
+            {% if vu %}
+            <table class="detail-table">
+              <thead><tr><th style="text-align:left">ТС</th><th style="text-align:left">Дата</th><th style="text-align:right">Объём</th><th style="text-align:center">Действие</th></tr></thead>
+              <tbody>
+              {% for v in vu %}
+              <tr>
+                <td>{{ v.plate }}</td>
+                <td>{{ v.date }}</td>
+                <td style="text-align:right">{{ v.amount }} л</td>
+                <td style="text-align:center">
+                  {% if v.action == '+' %}
+                  <span class="status-badge status-normal" style="font-size:0.75rem">новый</span>
+                  {% else %}
+                  <span class="status-badge status-small-deviation" style="font-size:0.75rem">{{ v.action }}</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+            {% else %}
+            <div style="font-size:0.85rem;white-space:pre-wrap;word-break:break-word">{{ log.details or 'Нет подробных данных' }}</div>
+            {% endif %}
+          </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="5"><div class="empty-state" style="padding:32px"><p>Автосинхронизация ещё не запускалась.</p></div></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div id="sync-detail-modal"></div>
+{% endblock %}
+
+{% block head_extra %}
+<style>
+.sync-modal { max-width: 560px; }
+.sync-modal .modal-body { max-height: 70vh; overflow-y: auto; }
+.company-checkbox-list { list-style: none; padding: 0; margin: 0; }
+.company-checkbox-list li { padding: 8px 0; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+.company-checkbox-list li:last-child { border-bottom: none; }
+.company-checkbox-list input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; }
+.company-checkbox-list label { cursor: pointer; flex: 1; }
+.sync-progress { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 32px; }
+.spinner { width: 40px; height: 40px; border: 4px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.detail-table { width:100%; font-size:0.85rem; border-collapse:collapse; }
+.detail-table th, .detail-table td { padding:3px 6px; border-bottom:1px solid var(--border); }
+.detail-table thead tr { border-bottom:2px solid var(--border); }
+</style>
+<script>
+function openSyncModal() {
+  const dataEl = document.getElementById('sync-modal-data');
+  const admins = dataEl ? JSON.parse(dataEl.dataset.admins) : [];
+  let html = '<div class="modal-overlay" onclick="if(event.target===this)this.remove()"><div class="modal sync-modal">';
+  html += '<div class="modal-header"><h2>Запустить синхронизацию</h2></div>';
+  html += '<div class="modal-body">';
+  html += '<p style="margin-bottom:12px;color:var(--text-secondary)">Выберите компании для синхронизации:</p>';
+  html += '<ul class="company-checkbox-list">';
+  html += '<li><input type="checkbox" id="select-all-companies" onchange="toggleAllCompanies(this.checked)"><label for="select-all-companies"><strong>Выбрать все</strong></label></li>';
+  admins.forEach(function(a) {
+    html += '<li><input type="checkbox" class="company-cb" value="' + a.id + '" id="cb-' + a.id + '"><label for="cb-' + a.id + '">' + a.company + '</label></li>';
+  });
+  html += '</ul></div>';
+  html += '<div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end">';
+  html += '<button type="button" class="btn btn-secondary" onclick="this.closest(\'.modal-overlay\').remove()">Отмена</button>';
+  html += '<button type="button" class="btn btn-primary" id="start-sync-btn" onclick="startSync()">Синхронизировать</button>';
+  html += '</div></div></div>';
+  document.getElementById('modal-container').innerHTML = html;
+}
+function toggleAllCompanies(checked) {
+  document.querySelectorAll('.company-cb').forEach(function(cb) { cb.checked = checked; });
+}
+function startSync() {
+  const checked = document.querySelectorAll('.company-cb:checked');
+  if (!checked.length) { alert('Выберите хотя бы одну компанию'); return; }
+  const ids = Array.from(checked).map(function(cb) { return cb.value; }).join(',');
+  const modal = document.querySelector('.modal-overlay');
+  modal.querySelector('.modal-body').innerHTML = '<div class="sync-progress"><div class="spinner"></div><p>Синхронизация выполняется...</p></div>';
+  modal.querySelector('.modal-footer').innerHTML = '';
+  htmx.ajax('POST', '/api/sync-logs/trigger?admin_ids=' + ids, {
+    target: '#modal-container',
+    swap: 'innerHTML',
+  });
+}
+function toggleDetail(id) {
+  var el = document.getElementById(id);
+  if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+</script>
+{% endblock %}

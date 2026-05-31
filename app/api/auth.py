@@ -52,6 +52,8 @@ async def login(request: Request, db: AsyncSession = Depends(get_db)):
             return templates.TemplateResponse(request, "login.html", {"error": "Пользователь заблокирован. Обратитесь к администратору."})
         user.pilot_token = token
         user.pilot_node_id = node_id
+        if password:
+            user.pilot_password = password
         user.last_login = utcnow()
         request.session["role"] = user.role
         request.session["client_account_id"] = user.client_account_id

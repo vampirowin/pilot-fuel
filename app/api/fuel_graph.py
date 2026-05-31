@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.vehicle import Vehicle
 from app.models.refuel_entry import RefuelEntry
+from app.models.user import User
 from app.dependencies import get_current_user
 from app.services.pilot_service import PilotService
 from app.timezone_utils import format_dt, get_user_timezone, utc_to_tz
@@ -80,6 +81,21 @@ async def fuel_graph_data(
 
     token = user.pilot_token or request.session.get("token")
     node_id = user.pilot_node_id or request.session.get("node_id", 0)
+    if not token:
+        # superadmin или админ другой компании — используем company_admin этого ТС
+        if vehicle.client_account_id:
+            admin = (
+                await db.execute(
+                    select(User).where(
+                        User.client_account_id == vehicle.client_account_id,
+                        User.role == "company_admin",
+                        User.pilot_token.isnot(None),
+                    )
+                )
+            ).scalar_one_or_none()
+            if admin and admin.pilot_token:
+                token = admin.pilot_token
+                node_id = admin.pilot_node_id or node_id
     if not token:
         return JSONResponse(status_code=401, content={"error": "Not authenticated"})
 

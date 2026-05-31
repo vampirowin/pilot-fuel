@@ -7,43 +7,64 @@
     <div class="modal-body">
       <div class="period-selector" style="margin-bottom: 12px;">
         <div class="period-chips" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">
-          <button type="button" class="chip" onclick="fg.setPeriod(0,0)">Сегодня</button>
-          <button type="button" class="chip" onclick="fg.setPeriod(1,0)">Вчера</button>
-          <button type="button" class="chip" onclick="fg.setPeriod(6,0)">7 дней</button>
-          <button type="button" class="chip" onclick="fg.setPeriod(13,0)">14 дней</button>
-          <button type="button" class="chip" onclick="fg.setPeriod(29,0)">30 дней</button>
+          <button type="button" class="chip active" onclick="fg.setPeriod(6,0,this)">7 дней</button>
+          <button type="button" class="chip" onclick="fg.setPeriod(0,0,this)">Сегодня</button>
+          <button type="button" class="chip" onclick="fg.setPeriod(1,0,this)">Вчера</button>
+          <button type="button" class="chip" onclick="fg.setPeriod(13,0,this)">14 дней</button>
+          <button type="button" class="chip" onclick="fg.setPeriod(29,0,this)">30 дней</button>
           <button type="button" class="chip chip-custom" onclick="document.getElementById('fg-custom-range').style.display='flex'">Свой</button>
-          <span style="flex:1"></span>
+        </div>
+        <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">
           <button type="button" class="chip" onclick="fg.zoomIn()" title="Приблизить">+</button>
           <button type="button" class="chip" onclick="fg.zoomOut()" title="Отдалить">−</button>
           <button type="button" class="chip" onclick="fg.resetZoom()" title="Сбросить масштаб">Сбросить</button>
         </div>
-        <div id="fg-custom-range" style="display:none;align-items:center;gap:6px">
+        <div id="fg-custom-range" style="display:none;align-items:center;gap:6px;margin-top:6px">
           <input type="date" id="fg-date-from" value="{{ date_from }}" style="flex:1">
           <span style="color:var(--text-dim)">—</span>
           <input type="date" id="fg-date-to" value="{{ date_to }}" style="flex:1">
           <button type="button" class="btn btn-sm btn-primary" onclick="fg.build()">Построить</button>
         </div>
       </div>
-      <div class="graph-chart-container" style="position:relative;width:100%;height:400px">
-        <canvas id="fuel-graph-canvas" width="100%" height="400" style="width:100%;height:100%"></canvas>
+      <div class="graph-chart-container" style="position:relative;width:100%;height:min(400px,55vh);min-height:250px">
+        <div id="fg-loading" style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;background:var(--card-bg,rgba(0,0,0,0.3));z-index:5;border-radius:8px">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:12px">
+            <div class="spinner" style="width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:fg-spin 0.8s linear infinite"></div>
+            <span style="color:var(--text-secondary);font-size:14px">Загрузка...</span>
+          </div>
+        </div>
+        <div id="fg-error" style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;z-index:5;border-radius:8px;padding:16px;text-align:center">
+          <div>
+            <span id="fg-error-text" style="color:var(--danger,#ef4444);font-size:14px"></span>
+            <button type="button" class="btn btn-sm btn-secondary" style="margin-top:8px;display:block;margin-left:auto;margin-right:auto" onclick="fg.build()">Повторить</button>
+          </div>
+        </div>
+        <div id="fg-empty" style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;z-index:5;border-radius:8px;padding:16px;text-align:center">
+          <span style="color:var(--text-dim,#888);font-size:15px">Нет данных об уровне топлива за выбранный период</span>
+        </div>
+        <canvas id="fuel-graph-canvas" style="width:100%;height:100%"></canvas>
       </div>
-      <div id="fg-legend" style="display:flex;gap:16px;margin-top:8px;font-size:13px;color:var(--text-secondary);flex-wrap:wrap"></div>
+      <div id="fg-stats" style="display:flex;gap:12px;margin-top:6px;font-size:12px;color:var(--text-dim,#888);flex-wrap:wrap"></div>
+      <div id="fg-legend" style="display:flex;gap:16px;margin-top:4px;font-size:13px;color:var(--text-secondary);flex-wrap:wrap"></div>
     </div>
     <div class="modal-footer">
       <button type="button" class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Закрыть</button>
     </div>
   </div>
 </div>
+<style>
+@keyframes fg-spin { to { transform: rotate(360deg); }}
+</style>
 <script>
 var fg = (function() {
   var chart = null;
   var canvas = document.getElementById('fuel-graph-canvas');
-    var vehId = {{ vehicle_id }};
+  var vehId = {{ vehicle_id }};
   var userTz = '{{ user_timezone }}';
-  var defaultFrom = '{{ date_from }}';
-  var defaultTo = '{{ date_to }}';
   var zoomMin = null, zoomMax = null;
+  var abortController = null;
+  var wheelHandler = null;
+  var dragState = null;
 
   function daysAgo(n) {
     var d = new Date();
@@ -52,11 +73,15 @@ var fg = (function() {
   }
   function todayStr() { return new Date().toISOString().split('T')[0]; }
 
-  function setPeriod(backFrom, backTo) {
+  function setPeriod(backFrom, backTo, btn) {
     var to = backTo === 0 ? todayStr() : daysAgo(backTo);
     var from = backFrom === 0 ? todayStr() : daysAgo(backFrom);
     document.getElementById('fg-date-from').value = from;
     document.getElementById('fg-date-to').value = to;
+    document.querySelectorAll('.period-chips .chip').forEach(function(c) { c.classList.remove('active'); });
+    if (btn) btn.classList.add('active');
+    document.getElementById('fg-custom-range').style.display = 'none';
+    zoomMin = null; zoomMax = null;
     build();
   }
 
@@ -64,26 +89,73 @@ var fg = (function() {
   var colorRed = 'rgba(239,68,68,1)';
   var colorBlue = 'rgba(59,130,246,1)';
   var colorOrange = 'rgba(249,115,22,1)';
-  var colorFill = 'rgba(59,130,246,0.1)';
+  var colorFill = 'rgba(59,130,246,0.15)';
+
+  function isLoading(v) {
+    var el = document.getElementById('fg-loading');
+    el.style.display = v ? 'flex' : 'none';
+  }
+  function showError(msg) {
+    var el = document.getElementById('fg-error');
+    document.getElementById('fg-error-text').textContent = msg;
+    el.style.display = 'flex';
+  }
+  function hideError() {
+    document.getElementById('fg-error').style.display = 'none';
+  }
+  function showEmpty() {
+    document.getElementById('fg-empty').style.display = 'flex';
+  }
+  function hideEmpty() {
+    document.getElementById('fg-empty').style.display = 'none';
+  }
 
   function build() {
+    if (abortController) abortController.abort();
+    abortController = new AbortController();
+    hideEmpty(); hideError(); isLoading(true);
+
     var from = document.getElementById('fg-date-from').value;
     var to = document.getElementById('fg-date-to').value;
-    if (!from || !to) return;
+    if (!from || !to) { isLoading(false); return; }
 
     var url = '/api/fuel-graph/data?vehicle_id=' + vehId + '&date_from=' + from + '&date_to=' + to;
 
-    fetch(url)
-      .then(function(r) { return r.json(); })
+    fetch(url, { signal: abortController.signal })
+      .then(function(r) {
+        if (!r.ok) return r.json().then(function(e) { throw new Error(e.error || 'Ошибка ' + r.status); });
+        return r.json();
+      })
       .then(function(data) {
+        isLoading(false);
         zoomMin = null; zoomMax = null;
-        console.log('Fuel graph data:', JSON.stringify(data).substring(0, 500));
-        var segs = renderChart(data);
-        renderLegend(data, segs);
+        renderChart(data);
+        renderLegend(data);
       })
       .catch(function(err) {
-        console.error('Fuel graph error:', err);
+        isLoading(false);
+        if (err.name === 'AbortError') return;
+        showError(err.message || 'Ошибка загрузки данных');
       });
+  }
+
+  function calcMedianInterval(dip) {
+    if (dip.length < 3) return 600;
+    var intervals = [];
+    for (var i = 1; i < dip.length; i++) {
+      intervals.push((dip[i].ts || 0) - (dip[i-1].ts || 0));
+    }
+    intervals.sort(function(a,b){return a-b;});
+    return intervals[Math.floor(intervals.length / 2)] || 600;
+  }
+
+  function findNearestIdx(ts, dip, maxDist) {
+    var best = -1, bestDist = Infinity;
+    for (var i = 0; i < dip.length; i++) {
+      var d = Math.abs((dip[i].ts || 0) - ts);
+      if (d < bestDist) { bestDist = d; best = i; }
+    }
+    return bestDist < maxDist ? best : -1;
   }
 
   function renderChart(data) {
@@ -92,64 +164,90 @@ var fg = (function() {
     var reportDrains = data.report_drains || [];
     var dbRefuels = data.db_refuels || [];
 
-    var labels = [];
-    var levelValues = [];
-
-    if (chart) { chart.destroy(); chart = null; }
-
-    if (dip.length === 0) {
-      var ctx = canvas.getContext('2d');
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.font = '16px sans-serif';
-      ctx.fillStyle = '#888';
-      ctx.textAlign = 'center';
-      ctx.fillText('Нет данных об уровне топлива', canvas.width / 2, canvas.height / 2);
-      document.getElementById('fg-legend').innerHTML = '';
-      return [];
+    if (chart) {
+      if (wheelHandler) { canvas.removeEventListener('wheel', wheelHandler); wheelHandler = null; }
+      if (dragState) {
+        canvas.removeEventListener('mousedown', dragState.down);
+        canvas.removeEventListener('mousemove', dragState.move);
+        canvas.removeEventListener('mouseup', dragState.up);
+        canvas.removeEventListener('mouseleave', dragState.up);
+        canvas.removeEventListener('touchstart', dragState.touchStart);
+        canvas.removeEventListener('touchmove', dragState.touchMove);
+        canvas.removeEventListener('touchend', dragState.touchEnd);
+        dragState = null;
+      }
+      chart.destroy(); chart = null;
     }
 
+    if (dip.length === 0) {
+      showEmpty();
+      document.getElementById('fg-legend').innerHTML = '';
+      document.getElementById('fg-stats').innerHTML = '';
+      return;
+    }
+    hideEmpty();
+
+    var medianInterval = calcMedianInterval(dip);
+    var maxDist = Math.max(600, Math.min(7200, medianInterval * 4));
+
+    var labels = [];
+    var levelValues = [];
     dip.forEach(function(p) {
       var d = new Date((p.ts || 0) * 1000);
       labels.push(d.toLocaleString('ru-RU', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',timeZone:userTz}));
-      var val = (p.val !== null && p.val !== undefined) ? p.val : null;
-      levelValues.push(val);
+      levelValues.push((p.val !== null && p.val !== undefined) ? p.val : null);
     });
 
-    // Collect refuel events with fuel level from dip
-    // Use reportRefuels as primary source; only use dbRefuels with actual_amount
-    var refuelSources = [];
-    reportRefuels.forEach(function(ev) { refuelSources.push(ev); });
-    dbRefuels.forEach(function(ev) {
-      if (ev.actual_amount !== null && ev.actual_amount !== undefined) {
-        refuelSources.push(ev);
-      }
-    });
-    var refuelSegments = [];
-    refuelSources.forEach(function(ev) {
-      var ts = ev.ts || 0;
-      var amount = ev.amount || 0;
-      var bestIdx = -1, bestDist = Infinity;
-      for (var i = 0; i < dip.length; i++) {
-        var d = Math.abs((dip[i].ts || 0) - ts);
-        if (d < bestDist) { bestDist = d; bestIdx = i; }
-      }
-      if (bestIdx >= 0 && bestDist < 3600 && amount > 0) {
-        refuelSegments.push({
-          ts: ts,
-          amount: amount,
-          dipIdx: bestIdx,
-        });
-      }
-    });
+    // Pre-compute nearest indices once
+    var refuelSegments = reportRefuels.map(function(ev) {
+      var ts = ev.ts || 0, amount = ev.amount || 0;
+      if (amount <= 0) return null;
+      var idx = findNearestIdx(ts, dip, maxDist);
+      return idx >= 0 ? { ts: ts, amount: amount, dipIdx: idx } : null;
+    }).filter(Boolean);
 
-    var drainTimestamps = {};
-    reportDrains.forEach(function(ev) {
-      var ts = ev.ts || 0;
-      var key = Math.round(ts / 60);
-      if (!drainTimestamps[key] || ev.amount > drainTimestamps[key].amount) {
-        drainTimestamps[key] = {ts: ts, amount: ev.amount, label: 'Слив ' + (ev.amount ? ev.amount.toFixed(1) + 'л' : '')};
+    var dbRefuelSegments = dbRefuels.map(function(ev) {
+      if (ev.actual_amount === null || ev.actual_amount === undefined) return null;
+      var ts = ev.ts || 0, amount = ev.actual_amount || 0;
+      if (amount <= 0) return null;
+      var idx = findNearestIdx(ts, dip, maxDist);
+      return idx >= 0 ? { ts: ts, amount: amount, dipIdx: idx, source: ev.source || 'manual' } : null;
+    }).filter(Boolean);
+
+    var drainSegments = reportDrains.map(function(ev) {
+      var ts = ev.ts || 0, amount = ev.amount || 0;
+      if (amount <= 0) return null;
+      var idx = findNearestIdx(ts, dip, maxDist);
+      return idx >= 0 ? { ts: ts, amount: amount, dipIdx: idx } : null;
+    }).filter(Boolean);
+
+    // Merge events within 5 minutes to reduce overlap
+    function mergeClusters(segments, maxGap) {
+      if (!segments.length) return segments;
+      var sorted = segments.slice().sort(function(a,b){return a.ts - b.ts;});
+      var merged = [sorted[0]];
+      for (var i = 1; i < sorted.length; i++) {
+        var last = merged[merged.length - 1];
+        if (sorted[i].ts - last.ts < maxGap) {
+          last.amount += sorted[i].amount;
+          last.dipIdx = Math.min(last.dipIdx, sorted[i].dipIdx);
+        } else {
+          merged.push(sorted[i]);
+        }
       }
-    });
+      return merged;
+    }
+    var mergedRefuels = mergeClusters(refuelSegments, 300);
+    var mergedDrains = mergeClusters(drainSegments, 300);
+    var mergedDbRefuels = mergeClusters(dbRefuelSegments, 300);
+
+    // Compute Y axis range with 15% padding
+    var valid = levelValues.filter(function(v){return v !== null;});
+    var dataMin = valid.length ? Math.min.apply(null, valid) : 0;
+    var dataMax = valid.length ? Math.max.apply(null, valid) : 100;
+    var dataRange = dataMax - dataMin || 100;
+    var yMin = Math.max(0, dataMin - dataRange * 0.15);
+    var yMax = dataMax + dataRange * 0.15;
 
     try {
       chart = new Chart(canvas, {
@@ -163,23 +261,24 @@ var fg = (function() {
             backgroundColor: colorFill,
             fill: true,
             tension: 0.3,
-            pointRadius: 1,
-            pointHitRadius: 5,
+            pointRadius: 0.5,
+            pointHitRadius: 6,
             borderWidth: 2,
           }],
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          animation: { duration: 300 },
           interaction: { mode: 'nearest', axis: 'x', intersect: false },
           scales: {
             x: {
-              ticks: { maxTicksLimit: 10, color: '#888', font: {size: 10} },
+              ticks: { maxTicksLimit: 10, color: '#888', font: {size: 10}, maxRotation: 45 },
               grid: { color: 'rgba(255,255,255,0.05)' },
             },
             y: {
-              beginAtZero: true,
-              ticks: { color: '#888', font: {size: 11}, callback: function(v) { return v + ' л'; } },
+              min: yMin, max: yMax,
+              ticks: { color: '#888', font: {size: 11}, callback: function(v) { return v.toFixed(0) + ' л'; } },
               grid: { color: 'rgba(255,255,255,0.08)' },
             },
           },
@@ -196,13 +295,16 @@ var fg = (function() {
                   var idx = items[0].dataIndex;
                   var dipPoint = dip[idx];
                   if (!dipPoint) return '';
+                  var ts2 = dipPoint.ts || 0;
                   var lines = [];
-                  var ts = dipPoint.ts || 0;
-                  refuelSegments.forEach(function(seg) {
-                    if (Math.abs(seg.ts - ts) < 120) lines.push('\u2191 Заправка ' + seg.amount.toFixed(1) + 'л');
+                  mergedRefuels.forEach(function(seg) {
+                    if (Math.abs(seg.ts - ts2) < 120) lines.push('\u2191 Заправка (Pilot) ' + seg.amount.toFixed(1) + 'л');
                   });
-                  Object.values(drainTimestamps).forEach(function(ev) {
-                    if (Math.abs(ev.ts - ts) < 120) lines.push('\u2193 ' + ev.label);
+                  mergedDbRefuels.forEach(function(seg) {
+                    if (Math.abs(seg.ts - ts2) < 120) lines.push('\u25CF Чек ' + seg.amount.toFixed(1) + 'л');
+                  });
+                  mergedDrains.forEach(function(seg) {
+                    if (Math.abs(seg.ts - ts2) < 120) lines.push('\u2193 Слив ' + seg.amount.toFixed(1) + 'л');
                   });
                   return lines.length ? '\n' + lines.join('\n') : '';
                 }
@@ -216,55 +318,17 @@ var fg = (function() {
             var xAxis = ch.scales.x;
             var yAxis = ch.scales.y;
 
-            function idxByTs(ts) {
-              var best = -1, bestDist = Infinity;
-              for (var i = 0; i < dip.length; i++) {
-                var d = Math.abs((dip[i].ts || 0) - ts);
-                if (d < bestDist) { bestDist = d; best = i; }
-              }
-              return best;
-            }
-
-            function drawMarker(ev, color, symbol) {
-              var idx = idxByTs(ev.ts);
-              if (idx < 0) return;
-              var x = xAxis.getPixelForValue(idx);
+            // Refuel green bands
+            mergedRefuels.forEach(function(seg) {
+              var x = xAxis.getPixelForValue(seg.dipIdx);
               if (isNaN(x)) return;
-              var y = yAxis.top + 10;
+              var topY = yAxis.top, bottomY = yAxis.bottom, midY = (topY + bottomY) / 2;
               ctx2.save();
-              ctx2.fillStyle = color;
-              ctx2.font = 'bold 16px sans-serif';
-              ctx2.textAlign = 'center';
-              ctx2.fillText(symbol, x, y);
-              ctx2.font = '10px sans-serif';
-              ctx2.fillStyle = color;
-              ctx2.fillText((ev.amount || 0).toFixed(0) + 'л', x, y + 14);
-              ctx2.restore();
-            }
-
-            // Draw refuel segments — full-height pale green band with volume label
-            refuelSegments.forEach(function(seg) {
-              var si = seg.dipIdx;
-              if (si < 0) return;
-              var x = xAxis.getPixelForValue(si);
-              if (isNaN(x)) return;
-
-              var topY = yAxis.top;
-              var bottomY = yAxis.bottom;
-              var midY = (topY + bottomY) / 2;
-
-              ctx2.save();
-
-              // Full-height pale green band
-              ctx2.fillStyle = 'rgba(34,197,94,0.12)';
-              ctx2.fillRect(x - 14, topY, 28, bottomY - topY);
-
-              // Volume label centered vertically
-              ctx2.textAlign = 'center';
-              ctx2.font = 'bold 11px sans-serif';
+              ctx2.fillStyle = 'rgba(34,197,94,0.1)';
+              ctx2.fillRect(x - 12, topY, 24, bottomY - topY);
               var txt = '+' + seg.amount.toFixed(0) + 'л';
               var tw = ctx2.measureText(txt).width;
-              ctx2.fillStyle = 'rgba(21,128,61,0.85)';
+              ctx2.fillStyle = 'rgba(21,128,61,0.8)';
               if (ctx2.roundRect) {
                 ctx2.beginPath();
                 ctx2.roundRect(x - tw/2 - 4, midY - 8, tw + 8, 16, 4);
@@ -273,16 +337,45 @@ var fg = (function() {
                 ctx2.fillRect(x - tw/2 - 4, midY - 8, tw + 8, 16);
               }
               ctx2.fillStyle = '#fff';
+              ctx2.font = 'bold 11px sans-serif';
+              ctx2.textAlign = 'center';
               ctx2.fillText(txt, x, midY + 4);
-
               ctx2.restore();
             });
 
-            Object.values(drainTimestamps).forEach(function(ev) { drawMarker(ev, colorRed, '\u2193'); });
+            // DB refuel orange diamonds at top
+            mergedDbRefuels.forEach(function(seg) {
+              var x = xAxis.getPixelForValue(seg.dipIdx);
+              if (isNaN(x)) return;
+              ctx2.save();
+              ctx2.fillStyle = colorOrange;
+              ctx2.font = 'bold 14px sans-serif';
+              ctx2.textAlign = 'center';
+              ctx2.fillText('\u25C6', x, yAxis.top + 8);
+              ctx2.font = '10px sans-serif';
+              ctx2.fillText((seg.amount || 0).toFixed(0) + 'л', x, yAxis.top + 24);
+              ctx2.restore();
+            });
+
+            // Drain red arrows
+            mergedDrains.forEach(function(seg) {
+              var x = xAxis.getPixelForValue(seg.dipIdx);
+              if (isNaN(x)) return;
+              ctx2.save();
+              ctx2.fillStyle = colorRed;
+              ctx2.font = 'bold 16px sans-serif';
+              ctx2.textAlign = 'center';
+              ctx2.fillText('\u2193', x, yAxis.top + 10);
+              ctx2.font = '10px sans-serif';
+              ctx2.fillText((seg.amount || 0).toFixed(0) + 'л', x, yAxis.top + 26);
+              ctx2.restore();
+            });
           }
         }],
       });
-      canvas.onwheel = function(e) {
+
+      // Wheel zoom
+      wheelHandler = function(e) {
         e.preventDefault();
         if (!chart) return;
         var rect = canvas.getBoundingClientRect();
@@ -299,10 +392,68 @@ var fg = (function() {
         zoomMax = Math.min(chart.data.labels.length - 1, Math.round(idx + range * factor * (right / (total || 1))));
         applyZoom();
       };
+      canvas.addEventListener('wheel', wheelHandler, { passive: false });
+
+      // Drag-to-zoom
+      (function() {
+        var startX = 0, isDragging = false;
+        function onDown(e) {
+          var rect = canvas.getBoundingClientRect();
+          startX = (e.clientX || e.touches[0].clientX) - rect.left;
+          isDragging = true;
+        }
+        function onUp() {
+          isDragging = false;
+        }
+        function onMove(e) {
+          if (!isDragging || !chart) return;
+          var rect = canvas.getBoundingClientRect();
+          var endX = (e.clientX || e.touches[0].clientX) - rect.left;
+          var dist = endX - startX;
+          if (Math.abs(dist) < 10) return;
+          var min = chart.scales.x.min || 0;
+          var max = chart.scales.x.max || (chart.data.labels.length - 1);
+          var range = max - min;
+          var pct = dist / rect.width;
+          var shift = Math.round(range * pct);
+          zoomMin = Math.max(0, min - shift);
+          zoomMax = Math.min(chart.data.labels.length - 1, max - shift);
+          applyZoom();
+          isDragging = false;
+          startX = endX;
+        }
+        function onTouchStart(e) {
+          if (e.touches.length === 1) onDown(e);
+        }
+        function onTouchMove(e) {
+          if (e.touches.length === 1) { e.preventDefault(); onMove(e); }
+        }
+        function onTouchEnd() { isDragging = false; }
+        canvas.addEventListener('mousedown', onDown);
+        canvas.addEventListener('mousemove', onMove);
+        canvas.addEventListener('mouseup', onUp);
+        canvas.addEventListener('mouseleave', onUp);
+        canvas.addEventListener('touchstart', onTouchStart, { passive: true });
+        canvas.addEventListener('touchmove', onTouchMove, { passive: false });
+        canvas.addEventListener('touchend', onTouchEnd);
+        dragState = { down: onDown, move: onMove, up: onUp, touchStart: onTouchStart, touchMove: onTouchMove, touchEnd: onTouchEnd };
+      })();
+
     } catch (e) {
-      console.error('Chart render error:', e);
+      showError('Ошибка рендеринга графика');
+      return;
     }
-    return refuelSegments;
+
+    // Update stats
+    var totalPilot = mergedRefuels.reduce(function(s,seg){return s+seg.amount;}, 0);
+    var totalDb = mergedDbRefuels.reduce(function(s,seg){return s+seg.amount;}, 0);
+    var totalDrain = mergedDrains.reduce(function(s,seg){return s+seg.amount;}, 0);
+    document.getElementById('fg-stats').innerHTML = [
+      '<span>\u2500 min: ' + dataMin.toFixed(0) + ' \u043B, max: ' + dataMax.toFixed(0) + ' \u043B</span>',
+      reportRefuels.length ? '<span style="color:' + colorGreen + '">\u2191 \u0437\u0430\u043F\u0440.: ' + totalPilot.toFixed(0) + ' \u043B</span>' : '',
+      reportDrains.length ? '<span style="color:' + colorRed + '">\u2193 \u0441\u043B\u0438\u0432: ' + totalDrain.toFixed(0) + ' \u043B</span>' : '',
+      dbRefuels.length ? '<span style="color:' + colorOrange + '">\u25C6 \u0447\u0435\u043A\u0438: ' + totalDb.toFixed(0) + ' \u043B</span>' : '',
+    ].filter(Boolean).join('');
   }
 
   function applyZoom() {
@@ -311,33 +462,6 @@ var fg = (function() {
     chart.options.scales.x.max = zoomMax;
     chart.update();
   }
-
-  function renderLegend(data, segs) {
-    var el = document.getElementById('fg-legend');
-    var parts = [];
-    var dbR = data.db_refuels || [];
-    var totalDb = dbR.reduce(function(s, e) { return s + (e.actual_amount || e.pilot_amount || 0); }, 0);
-    parts.push('<span style="color:' + colorBlue + '">\u2500 Линия: уровень топлива</span>');
-    if (segs && segs.length > 0) {
-      parts.push('<span style="color:#15803d">\u2588 Заправка (сегмент): ' + segs.length + '</span>');
-    }
-    if (data.report_refuels && data.report_refuels.length) {
-    parts.push('<span style="color:' + colorGreen + '">\u2191 Заправки (Pilot): ' + data.report_refuels.length + '</span>');
-    }
-    if (data.report_drains && data.report_drains.length) {
-      parts.push('<span style="color:' + colorRed + '">\u2193 Сливы (Pilot): ' + data.report_drains.length + '</span>');
-    }
-    if (dbR.length) {
-      parts.push('<span style="color:' + colorOrange + '">\u25CF Заправки (БД): ' + dbR.length + ', ' + totalDb.toFixed(0) + 'л</span>');
-    }
-    if (data.sensor_names && data.sensor_names.length) {
-      parts.push('<span style="color:#888">\u25A0 Датчики: ' + data.sensor_names.join(', ') + '</span>');
-    }
-    el.innerHTML = parts.join('');
-  }
-
-  // Auto-build on load
-  setTimeout(build, 100);
 
   function zoomIn() {
     if (!chart) return;
@@ -363,6 +487,41 @@ var fg = (function() {
 
   function resetZoom() { zoomMin = null; zoomMax = null; applyZoom(); }
 
-  return { setPeriod: setPeriod, build: build, todayStr: todayStr, zoomIn: zoomIn, zoomOut: zoomOut, resetZoom: resetZoom };
+  function renderLegend(data) {
+    var el = document.getElementById('fg-legend');
+    var items = [];
+    items.push({ html: '\u2500 <b>\u0423\u0440\u043E\u0432\u0435\u043D\u044C \u0442\u043E\u043F\u043B\u0438\u0432\u0430</b>', color: colorBlue });
+    var rR = data.report_refuels || [];
+    if (rR.length) {
+      items.push({ html: '\u2191 <b>\u0417\u0430\u043F\u0440\u0430\u0432\u043A\u0438 (Pilot)</b>: ' + rR.length, color: colorGreen });
+    }
+    var rD = data.report_drains || [];
+    if (rD.length) {
+      items.push({ html: '\u2193 <b>\u0421\u043B\u0438\u0432\u044B</b>: ' + rD.length, color: colorRed });
+    }
+    var dbR = data.db_refuels || [];
+    if (dbR.length) {
+      var totalDb = dbR.reduce(function(s, e) {
+        var v = (e.actual_amount != null && e.actual_amount !== 0) ? e.actual_amount : (e.pilot_amount || 0);
+        return s + v;
+      }, 0);
+      items.push({ html: '\u25C6 <b>\u0427\u0435\u043A\u0438 (\u0411\u0414)</b>: ' + dbR.length + ', ' + totalDb.toFixed(0) + '\u043B', color: colorOrange });
+    }
+    var sn = data.sensor_names || [];
+    if (sn.length) {
+      items.push({ html: '\u25A0 <b>\u0414\u0430\u0442\u0447\u0438\u043A\u0438</b>: ' + sn.join(', '), color: '#888' });
+    }
+    var html = items.map(function(it) {
+      return '<span style="color:' + it.color + '">' + it.html + '</span>';
+    }).join('');
+    el.innerHTML = html;
+  }
+
+  setTimeout(build, 100);
+
+  return {
+    setPeriod: setPeriod, build: build, todayStr: todayStr,
+    zoomIn: zoomIn, zoomOut: zoomOut, resetZoom: resetZoom
+  };
 })();
 </script>

@@ -1,0 +1,58 @@
+<div class="modal-overlay" onclick="if(event.target===this)this.remove()">
+  <div class="modal sync-modal">
+    <div class="modal-header">
+      <h2>Результат синхронизации</h2>
+    </div>
+    <div class="modal-body">
+      {% for r in results %}
+      {% if r.status == 'error' %}
+      <div class="toast toast-error" style="margin-bottom:8px">
+        <strong>{{ r.username }}</strong>: {{ r.error }}
+      </div>
+      {% elif r.status == 'skipped' %}
+      <div class="toast toast-info" style="margin-bottom:8px">
+        <strong>{{ r.username }}</strong>: пропущено ({{ r.reason }})
+      </div>
+      {% else %}
+      <div class="toast toast-success" style="margin-bottom:4px">
+        <strong>{{ r.username }}</strong>: +{{ r.new }} / ~{{ r.updated }} из {{ r.total_events }} событий Pilot
+        {% if r.errors %}<br><small style="color:var(--warning)">не сопоставлено ТС: {{ r.errors|length }}</small>{% endif %}
+      </div>
+      {% if r.vehicle_updates %}
+      <div style="margin:4px 0 12px 16px">
+        <button class="btn btn-sm btn-secondary" onclick="toggleDetail('vu-{{ loop.index }}')">Подробнее &#9660;</button>
+        <div id="vu-{{ loop.index }}" style="display:none;margin-top:6px">
+          <table class="detail-table">
+            <thead>
+              <tr><th style="text-align:left">ТС</th><th style="text-align:left">Дата</th><th style="text-align:right">Объём</th><th style="text-align:center">Действие</th></tr>
+            </thead>
+            <tbody>
+              {% for vu in r.vehicle_updates %}
+              <tr>
+                <td>{{ vu.plate }}</td>
+                <td>{{ vu.date }}</td>
+                <td style="text-align:right">{{ vu.amount }} л</td>
+                <td style="text-align:center">
+                  {% if vu.action == '+' %}
+                  <span class="status-badge status-normal" style="font-size:0.75rem">новый</span>
+                  {% else %}
+                  <span class="status-badge status-small-deviation" style="font-size:0.75rem">{{ vu.action }}</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% endif %}
+      {% endif %}
+      {% else %}
+      <div class="empty-state"><p>Нет компаний для синхронизации</p></div>
+      {% endfor %}
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Закрыть</button>
+    </div>
+  </div>
+</div>
