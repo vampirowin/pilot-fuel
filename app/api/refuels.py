@@ -13,6 +13,7 @@ from app.database import get_db
 from app.models.refuel_entry import RefuelEntry
 from app.models.pilot_refuel import PilotRefuel
 from app.models.vehicle import Vehicle
+from app.models.user import User
 from app.models.client_account import ClientAccount
 from app.models.site import Site
 from app.models.setting import Setting
@@ -21,6 +22,20 @@ from app.dependencies import get_current_user, apply_refuel_filter, apply_vehicl
 from app.services.pilot_service import PilotService
 from app.config import get_settings
 from app.timezone_utils import format_dt, get_user_timezone, utc_to_tz, utcnow
+
+async def _resolve_pilot_credentials(user, db) -> tuple[str | None, int]:
+    token = user.pilot_token
+    node_id = user.pilot_node_id or 0
+    if token:
+        return token, node_id
+    if user.role == "superadmin":
+        admin = (await db.execute(
+            select(User).where(User.role == "company_admin", User.pilot_token.isnot(None))
+        )).scalar_one_or_none()
+        if admin and admin.pilot_token:
+            return admin.pilot_token, admin.pilot_node_id or 0
+    return None, 0
+
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
@@ -393,6 +408,8 @@ async def sync_refuels(
     token = user.pilot_token or request.session.get("token")
     node_id = user.pilot_node_id or request.session.get("node_id", 0)
     if not token:
+        token, node_id = await _resolve_pilot_credentials(user, db)
+    if not token:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
     pilot = PilotService()
@@ -613,6 +630,8 @@ async def sync_refuels_preview(
 
     token = user.pilot_token or request.session.get("token")
     node_id = user.pilot_node_id or request.session.get("node_id", 0)
+    if not token:
+        token, node_id = await _resolve_pilot_credentials(user, db)
     if not token:
         raise HTTPException(status_code=401, detail="Not authenticated")
 

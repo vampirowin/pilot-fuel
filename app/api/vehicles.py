@@ -13,7 +13,7 @@ from app.models.refuel_entry import RefuelEntry
 from app.services.pilot_service import PilotService
 from app.dependencies import get_current_user, apply_vehicle_filter
 from app.models.vehicle import SENSOR_STATUSES
-from app.api.refuels import _get_effective_thresholds, _calc_comparison
+from app.api.refuels import _get_effective_thresholds, _calc_comparison, _resolve_pilot_credentials
 from app.models.setting import Setting
 
 logger = logging.getLogger(__name__)
@@ -416,6 +416,8 @@ async def sync_vehicles(
 
     token = user.pilot_token or request.session.get("token")
     node_id = user.pilot_node_id or request.session.get("node_id", 0)
+    if not token:
+        token, node_id = await _resolve_pilot_credentials(user, db)
     if not token:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
