@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+{% block title %}UI fuel — Транспорт{% endblock %}
+{% block head %}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Транспортные средства</h1>
+  <div class="page-header-actions">
+    {% if is_superadmin or is_company_admin %}
+    <button class="btn btn-danger" hx-post="/api/vehicles/bulk-remove-sensor" hx-target="#vehicles-table" hx-swap="innerHTML" hx-include="#bulk-vehicle-form" hx-confirm="Убрать выбранные ТС из списка синхронизации топлива?">
+      ТС без датчиков
+    </button>
+    {% endif %}
+    {% if is_superadmin or is_company_admin %}
+    <button class="btn btn-primary" hx-post="/api/vehicles/sync" hx-target="#vehicles-table" hx-swap="innerHTML" hx-indicator="#sync-spinner">
+      <span class="btn-text">Синхронизировать</span>
+      <span class="btn-loading">Синхронизация...</span>
+    </button>
+    {% endif %}
+  </div>
+</div>
+
+{% include "vehicles_search.html" %}
+
+<form id="bulk-vehicle-form">
+<div id="vehicles-table">
+  {% if nested_groups %}
+    {% set cidx = namespace(value=0) %}
+    {% for cname, ctotal, sites in nested_groups %}
+    {% set cidx.value = cidx.value + 1 %}
+    {% set cid = "c-" ~ cidx.value %}
+    <div class="card level-company" style="margin-top: 16px;">
+      <div class="card-header collapsible-header" onclick="toggleGroup('{{ cid }}')">
+        <span class="arrow">&#9660;</span>
+        <span class="level-badge level-badge-company">{{ cname }}</span>
+        <span class="level-count">{{ ctotal }}</span>
+      </div>
+      <div class="collapsible-body" id="{{ cid }}">
+        {% set sidx = namespace(value=0) %}
+        {% for sname, stotal, folders in sites %}
+        {% if sname == '__flat__' %}
+        {# Flat mode — render vehicles directly under company #}
+        {% set flat_vehicles = folders[0] %}
+        <div class="table-container" style="margin-top:12px">
+          <table>
+            <thead>
+              <tr>
+                {% if is_superadmin or is_company_admin %}<th style="width: 32px;"><input type="checkbox" onchange="var e=this;document.querySelectorAll('#bulk-vehicle-form input[name=vehicle_ids]').forEach(function(c){c.checked=e.checked})"></th>{% endif %}
+                <th>#</th>
+                <th>Госномер</th>
+                <th>IMEI</th>
+                <th>Датчик</th>
+                <th>Заправки</th>
+                <th>Компания</th>
+                <th>График</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for v in flat_vehicles %}
+              <tr id="v-{{ v.id }}">
+                {% if is_superadmin or is_company_admin %}<td><input type="checkbox" name="vehicle_ids" value="{{ v.id }}"></td>{% endif %}
+                <td style="color: var(--text-dim);">{{ loop.index }}</td>
+                <td><strong>{{ v.plate_number or '—' }}</strong></td>
+                <td style="font-family: monospace; font-size: 12px;">{{ v.imei or '—' }}</td>
+                <td>
+                  <span class="status-badge {% if v.sensor_count > 0 %}status-normal{% else %}status-false-reading{% endif %}">
+                    {{ v.sensor_count }} датч.
+                  </span>
+                </td>
+                <td><a href="/refuels?vehicle_id={{ v.id }}" class="btn btn-sm btn-secondary">Заправки</a></td>
+                <td>{{ v.company_name or '—' }}</td>
+                <td><button class="btn btn-sm btn-secondary" hx-get="/api/fuel-graph/modal?vehicle_id={{ v.id }}&imei={{ v.imei or '' }}" hx-target="#modal-container" hx-swap="innerHTML">График</button></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        {% set sidx.value = sidx.value + 1 %}
+        {% set sid = "s-" ~ cidx.value ~ "-" ~ sidx.value %}
+        <div class="nested-card level-site">
+          <div class="card-header collapsible-header" onclick="toggleGroup('{{ sid }}')">
+            <span class="arrow">&#9660;</span>
+            <span class="level-badge level-badge-site">{{ sname }}</span>
+            <span class="level-count">{{ stotal }}</span>
+          </div>
+          <div class="collapsible-body" id="{{ sid }}">
+            {% set fidx = namespace(value=0) %}
+            {% for fname, vehicles in folders %}
+            {% if fname == '__flat__' %}
+            {# Flat folder — render table directly under site #}
+            <div class="table-container" style="margin-top:8px">
+              <table>
+                <thead>
+                  <tr>
+                    {% if is_superadmin or is_company_admin %}<th style="width: 32px;"><input type="checkbox" onchange="var e=this;document.querySelectorAll('#bulk-vehicle-form input[name=vehicle_ids]').forEach(function(c){c.checked=e.checked})"></th>{% endif %}
+                    <th>#</th>
+                    <th>Госномер</th>
+                    <th>IMEI</th>
+                    <th>Датчик</th>
+                    <th>Заправки</th>
+                    <th>Компания</th>
+                    <th>График</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for v in vehicles %}
+                  <tr id="v-{{ v.id }}">
+                    {% if is_superadmin or is_company_admin %}<td><input type="checkbox" name="vehicle_ids" value="{{ v.id }}"></td>{% endif %}
+                    <td style="color: var(--text-dim);">{{ loop.index }}</td>
+                    <td><strong>{{ v.plate_number or '—' }}</strong></td>
+                    <td style="font-family: monospace; font-size: 12px;">{{ v.imei or '—' }}</td>
+                    <td>
+                      <span class="status-badge {% if v.sensor_count > 0 %}status-normal{% else %}status-false-reading{% endif %}">
+                        {{ v.sensor_count }} датч.
+                      </span>
+                    </td>
+                    <td><a href="/refuels?vehicle_id={{ v.id }}" class="btn btn-sm btn-secondary">Заправки</a></td>
+                    <td>{{ v.company_name or '—' }}</td>
+                    <td><button class="btn btn-sm btn-secondary" hx-get="/api/fuel-graph/modal?vehicle_id={{ v.id }}&imei={{ v.imei or '' }}" hx-target="#modal-container" hx-swap="innerHTML">График</button></td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            {% else %}
+            {% set fidx.value = fidx.value + 1 %}
+            {% set fid = "f-" ~ cidx.value ~ "-" ~ sidx.value ~ "-" ~ fidx.value %}
+            <div class="level-folder" style="margin: 4px 0; border: 1px solid var(--border); border-radius: 6px;">
+              <div class="collapsible-header" onclick="toggleGroup('{{ fid }}')">
+                <span class="arrow">&#9660;</span>
+                <span class="level-badge level-badge-folder">{{ fname }}</span>
+                <span class="level-count">{{ vehicles|length }}</span>
+              </div>
+              <div class="collapsible-body" id="{{ fid }}">
+                <div class="table-container">
+                  <table>
+                    <thead>
+                      <tr>
+                        {% if is_superadmin or is_company_admin %}<th style="width: 32px;"><input type="checkbox" onchange="var e=this;document.querySelectorAll('#bulk-vehicle-form input[name=vehicle_ids]').forEach(function(c){c.checked=e.checked})"></th>{% endif %}
+                        <th>#</th>
+                        <th>Госномер</th>
+                        <th>IMEI</th>
+                        <th>Датчик</th>
+                        <th>Заправки</th>
+                        <th>Компания</th>
+                        <th>График</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for v in vehicles %}
+                      <tr id="v-{{ v.id }}">
+                        {% if is_superadmin or is_company_admin %}<td><input type="checkbox" name="vehicle_ids" value="{{ v.id }}"></td>{% endif %}
+                        <td style="color: var(--text-dim);">{{ loop.index }}</td>
+                        <td><strong>{{ v.plate_number or '—' }}</strong></td>
+                        <td style="font-family: monospace; font-size: 12px;">{{ v.imei or '—' }}</td>
+                        <td>
+                          <span class="status-badge {% if v.sensor_count > 0 %}status-normal{% else %}status-false-reading{% endif %}">
+                            {{ v.sensor_count }} датч.
+                          </span>
+                        </td>
+                        <td><a href="/refuels?vehicle_id={{ v.id }}" class="btn btn-sm btn-secondary">Заправки</a></td>
+                        <td>{{ v.company_name or '—' }}</td>
+                        <td><button class="btn btn-sm btn-secondary" hx-get="/api/fuel-graph/modal?vehicle_id={{ v.id }}&imei={{ v.imei or '' }}" hx-target="#modal-container" hx-swap="innerHTML">График</button></td>
+                      </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+            {% endif %}
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+  <div class="card">
+    <div class="empty-state">
+      <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+      <h3>Нет транспортных средств</h3>
+      <p>{% if plate or imei %}Ничего не найдено по заданным фильтрам.{% else %}Нажмите «Синхронизировать», чтобы загрузить список ТС из Pilot.{% endif %}</p>
+    </div>
+  </div>
+  {% endif %}
+</div>
+</form>
+<div id="modal-container"></div>
+{% endblock %}

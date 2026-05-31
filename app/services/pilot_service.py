@@ -53,11 +53,14 @@ class PilotService:
         headers.setdefault("X-Requested-With", "XMLHttpRequest")
 
         client = _get_client()
-        resp = await client.request(method, f"{self.base_url}{path}", headers=headers, cookies=cookies, **kwargs)
+        client.cookies.clear()
+        resp = await client.request(method, f"{self.base_url}{path}", headers=headers, cookies=cookies or {}, **kwargs)
         await _log_sync(f"[request] {method} {path} -> {resp.status_code} ({len(resp.content)} bytes)")
         data = resp.json()
 
-        if data.get("code") != 0 or not data.get("success"):
+        await _log_sync(f"[response] {path} -> {str(data)[:300]}")
+
+        if data.get("success") is False or data.get("code", 0) != 0:
             raise PilotAuthError(data.get("msg", "Unknown API error"))
         return data
 
@@ -143,7 +146,6 @@ class PilotService:
                 "vehicle_not_moving_time": "1",
                 "vehicles_has_covered_km": "1",
                 "fillings": "on",
-                "stales": "on",
                 "speed": "on",
                 "rashod": "on",
                 "stops": "on",
@@ -174,6 +176,9 @@ class PilotService:
         raw_data = raw.get("data", {})
         if not isinstance(raw_data, dict):
             return events
+        for date_group, entries in raw_data.items():
+            if not isinstance(entries, dict):
+                continue
             for ts_key, entry in entries.items():
                 if not isinstance(entry, list) or len(entry) < 6:
                     continue
@@ -253,7 +258,6 @@ class PilotService:
                 "vehicle_not_moving_time": "1",
                 "vehicles_has_covered_km": "1",
                 "fillings": "on",
-                "stales": "on",
                 "speed": "on",
                 "rashod": "on",
                 "stops": "on",

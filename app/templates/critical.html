@@ -9,52 +9,74 @@
   </div>
 </div>
 
-{% if entries %}
-<div class="card">
-  <div class="table-container">
-    <table>
-      <thead>
-        <tr>
-          <th>Дата</th>
-          <th>ТС</th>
-          <th>Pilot (л)</th>
-          <th>Чек (л)</th>
-          <th>Разница</th>
-          <th>Погрешность</th>
-          <th>Статус</th>
-          <th>Действия</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for e in entries %}
-        {% set v = vehicles.get(e.vehicle_id) %}
-        {% set class_map = {'normal': 'status-normal', 'small_deviation': 'status-small-deviation', 'unacceptable': 'status-unacceptable', 'pilot_missing': 'status-pilot-missing', 'false_reading': 'status-false-reading'} %}
-        {% set label_map = {'normal': 'Норма', 'small_deviation': 'Расхождение', 'unacceptable': 'Недопустимо', 'pilot_missing': 'Нет в Pilot', 'false_reading': 'Ложная'} %}
-        <tr>
-          <td data-label="Дата">{{ e.event_date.strftime('%d.%m.%Y %H:%M') }}</td>
-          <td data-label="ТС"><strong>{{ v.plate_number if v else '—' }}</strong></td>
-          <td data-label="Pilot">{{ '%.1f'|format(e.pilot_amount) if e.pilot_amount is not none else '—' }}</td>
-          <td data-label="Чек">{{ '%.1f'|format(e.actual_amount) if e.actual_amount is not none else '—' }}</td>
-          <td data-label="Разница">{{ '%.1f'|format(e.difference) if e.difference is not none else '—' }}</td>
-          <td data-label="Погрешность">{{ '%.1f'|format(e.error_percent) + '%' if e.error_percent is not none else '—' }}</td>
-          <td data-label="Статус"><span class="status-badge {{ class_map.get(e.comparison_status, '') }}">{{ label_map.get(e.comparison_status, e.comparison_status or '—') }}</span></td>
-          <td>
-            <button class="btn btn-sm btn-secondary" hx-get="/api/refuels/{{ e.id }}/edit" hx-target="#modal-container" hx-swap="innerHTML">Правка</button>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+<div class="card" style="margin-bottom:16px">
+  <div class="card-body" style="padding:12px 16px">
+    <div class="filter-row" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <input type="text" id="plate-search" name="plate_search" placeholder="Поиск по госномеру..." value="{{ plate_search }}" style="flex:1;min-width:200px"
+        hx-get="/critical"
+        hx-trigger="keyup changed delay:400ms"
+        hx-target="#critical-groups"
+        hx-push-url="true">
+      <button class="btn btn-secondary" onclick="document.getElementById('plate-search').value=''; document.getElementById('plate-search').dispatchEvent(new Event('keyup'))">Сбросить</button>
+    </div>
   </div>
 </div>
-{% else %}
-<div class="card">
-  <div class="empty-state">
-    <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-    <h3>Критических событий нет</h3>
-    <p>Все заправки имеют данные из Pilot или находятся в пределах нормы.</p>
+
+<div id="critical-groups">
+  {% if sorted_groups %}
+    {% for vid, entries in sorted_groups %}
+    {% set v = vmap.get(vid) %}
+    {% set plate = v.plate_number or v.name or '—' if v else '—' %}
+    <div class="card vehicle-group" style="margin-top:12px">
+      <div class="vehicle-group-title collapsible-header" onclick="toggleGroup('crit-{{ vid }}')">
+        <span class="arrow">&#9660;</span>
+        <span>{{ plate }} <span class="vehicle-group-count">{{ entries|length }}</span></span>
+      </div>
+      <div class="collapsible-body" id="crit-{{ vid }}">
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Дата</th>
+                <th>Pilot (л)</th>
+                <th>Чек (л)</th>
+                <th>Разница</th>
+                <th>Погрешность</th>
+                <th>Статус</th>
+                <th>Действия</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for e in entries %}
+              {% set class_map = {'normal': 'status-normal', 'small_deviation': 'status-small-deviation', 'unacceptable': 'status-unacceptable', 'pilot_missing': 'status-pilot-missing', 'false_reading': 'status-false-reading'} %}
+              {% set label_map = {'normal': 'Норма', 'small_deviation': 'Расхождение', 'unacceptable': 'Недопустимо', 'pilot_missing': 'Нет в Pilot', 'false_reading': 'Ложная'} %}
+              <tr>
+                <td data-label="Дата">{{ e.event_date.strftime('%d.%m.%Y %H:%M') }}</td>
+                <td data-label="Pilot">{{ '%.1f'|format(e.pilot_amount) if e.pilot_amount is not none else '—' }}</td>
+                <td data-label="Чек">{{ '%.1f'|format(e.actual_amount) if e.actual_amount is not none else '—' }}</td>
+                <td data-label="Разница">{{ '%.1f'|format(e.difference) if e.difference is not none else '—' }}</td>
+                <td data-label="Погрешность">{{ '%.1f'|format(e.error_percent) + '%' if e.error_percent is not none else '—' }}</td>
+                <td data-label="Статус"><span class="status-badge {{ class_map.get(e.comparison_status, '') }}">{{ label_map.get(e.comparison_status, e.comparison_status or '—') }}</span></td>
+                <td>
+                  <button class="btn btn-sm btn-secondary" hx-get="/api/refuels/{{ e.id }}/edit" hx-target="#modal-container" hx-swap="innerHTML">Правка</button>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+  <div class="card">
+    <div class="empty-state">
+      <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <h3>Критических событий нет</h3>
+      <p>Все заправки имеют данные из Pilot или находятся в пределах нормы.</p>
+    </div>
   </div>
+  {% endif %}
 </div>
-{% endif %}
 <div id="modal-container"></div>
 {% endblock %}

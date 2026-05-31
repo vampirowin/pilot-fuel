@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request, Depends
+from fastapi import APIRouter, Request, Depends, Query
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from app.dependencies import get_current_user, apply_vehicle_filter, apply_refuel_filter
@@ -46,22 +46,79 @@ async def critical_page(
     request: Request,
     user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    plate_search: str = Query(default=""),
 ):
+    vq = select(Vehicle).where(Vehicle.is_active == True)
+    vq = apply_vehicle_filter(vq, user, Vehicle)
+    all_vehicles = (await db.execute(vq.order_by(Vehicle.plate_number))).scalars().all()
+    vmap = {v.id: v for v in all_vehicles}
+
+    matched_ids = set(v.id for v in all_vehicles)
+    if plate_search:
+        matched_ids = set()
+        for v in all_vehicles:
+            ps = plate_search.lower()
+            if (v.plate_number and ps in v.plate_number.lower()) or (v.name and ps in v.name.lower()):
+                matched_ids.add(v.id)
+
     query = select(RefuelEntry).where(
         RefuelEntry.is_deleted == False,
+        RefuelEntry.is_false == False,
         RefuelEntry.comparison_status.in_(["pilot_missing", "unacceptable"]),
-    ).order_by(RefuelEntry.event_date.desc()).limit(100)
+        RefuelEntry.vehicle_id.in_(matched_ids),
+    ).order_by(RefuelEntry.event_date.desc())
     query = apply_refuel_filter(query, user, RefuelEntry, Vehicle)
     entries = (await db.execute(query)).scalars().all()
 
-    vq = select(Vehicle).where(Vehicle.is_active == True)
-    vq = apply_vehicle_filter(vq, user, Vehicle)
-    vehicles = {v.id: v for v in (await db.execute(vq)).scalars().all()}
+    grouped = {}
+    for e in entries:
+        grouped.setdefault(e.vehicle_id, []).append(e)
+    sorted_groups = sorted(grouped.items(), key=lambda x: (vmap.get(x[0]).plate_number or "") if vmap.get(x[0]) else "")
+
+    is_hx = request.headers.get("hx-request") == "true"
+
+    if is_hx:
+        rendered = _render_critical_groups(sorted_groups, vmap)
+        return HTMLResponse(rendered)
+
+    critical_ids = set(e.vehicle_id for e in entries)
+    vehicle_list = [v for v in all_vehicles if v.id in critical_ids or not plate_search]
+    if plate_search and not entries:
+        vehicle_list = [v for v in all_vehicles if v.id in matched_ids]
 
     return templates.TemplateResponse(request, "critical.html", {
-        "entries": entries,
-        "vehicles": vehicles,
+        "sorted_groups": sorted_groups,
+        "vmap": vmap,
+        "plate_search": plate_search,
+        "vehicle_list": vehicle_list,
     })
+
+
+def _render_critical_groups(sorted_groups: list, vmap: dict) -> str:
+    if not sorted_groups:
+        return '<div class="card"><div class="empty-state"><svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><h3>Критических событий нет</h3><p>Все заправки имеют данные из Pilot или находятся в пределах нормы.</p></div></div>'
+
+    class_map = {'normal': 'status-normal', 'small_deviation': 'status-small-deviation', 'unacceptable': 'status-unacceptable', 'pilot_missing': 'status-pilot-missing', 'false_reading': 'status-false-reading'}
+    label_map = {'normal': 'Норма', 'small_deviation': 'Расхождение', 'unacceptable': 'Недопустимо', 'pilot_missing': 'Нет в Pilot', 'false_reading': 'Ложная'}
+
+    h = ""
+    for vid, entries in sorted_groups:
+        v = vmap.get(vid)
+        plate = v.plate_number or v.name or "—" if v else "—"
+        gid = f"crit-{vid}"
+        h += f'<div class="card vehicle-group" style="margin-top:12px"><div class="vehicle-group-title collapsible-header" onclick="toggleGroup(\'{gid}\')"><span class="arrow">&#9660;</span><span>{plate} <span class="vehicle-group-count">{len(entries)}</span></span></div><div class="collapsible-body" id="{gid}"><div class="table-container"><table><thead><tr><th>Дата</th><th>Pilot (л)</th><th>Чек (л)</th><th>Разница</th><th>Погрешность</th><th>Статус</th><th>Действия</th></tr></thead><tbody>'
+        for e in entries:
+            pa = f"{e.pilot_amount:.1f}" if e.pilot_amount is not None else "—"
+            aa = f"{e.actual_amount:.1f}" if e.actual_amount is not None else "—"
+            df = f"{e.difference:.1f}" if e.difference is not None else "—"
+            er = f"{e.error_percent:.1f}%" if e.error_percent is not None else "—"
+            ds = e.event_date.strftime("%d.%m.%Y %H:%M") if e.event_date else "—"
+            sc = class_map.get(e.comparison_status, "")
+            sl = label_map.get(e.comparison_status, e.comparison_status or "—")
+            actions = f'<button class="btn btn-sm btn-secondary" hx-get="/api/refuels/{e.id}/edit" hx-target="#modal-container" hx-swap="innerHTML">Правка</button>'
+            h += f"<tr><td data-label=\"Дата\">{ds}</td><td data-label=\"Pilot\">{pa}</td><td data-label=\"Чек\">{aa}</td><td data-label=\"Разница\">{df}</td><td data-label=\"Погрешность\">{er}</td><td data-label=\"Статус\"><span class=\"status-badge {sc}\">{sl}</span></td><td>{actions}</td></tr>"
+        h += "</tbody></table></div></div></div>"
+    return h
 
 
 @router.get("/api/critical-count")
