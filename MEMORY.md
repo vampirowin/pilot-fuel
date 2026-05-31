@@ -298,6 +298,30 @@ pilot-fuel/
 - **Overall status**: читал `get_settings()` из config.py вместо БД — исправлено прямым `select(Setting)`
 - **Кнопка «Пороги» в HTMX-партиалах**: была только в Jinja2-шаблоне, отсутствовала в Python-функции `_vehicle_row` → не показывалась при поиске/обновлении
 
+### 2026-06-01 — Comments, exclude from stats, superadmin sync, recalculate button, search fixes
+
+**Refuel entries: comment + exclude_from_stats:**
+- Добавлено поле `comment` (Text) и `exclude_from_stats` (Boolean) в модель `RefuelEntry`
+- Миграция `0b35e5ca0b45_add_exclude_from_stats_to_refuel_entries`
+- Модалка редактирования: textarea для примечания, чекбокс «Не учитывать в статистике»
+- В таблице заправок колонка «Прим.»: индикаторы `⊘` (исключён) и `прим.` (есть комментарий)
+- Итог: исключает записи с `exclude_from_stats` + ложные, в подписи пишет `(X ложн., Y искл. не учтены)`
+
+**Superadmin sync via company admin:**
+- Хелпер `_resolve_pilot_credentials(user, db)` — для superadmin находит company_admin с Pilot-токеном
+- Используется в `sync_refuels`, `sync_refuels_preview`, `sync_vehicles`
+
+**Recalculate button:**
+- `POST /admin/settings/recalculate` — пересчитывает статусы всех записей по текущим порогам
+- Кнопка «Пересчитать все записи» на странице настроек
+- Вынесен `_recalculate_all(db)` для переиспользования
+- **Bugfix**: в `vehicle_thresholds_save` добавлен `db.flush()` перед рекалькуляцией — иначе `_get_effective_thresholds` читала старые значения
+
+**Search / UI fixes:**
+- **Поиск на ТС** — перестал работать из-за отсутствия роута `/api/vehicles/search`. Добавлен `search_url="/vehicles"` в контекст шаблона
+- **Поиск на Критических** — заменён на `.search-bar-compact` с иконкой (как на ТС), убрана белая тема
+- **Дата → график на Критических** — клик по дате открывает график топлива за этот день (как в Заправках)
+
 ## Ports
 - UI fuel: **9001** (9000 занят zombie PID 32440)
 - PostgreSQL: 5432 (shared)

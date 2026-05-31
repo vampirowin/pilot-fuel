@@ -11,7 +11,7 @@
 | **Авторизация** | Вход через Pilot API или локальный суперадмин |
 | **Панель управления** | Статистика, счётчики критических, графики (Chart.js) |
 | **Транспорт** | Иерархия Компания → Площадка → Тип ТС с коллапсами, цветные бейджи, поиск, bulk-операции, статус датчика, per-vehicle пороги |
-| **Заправки** | Иерархия Компания → Площадка → Тип ТС → ТС, данные Pilot vs чек, погрешность, статус, сортировка, поиск по номеру |
+| **Заправки** | Иерархия Компания → Площадка → Тип ТС → ТС, данные Pilot vs чек, погрешность, статус, сортировка, поиск по номеру, комментарии, исключение из статистики |
 | **Синхронизация** | Ручная (preview + apply) и автоматическая ежедневная (APScheduler, 03:00 MSK) |
 | **Автосинхронизация** | APScheduler, force-overwrite, перелогин при 401 (если сохранён пароль), логирование в SyncLog с vehicle_updates |
 | **Лог синхронизации** | Таблица с деталями, vehicle-уровень, раскрытие «Подробнее», компания вместо логина |
@@ -23,7 +23,7 @@
 | **Профиль** | Выбор часового пояса (13 российских + основные мировые) |
 | **Фильтры** | По компании (superadmin), площадке, типу ТС, статусу, дате, госномеру |
 | **Разметка «Ложная»** | Отметка ошибочных показаний в модалке |
-| **Пороги точности** | Настраиваемые: норма, предупреждение, критично |
+| **Пороги точности** | Глобальные + per-vehicle override, абсолютная разница (литры), кнопка пересчёта всех записей |
 | **Multi-tenant** | Компании, площадки, роли (superadmin / company_admin / user) |
 | **Блокировка** | Отключение доступа без удаления |
 | **ТС без датчиков** | Отдельная страница с иерархией и bulk-возвратом |
@@ -157,7 +157,7 @@ pilot_refuels      — id, vehicle_id (FK), event_date, amount, start_level, end
 refuel_entries     — id, vehicle_id (FK), pilot_refuel_id (FK), event_date, pilot_amount,
                      actual_amount, receipt_number, source, difference, error_percent,
                      comparison_status, is_false, false_reason, is_deleted, created_by,
-                     comment, created_at, updated_at
+                     comment, exclude_from_stats, created_at, updated_at
 settings           — id, key, value (норма 3%, предупреждение 10%)
 sync_log           — id, vehicle_id, sync_type, status, records_affected, details,
                      details_json (JSONB), created_by, started_at, completed_at
@@ -192,6 +192,7 @@ sync_log           — id, vehicle_id, sync_type, status, records_affected, deta
 | `POST /api/vehicles/bulk-remove-sensor` | Bulk: убрать датчики |
 | `GET/POST /api/vehicles/{id}/thresholds` | Per-vehicle пороги (модалка) |
 | `POST /api/vehicles/{id}/sensor-status` | Смена статуса датчика |
+| `GET /admin/settings/recalculate` | Пересчитать все записи по текущим порогам |
 | `POST /api/refuels/sync/preview` | Предпросмотр синхронизации |
 | `POST /api/refuels/sync/apply` | Применить синхронизацию |
 | `POST /api/refuels/add` | Ручная заправка |
