@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime
 
 import httpx
@@ -7,6 +8,29 @@ PILOT_VEHICLES_URL = "/api/v3/vehicles"
 PILOT_VEHICLE_STATUS_URL = "/api/v3/vehicles/status"
 PILOT_REPORTS_URL = "/backend/ax/reports.php"
 PILOT_SENSOR_DIP_URL = "/api/v3/vehicles/sensors/dip"
+
+_client: httpx.AsyncClient | None = None
+
+
+def _get_client() -> httpx.AsyncClient:
+    global _client
+    if _client is None:
+        _client = httpx.AsyncClient(timeout=120.0)
+    return _client
+
+
+async def _close_client():
+    global _client
+    if _client is not None:
+        await _client.aclose()
+        _client = None
+
+
+async def _log_sync(msg: str):
+    def _write():
+        with open("sync_debug.log", "a") as lf:
+            lf.write(f"[{datetime.now().strftime('%d.%m %H:%M:%S')}] {msg}\n")
+    await asyncio.to_thread(_write)
 
 
 class PilotAuthError(Exception):
@@ -28,13 +52,12 @@ class PilotService:
         headers.setdefault("Content-Type", "application/json")
         headers.setdefault("X-Requested-With", "XMLHttpRequest")
 
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            resp = await client.request(method, f"{self.base_url}{path}", headers=headers, cookies=cookies, **kwargs)
-            with open("sync_debug.log", "a") as lf:
-                lf.write(f"[{datetime.now().strftime('%d.%m %H:%M:%S')}] [request] {method} {path} -> {resp.status_code} ({len(resp.content)} bytes)\n")
-            data = resp.json()
+        client = _get_client()
+        resp = await client.request(method, f"{self.base_url}{path}", headers=headers, cookies=cookies, **kwargs)
+        await _log_sync(f"[request] {method} {path} -> {resp.status_code} ({len(resp.content)} bytes)")
+        data = resp.json()
 
-        if data.get("code") != 0 and not data.get("success"):
+        if data.get("code") != 0 or not data.get("success"):
             raise PilotAuthError(data.get("msg", "Unknown API error"))
         return data
 
@@ -150,14 +173,7 @@ class PilotService:
         events = []
         raw_data = raw.get("data", {})
         if not isinstance(raw_data, dict):
-            with open("sync_debug.log", "a") as lf:
-                lf.write(f"[{datetime.now().strftime('%d.%m %H:%M:%S')}] [parse] data не словарь, а {type(raw_data).__name__}\n")
             return events
-        with open("sync_debug.log", "a") as lf:
-            lf.write(f"[{datetime.now().strftime('%d.%m %H:%M:%S')}] [parse] date_groups={len(raw_data)}\n")
-        for date_group, entries in raw_data.items():
-            with open("sync_debug.log", "a") as lf:
-                lf.write(f"[{datetime.now().strftime('%d.%m %H:%M:%S')}] [parse] группа '{date_group[:50]}...': {'словарь' if isinstance(entries, dict) else 'не словарь'}, ключей={len(entries) if isinstance(entries, dict) else 'N/A'}\n")
             for ts_key, entry in entries.items():
                 if not isinstance(entry, list) or len(entry) < 6:
                     continue

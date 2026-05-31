@@ -29,7 +29,7 @@ function todayStr() { return new Date().toISOString().split('T')[0]; }
 
 function showCustom() { document.getElementById('custom-range').style.display = 'flex'; }
 
-var vehicleMap = { {% for v in all_vehicles %}"{{ v.plate_number or v.name }}":{{ v.id }},{% endfor %} };
+var vehicleMap = { {% for v in all_vehicles %}{{ (v.plate_number or v.name)|tojson }}:{{ v.id }},{% endfor %} };
 
 function searchVehicle(val) {
   var id = vehicleMap[val];
@@ -50,13 +50,13 @@ function setSyncRange(backFrom, backTo) {
 }
 
 document.addEventListener('DOMContentLoaded', function () {
-  var df = '{{ date_from }}';
-  var dt = '{{ date_to }}';
+  var df = {{ date_from|tojson }};
+  var dt = {{ date_to|tojson }};
   document.getElementById('period-date-from').value = df;
   document.getElementById('period-date-to').value = dt;
   var presets = [
-    df + ',' + dt + ':' + 'today_str',
-    df + ',' + dt + ':' + 'days1_str',
+    '{{ today_str }},{{ today_str }}',
+    '{{ days1_str }},{{ days1_str }}',
     '{{ month_start_str }},{{ today_str }}',
     '{{ days7_str }},{{ today_str }}',
     '{{ days14_str }},{{ today_str }}',

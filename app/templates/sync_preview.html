@@ -4,7 +4,7 @@
       <h2>Предпросмотр синхронизации</h2>
       <button type="button" class="modal-close" onclick="this.closest('.modal-overlay').remove()">&times;</button>
     </div>
-    <form hx-post="/api/refuels/sync/apply" hx-target="#modal-container" hx-swap="innerHTML"
+    <form hx-post="/api/refuels/sync/preview" hx-target="#modal-container" hx-swap="innerHTML"
           hx-on::after-request="if(event.detail.successful && event.detail.xhr.response) { setTimeout(function(){ location.reload() }, 1500) }">
       <div class="modal-body">
         <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">

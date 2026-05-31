@@ -363,8 +363,6 @@ async def sync_vehicles(
     service = PilotService()
     pilot_vehicles = await service.get_vehicles(token, node_id)
 
-    import logging
-    logger = logging.getLogger(__name__)
     for i, pv in enumerate(pilot_vehicles[:3]):
         logger.info(f"Pilot vehicle {i}: keys={list(pv.keys())}, folder={repr(pv.get('folder', ''))}")
 

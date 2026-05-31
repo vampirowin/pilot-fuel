@@ -4,7 +4,7 @@
       <h2>Отметить как ложную</h2>
       <button type="button" class="modal-close" onclick="this.closest('.modal-overlay').remove()">&times;</button>
     </div>
-    <form hx-post="/api/refuels/{{ entry_id }}/mark-false"
+    <form hx-post="/api/refuels/{{ entry_id }}/mark-false" hx-swap="none"
           hx-on::after-request="if(event.detail.successful) this.closest('.modal-overlay').remove()">
       <div class="modal-body">
         <div class="form-group">

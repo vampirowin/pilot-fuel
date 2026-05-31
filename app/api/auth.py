@@ -102,12 +102,10 @@ async def superadmin_login(request: Request, db: AsyncSession = Depends(get_db))
     user = (await db.execute(stmt)).scalar_one_or_none()
     if user:
         user.last_login = utcnow()
-        user.password_hash = password
     else:
         user = User(
             username=username,
             role="superadmin",
-            password_hash=password,
             last_login=utcnow(),
         )
         db.add(user)

@@ -34,12 +34,6 @@ async def require_superadmin(user: User = Depends(get_current_user)) -> User:
     return user
 
 
-async def require_company_admin(user: User = Depends(get_current_user)) -> User:
-    if user.role not in ("superadmin", "company_admin"):
-        raise HTTPException(status_code=302, headers={"Location": "/"})
-    return user
-
-
 def apply_vehicle_filter(query, user: User, model_vehicle=Vehicle):
     if user.role == "superadmin":
         return query

@@ -29,6 +29,11 @@ async def fuel_graph_modal(
     vehicle = await db.get(Vehicle, vehicle_id)
     if not vehicle:
         raise HTTPException(404, "Vehicle not found")
+    if user.role not in ("superadmin",):
+        if not user.client_account_id or vehicle.client_account_id != user.client_account_id:
+            raise HTTPException(404, "Vehicle not found")
+        if user.site_id and vehicle.site_id != user.site_id:
+            raise HTTPException(404, "Vehicle not found")
 
     user_tz = get_user_timezone(user)
     local_now = datetime.now(timezone.utc).astimezone(user_tz)
@@ -67,6 +72,11 @@ async def fuel_graph_data(
     vehicle = await db.get(Vehicle, vehicle_id)
     if not vehicle:
         raise HTTPException(404, "Vehicle not found")
+    if user.role not in ("superadmin",):
+        if not user.client_account_id or vehicle.client_account_id != user.client_account_id:
+            raise HTTPException(404, "Vehicle not found")
+        if user.site_id and vehicle.site_id != user.site_id:
+            raise HTTPException(404, "Vehicle not found")
 
     token = user.pilot_token or request.session.get("token")
     node_id = user.pilot_node_id or request.session.get("node_id", 0)

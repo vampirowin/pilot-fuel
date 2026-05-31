@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request, Depends, HTTPException, Path, Form, Query
+from fastapi import APIRouter, Request, Depends, HTTPException, Path, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select, or_
@@ -15,10 +15,6 @@ from app.services.pilot_service import PilotService
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
-
-
-def has_admin_access(request: Request) -> bool:
-    return request.session.get("role") in ("superadmin", "company_admin")
 
 
 # ─── Companies ────────────────────────────────────────────────────
@@ -208,10 +204,6 @@ async def delete_site(
     site = await db.get(Site, site_id)
     if not site or site.client_account_id != company_id:
         raise HTTPException(404)
-    (await db.execute(select(Vehicle).where(Vehicle.site_id == site_id))).scalars().all()
-    await db.execute(
-        select(Vehicle).where(Vehicle.site_id == site_id)
-    )
     stmt = select(Vehicle).where(Vehicle.site_id == site_id)
     vehicles = (await db.execute(stmt)).scalars().all()
     for v in vehicles:

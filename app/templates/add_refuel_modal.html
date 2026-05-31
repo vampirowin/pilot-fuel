@@ -4,7 +4,7 @@
       <h2>Добавить заправку</h2>
       <button type="button" class="modal-close" onclick="this.closest('.modal-overlay').remove()">&times;</button>
     </div>
-    <form hx-post="/api/refuels/add"
+    <form hx-post="/api/refuels/add" hx-swap="none"
           hx-on::after-request="if(event.detail.successful) this.closest('.modal-overlay').remove()">
       <div class="modal-body">
         <div class="form-group">

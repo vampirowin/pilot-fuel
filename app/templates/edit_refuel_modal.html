@@ -4,7 +4,7 @@
       <h2>Редактировать заправку</h2>
       <button type="button" class="modal-close" onclick="this.closest('.modal-overlay').remove()">&times;</button>
     </div>
-    <form hx-post="/api/refuels/{{ entry.id }}/edit"
+    <form hx-post="/api/refuels/{{ entry.id }}/edit" hx-swap="none"
           hx-on::after-request="if(event.detail.successful) this.closest('.modal-overlay').remove()"
           onsubmit="var v=this.querySelector('[name=actual_amount]').value; if(v==='' && !confirm('Объём по чеку будет очищен. Продолжить?')) return false;">
       <div class="modal-body">
