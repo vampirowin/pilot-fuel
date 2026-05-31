@@ -241,7 +241,18 @@ async def vehicles_page(
     out = [build_vehicle_dict(v, companies.get(v.client_account_id, ""), sites.get(v.site_id, "")) for v in db_vehicles]
     is_su = user.role == "superadmin"
     is_ca = user.role == "company_admin"
-    return HTMLResponse(render_table_partial(out, is_su, is_ca))
+
+    is_hx = request.headers.get("hx-request") == "true"
+    is_boosted = request.headers.get("hx-boosted") == "true"
+    if is_hx and not is_boosted:
+        return HTMLResponse(render_table_partial(out, is_su, is_ca))
+
+    return templates.TemplateResponse(request, "vehicles.html", {
+        "nested_groups": build_nested_groups(out),
+        "is_superadmin": is_su,
+        "is_company_admin": is_ca,
+        "plate": plate,
+    })
 
 
 @router.get("/api/vehicles/{vehicle_id}/thresholds", response_class=HTMLResponse)
