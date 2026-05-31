@@ -135,7 +135,7 @@ def _render_vehicle_group(vehicle_id: int, entries: list, vmap: dict, page: int 
     add_btn = f'<button class="btn btn-sm btn-secondary" hx-get="/api/refuels/add-form?vehicle_id={vehicle_id}&page={page}&date_from={date_from}&date_to={date_to}" hx-target="#modal-container" hx-swap="innerHTML">+ Добавить</button>'
     graph_btn = f'<button class="btn btn-sm btn-secondary" hx-get="/api/fuel-graph/modal?vehicle_id={vehicle_id}&imei={imei_val}" hx-target="#modal-container" hx-swap="innerHTML">График</button>'
     gid = f"vg-{vehicle_id}"
-    h = f'<div class="card vehicle-group"><div class="vehicle-group-title collapsible-header" onclick="toggleGroup(\'{gid}\')"><span class="arrow">&#9660;</span><span>{plate} <span class="vehicle-group-count">{len(entries)}</span></span>{graph_btn}{add_btn}</div><div class="collapsible-body" id="{gid}"><div class="table-container"><table><thead><tr><th>Дата</th><th>Pilot (л)</th><th>Чек (л)</th><th>Разница</th><th>Погрешность</th><th>Статус</th><th>Действия</th></tr></thead><tbody>'
+    h = f'<div class="card vehicle-group"><div class="vehicle-group-title collapsible-header" onclick="toggleGroup(\'{gid}\')"><span class="arrow">&#9660;</span><span>{plate} <span class="vehicle-group-count">{len(entries)}</span></span>{graph_btn}{add_btn}</div><div class="collapsible-body" id="{gid}"><div class="table-container"><table><thead><tr><th>Дата</th><th>Pilot (л)</th><th>Чек (л)</th><th>Разница</th><th>Погрешность</th><th>Статус</th><th>Прим.</th><th>Действия</th></tr></thead><tbody>'
     for e in entries:
         rc = ' class="row-false"' if e.is_false else ""
         if e.is_false:
@@ -159,18 +159,27 @@ def _render_vehicle_group(vehicle_id: int, entries: list, vmap: dict, page: int 
             title_attr = f' title="Добавил: {e.created_by}, {created_at_str}"'
         elif e.created_at:
             title_attr = f' title="Создано: {created_at_str}"'
+        if e.comment:
+            title_attr += f' title="Примечание: {html.escape(e.comment)}"'
         actions = f'<button class="btn btn-sm btn-secondary" hx-get="/api/refuels/{e.id}/edit?page={page}&date_from={date_from}&date_to={date_to}" hx-target="#modal-container" hx-swap="innerHTML">Правка</button>'
         date_ymd = format_dt(e.event_date, "%Y-%m-%d", user) if e.event_date else ""
-        h += f"<tr{rc}{title_attr}><td data-label=\"Дата\" style=\"cursor:pointer;text-decoration:underline dotted #888\" hx-get=\"/api/fuel-graph/modal?vehicle_id={vehicle_id}&imei={imei_val}&date_from={date_ymd}&date_to={date_ymd}\" hx-target=\"#modal-container\" hx-swap=\"innerHTML\">{ds}</td><td data-label=\"Pilot\">{pa}</td><td data-label=\"Чек\">{aa}</td><td data-label=\"Разница\">{df}</td><td data-label=\"Погрешность\">{er}</td><td data-label=\"Статус\"><span class=\"status-badge {sc}\">{sl}</span></td><td>{actions}</td></tr>"
+        note_cell = ""
+        if e.exclude_from_stats:
+            note_cell = '<span style="color:var(--orange);font-size:12px" title="Не учитывается в статистике">⊘</span>'
+        if e.comment:
+            note_cell += f'<span style="color:var(--text-dim);font-size:11px;cursor:help;border-bottom:1px dotted var(--text-dim)" title="{html.escape(e.comment)}">прим.</span>'
+        h += f"<tr{rc}{title_attr}><td data-label=\"Дата\" style=\"cursor:pointer;text-decoration:underline dotted #888\" hx-get=\"/api/fuel-graph/modal?vehicle_id={vehicle_id}&imei={imei_val}&date_from={date_ymd}&date_to={date_ymd}\" hx-target=\"#modal-container\" hx-swap=\"innerHTML\">{ds}</td><td data-label=\"Pilot\">{pa}</td><td data-label=\"Чек\">{aa}</td><td data-label=\"Разница\">{df}</td><td data-label=\"Погрешность\">{er}</td><td data-label=\"Статус\"><span class=\"status-badge {sc}\">{sl}</span></td><td data-label=\"Прим.\" style=\"font-size:13px\">{note_cell}</td><td>{actions}</td></tr>"
 
+    stats_entries = [e for e in entries if not e.is_false and not e.exclude_from_stats]
     real_entries = [e for e in entries if not e.is_false]
 
-    total_pilot = sum(e.pilot_amount or 0 for e in real_entries)
-    total_actual = sum(e.actual_amount or 0 for e in real_entries)
+    total_pilot = sum(e.pilot_amount or 0 for e in stats_entries)
+    total_actual = sum(e.actual_amount or 0 for e in stats_entries)
     df_total = total_actual - total_pilot
     err_pct = abs(df_total) / total_pilot * 100 if total_pilot > 0 else None
 
     false_count = sum(1 for e in entries if e.is_false)
+    excluded_count = sum(1 for e in entries if e.exclude_from_stats and not e.is_false)
     if not real_entries:
         overall_sc = "status-false-reading"
         overall_sl = "Ложная"
@@ -188,9 +197,14 @@ def _render_vehicle_group(vehicle_id: int, entries: list, vmap: dict, page: int 
         overall_sl = "Недопустимо"
 
     footer_label = "Итого"
+    parts = []
     if false_count:
-        footer_label += f" ({false_count} ложн. не учтены)"
-    h += f'<tfoot class="vehicle-group-tfoot"><tr><td data-label=""><strong>{footer_label}</strong></td><td data-label="Pilot"><strong>{total_pilot:.1f}</strong></td><td data-label="Чек"><strong>{total_actual:.1f}</strong></td><td data-label="Разница"><strong>{df_total:.1f}</strong></td><td data-label="Погрешность"><strong>{f"{err_pct:.1f}%" if err_pct is not None else "—"}</strong></td><td data-label="Статус"><span class="status-badge {overall_sc}">{overall_sl}</span></td><td></td></tr></tfoot>'
+        parts.append(f"{false_count} ложн.")
+    if excluded_count:
+        parts.append(f"{excluded_count} искл.")
+    if parts:
+        footer_label += " (" + ", ".join(parts) + " не учтены)"
+    h += f'<tfoot class="vehicle-group-tfoot"><tr><td data-label=""><strong>{footer_label}</strong></td><td data-label="Pilot"><strong>{total_pilot:.1f}</strong></td><td data-label="Чек"><strong>{total_actual:.1f}</strong></td><td data-label="Разница"><strong>{df_total:.1f}</strong></td><td data-label="Погрешность"><strong>{f"{err_pct:.1f}%" if err_pct is not None else "—"}</strong></td><td data-label="Статус"><span class="status-badge {overall_sc}">{overall_sl}</span></td><td></td><td></td></tr></tfoot>'
     h += "</tbody></table></div></div></div>"
     return h
 
@@ -1077,6 +1091,8 @@ async def edit_refuel(
     db: AsyncSession = Depends(get_db),
     actual_amount: str = Form(default=""),
     receipt_number: str = Form(default=""),
+    comment: str = Form(default=""),
+    exclude_from_stats: str = Form(default=""),
 ):
     actual_amount_val = float(actual_amount) if actual_amount.strip() else None
     entry = await db.get(RefuelEntry, entry_id)
@@ -1092,6 +1108,8 @@ async def edit_refuel(
     n_pct, w_pct, n_abs, w_abs, enable_abs = await _get_effective_thresholds(db, entry.vehicle_id)
     entry.actual_amount = actual_amount_val
     entry.receipt_number = receipt_number or None
+    entry.comment = comment.strip() or None
+    entry.exclude_from_stats = exclude_from_stats == "1"
 
     pilot_amount = entry.pilot_amount
     if entry.pilot_refuel_id and pilot_amount is not None:

@@ -36,6 +36,14 @@
           <label>Номер чека</label>
           <input type="text" name="receipt_number" value="{{ entry.receipt_number or '' }}" placeholder="необязательно">
         </div>
+        <div class="form-group">
+          <label>Примечание</label>
+          <textarea name="comment" rows="2" placeholder="Комментарий к заправке..." style="width:100%;resize:vertical">{{ entry.comment or '' }}</textarea>
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;margin-top:8px;cursor:pointer;font-size:14px">
+          <input type="checkbox" name="exclude_from_stats" value="1" {% if entry.exclude_from_stats %}checked{% endif %}>
+          Не учитывать в статистике
+        </label>
         {% if entry.is_false %}
         <div class="form-group" style="margin-top:12px;padding:10px;background:#fef3cd;border-radius:6px;border:1px solid #ffc107">
           <strong style="color:#856404">Отмечено как ложная</strong>
