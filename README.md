@@ -144,7 +144,7 @@ pilot-fuel/
 ```
 client_accounts    — id, name
 sites              — id, client_account_id (FK), name
-users              — id, username, role, pilot_token, pilot_node_id, pilot_password,
+users              — id, username, full_name, role, pilot_token, pilot_node_id, pilot_password,
                      client_account_id (FK), site_id (FK), is_active, timezone
 vehicles           — id, pilot_agent_id, imei, plate_number, name, folder,
                      sensor_count, has_fuel_sensor, sensor_status,

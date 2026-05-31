@@ -11,6 +11,10 @@
       <input type="text" class="form-input" value="{{ user.username }}" disabled style="opacity:.7">
     </div>
     <div class="form-group">
+      <label for="full_name">ФИО</label>
+      <input type="text" id="full_name" name="full_name" class="form-input" value="{{ user.full_name or '' }}" placeholder="Иванов Иван Иванович">
+    </div>
+    <div class="form-group">
       <label>Роль</label>
       <input type="text" class="form-input" value="{{ {'superadmin': 'Администратор', 'company_admin': 'Админ компании', 'user': 'Пользователь'}.get(user.role, user.role) }}" disabled style="opacity:.7">
     </div>

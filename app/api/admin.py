@@ -377,6 +377,7 @@ async def edit_user(
     user_id: int = Path(...),
     _=Depends(require_superadmin),
     db: AsyncSession = Depends(get_db),
+    full_name: str = Form(default=""),
     role: str = Form(...),
     client_account_id: int = Form(default=0),
     site_id: int = Form(default=0),
@@ -385,6 +386,7 @@ async def edit_user(
     target = await db.get(User, user_id)
     if not target:
         raise HTTPException(404)
+    target.full_name = full_name.strip() or None
     target.role = role
     target.client_account_id = client_account_id if client_account_id > 0 else None
     target.site_id = site_id if site_id > 0 else None

@@ -150,6 +150,8 @@ async def profile_save(
             pass
     else:
         user.timezone = None
+    full_name = form.get("full_name", "").strip()
+    user.full_name = full_name or None
     await db.commit()
     ru_zones, other_zones = get_timezone_choices()
     return templates.TemplateResponse(request, "profile.html", {

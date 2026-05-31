@@ -22,7 +22,8 @@
 ```
 client_accounts    — id, name, created_at
 sites              — id, client_account_id (FK), name, created_at
-users              — id, username, role {superadmin|company_admin|user},
+users              — id, username, full_name,
+                     role {superadmin|company_admin|user},
                      pilot_token?, pilot_node_id?, password_hash?,
                      client_account_id (FK), site_id (FK)
 vehicles           — id, pilot_agent_id, imei, plate_number, name, folder,
@@ -321,6 +322,15 @@ pilot-fuel/
 - **Поиск на ТС** — перестал работать из-за отсутствия роута `/api/vehicles/search`. Добавлен `search_url="/vehicles"` в контекст шаблона
 - **Поиск на Критических** — заменён на `.search-bar-compact` с иконкой (как на ТС), убрана белая тема
 - **Дата → график на Критических** — клик по дате открывает график топлива за этот день (как в Заправках)
+
+### 2026-06-01 — Full_name field + display in tooltips
+
+- Добавлено поле `full_name` (String 200, nullable) в модель `User`
+- Миграция `09e47dc17a1d_add_full_name_to_users`
+- Страница профиля: поле «ФИО» (редактируется)
+- Админка пользователей: поле «ФИО» (редактируется суперадмином)
+- В таблице заправок тултип «Добавил:» теперь показывает ФИО (если есть), иначе логин
+- Для этого в `refuels_page` и `sync_refuels` строится `user_names = {username: full_name or username}`, пробрасывается через `_render_refuel_hierarchy` / `_list_html` → `_render_vehicle_group`
 
 ## Ports
 - UI fuel: **9001** (9000 занят zombie PID 32440)

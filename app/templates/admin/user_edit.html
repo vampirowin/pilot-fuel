@@ -8,6 +8,10 @@
 <div class="card">
   <form method="POST" style="max-width:500px">
     <div class="form-group">
+      <label for="full_name">ФИО</label>
+      <input type="text" id="full_name" name="full_name" class="form-input" value="{{ target.full_name or '' }}" placeholder="Иванов Иван Иванович">
+    </div>
+    <div class="form-group">
       <label for="role">Роль</label>
       <select id="role" name="role" required>
         <option value="user" {{ 'selected' if target.role == 'user' else '' }}>Пользователь</option>

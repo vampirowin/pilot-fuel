@@ -93,7 +93,7 @@ def build_refuel_hierarchy(entries: list, vmap: dict) -> list:
     return result
 
 
-def _render_refuel_hierarchy(nested_groups: list, vmap: dict, user, page: int = 1, date_from: str = "", date_to: str = "", n_th: float = 3.0, w_th: float = 10.0) -> str:
+def _render_refuel_hierarchy(nested_groups: list, vmap: dict, user, page: int = 1, date_from: str = "", date_to: str = "", n_th: float = 3.0, w_th: float = 10.0, user_names: dict | None = None) -> str:
     if not nested_groups:
         return '<div class="card"><div class="empty-state"><p>Нет заправок.</p></div></div>'
     html = ""
@@ -108,7 +108,7 @@ def _render_refuel_hierarchy(nested_groups: list, vmap: dict, user, page: int = 
             if sname == "__flat__":
                 for fname, ftotal, vehicles_list in folders:
                     for vid, plate, entries in vehicles_list:
-                        html += _render_vehicle_group(vid, entries, vmap, page, date_from, date_to, user, n_th, w_th)
+                        html += _render_vehicle_group(vid, entries, vmap, page, date_from, date_to, user, n_th, w_th, user_names)
             else:
                 sid = f"rs-{cidx}-{sidx}"
                 html += f'<div class="card level-site" style="margin-top:8px"><div class="card-header collapsible-header" onclick="toggleGroup(\'{sid}\')"><span class="arrow">&#9660;</span><span class="level-badge level-badge-site">{sname}</span><span class="level-count">{stotal}</span></div><div class="collapsible-body" id="{sid}">'
@@ -117,19 +117,19 @@ def _render_refuel_hierarchy(nested_groups: list, vmap: dict, user, page: int = 
                     fidx += 1
                     if fname == "__flat__":
                         for vid, plate, entries in vehicles_list:
-                            html += _render_vehicle_group(vid, entries, vmap, page, date_from, date_to, user, n_th, w_th)
+                            html += _render_vehicle_group(vid, entries, vmap, page, date_from, date_to, user, n_th, w_th, user_names)
                     else:
                         fid = f"rf-{cidx}-{sidx}-{fidx}"
                         html += f'<div class="level-folder" style="margin:4px 0;border:1px solid var(--border);border-radius:6px"><div class="collapsible-header" onclick="toggleGroup(\'{fid}\')"><span class="arrow">&#9660;</span><span class="level-badge level-badge-folder">{fname}</span><span class="level-count">{ftotal}</span></div><div class="collapsible-body" id="{fid}">'
                         for vid, plate, entries in vehicles_list:
-                            html += _render_vehicle_group(vid, entries, vmap, page, date_from, date_to, user, n_th, w_th)
+                            html += _render_vehicle_group(vid, entries, vmap, page, date_from, date_to, user, n_th, w_th, user_names)
                         html += '</div></div>'
                 html += '</div></div>'
         html += '</div></div>'
     return html
 
 
-def _render_vehicle_group(vehicle_id: int, entries: list, vmap: dict, page: int = 1, date_from: str = "", date_to: str = "", user = None, n_th: float = 3.0, w_th: float = 10.0) -> str:
+def _render_vehicle_group(vehicle_id: int, entries: list, vmap: dict, page: int = 1, date_from: str = "", date_to: str = "", user = None, n_th: float = 3.0, w_th: float = 10.0, user_names: dict | None = None) -> str:
     plate = vmap.get(vehicle_id, {}).get("plate_number", "—")
     imei_val = vmap.get(vehicle_id, {}).get("imei", "")
     add_btn = f'<button class="btn btn-sm btn-secondary" hx-get="/api/refuels/add-form?vehicle_id={vehicle_id}&page={page}&date_from={date_from}&date_to={date_to}" hx-target="#modal-container" hx-swap="innerHTML">+ Добавить</button>'
@@ -152,11 +152,13 @@ def _render_vehicle_group(vehicle_id: int, entries: list, vmap: dict, page: int 
         title_attr = ""
         created_at_str = format_dt(e.created_at, "%d.%m.%Y %H:%M", user) if e.created_at else ""
         if e.source == "manual" and e.created_by:
-            title_attr = f' title="Добавил: {e.created_by}, {created_at_str}"'
+            display = (user_names or {}).get(e.created_by, e.created_by)
+            title_attr = f' title="Добавил: {display}, {created_at_str}"'
         elif e.source == "pilot_sync":
             title_attr = f' title="Синхронизировано из Pilot, {created_at_str}"'
         elif e.created_by:
-            title_attr = f' title="Добавил: {e.created_by}, {created_at_str}"'
+            display = (user_names or {}).get(e.created_by, e.created_by)
+            title_attr = f' title="Добавил: {display}, {created_at_str}"'
         elif e.created_at:
             title_attr = f' title="Создано: {created_at_str}"'
         if e.comment:
@@ -220,13 +222,13 @@ def _pagination_html(page: int, total: int, qs: str) -> str:
     return f'<div class="pagination"><button class="chip {prev_d}" hx-get="{prev_url}" hx-target="#refuels-list" hx-push-url="true" {prev_d}>← Назад</button><span>стр. {page} из {total}</span><button class="chip {next_d}" hx-get="{next_url}" hx-target="#refuels-list" hx-push-url="true" {next_d}>Вперед →</button></div>'
 
 
-def _list_html(grouped: list, vmap: dict, page: int, total: int, qs: str, date_from: str = "", date_to: str = "", user = None, n_th: float = 3.0, w_th: float = 10.0) -> str:
+def _list_html(grouped: list, vmap: dict, page: int, total: int, qs: str, date_from: str = "", date_to: str = "", user = None, n_th: float = 3.0, w_th: float = 10.0, user_names: dict | None = None) -> str:
     if not grouped:
         return '<div class="card"><div class="empty-state"><p>Нет заправок.</p></div></div>'
     start = (page - 1) * PER_PAGE
     h = ""
     for vid, entries in grouped[start:start + PER_PAGE]:
-        h += _render_vehicle_group(vid, entries, vmap, page, date_from, date_to, user, n_th, w_th)
+        h += _render_vehicle_group(vid, entries, vmap, page, date_from, date_to, user, n_th, w_th, user_names)
     h += _pagination_html(page, total, qs)
     return h
 
@@ -335,8 +337,10 @@ async def refuels_page(
     page_entries = [e for _, ve in page_groups for e in ve]
 
     n_th, w_th, _, _, _ = await _get_effective_thresholds(db)
+    users_db = (await db.execute(select(User))).scalars().all()
+    user_names = {u.username: u.full_name or u.username for u in users_db}
     nested = build_refuel_hierarchy(page_entries, vmap)
-    rendered = _render_refuel_hierarchy(nested, vmap, user, page, df_str, dt_str, n_th, w_th)
+    rendered = _render_refuel_hierarchy(nested, vmap, user, page, df_str, dt_str, n_th, w_th, user_names)
 
     qparts = {}
     if vehicle_id:
@@ -611,7 +615,9 @@ async def sync_refuels(
         qparts["vehicle_id"] = vehicle_id
     qs = "&".join(f"{k}={v}" for k, v in qparts.items())
     n_th, w_th, _, _, _ = await _get_effective_thresholds(db)
-    html = _list_html(grouped, vmap, 1, total_pages, qs, qf, qt, user, n_th, w_th)
+    users_db = (await db.execute(select(User))).scalars().all()
+    user_names = {u.username: u.full_name or u.username for u in users_db}
+    html = _list_html(grouped, vmap, 1, total_pages, qs, qf, qt, user, n_th, w_th, user_names)
 
     if total_new:
         html += f'<div class="toast toast-success">Загружено {total_new} заправок</div>'
