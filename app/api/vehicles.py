@@ -252,6 +252,8 @@ async def vehicles_page(
         "is_superadmin": is_su,
         "is_company_admin": is_ca,
         "plate": plate,
+        "search_url": "/vehicles",
+        "search_target": "#vehicles-table",
     })
 
 

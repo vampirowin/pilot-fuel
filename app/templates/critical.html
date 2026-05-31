@@ -9,17 +9,22 @@
   </div>
 </div>
 
-<div class="card" style="margin-bottom:16px">
-  <div class="card-body" style="padding:12px 16px">
-    <div class="filter-row" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-      <input type="text" id="plate-search" name="plate_search" placeholder="Поиск по госномеру..." value="{{ plate_search }}" class="form-input" style="flex:1;min-width:200px"
-        hx-get="/critical"
-        hx-trigger="keyup changed delay:400ms"
-        hx-target="#critical-groups"
-        hx-push-url="true">
-      <button class="btn btn-secondary" onclick="document.getElementById('plate-search').value=''; document.getElementById('plate-search').dispatchEvent(new Event('keyup'))">Сбросить</button>
-    </div>
-  </div>
+<div class="search-bar search-bar-compact" style="margin-bottom:16px">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;color:var(--text-dim)"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+  <input
+    type="text"
+    id="plate-search"
+    name="plate_search"
+    placeholder="Поиск по госномеру..."
+    value="{{ plate_search }}"
+    hx-get="/critical"
+    hx-trigger="keyup changed delay:400ms, search"
+    hx-target="#critical-groups"
+    hx-push-url="true"
+    autocomplete="off">
+  {% if plate_search %}
+  <a href="/critical" class="btn btn-sm btn-secondary" style="flex-shrink:0;">Сбросить</a>
+  {% endif %}
 </div>
 
 <div id="critical-groups">
