@@ -12,7 +12,7 @@
 <div class="card" style="margin-bottom:16px">
   <div class="card-body" style="padding:12px 16px">
     <div class="filter-row" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-      <input type="text" id="plate-search" name="plate_search" placeholder="Поиск по госномеру..." value="{{ plate_search }}" style="flex:1;min-width:200px"
+      <input type="text" id="plate-search" name="plate_search" placeholder="Поиск по госномеру..." value="{{ plate_search }}" class="form-input" style="flex:1;min-width:200px"
         hx-get="/critical"
         hx-trigger="keyup changed delay:400ms"
         hx-target="#critical-groups"
@@ -51,7 +51,7 @@
               {% set class_map = {'normal': 'status-normal', 'small_deviation': 'status-small-deviation', 'unacceptable': 'status-unacceptable', 'pilot_missing': 'status-pilot-missing', 'false_reading': 'status-false-reading'} %}
               {% set label_map = {'normal': 'Норма', 'small_deviation': 'Расхождение', 'unacceptable': 'Недопустимо', 'pilot_missing': 'Нет в Pilot', 'false_reading': 'Ложная'} %}
               <tr>
-                <td data-label="Дата">{{ e.event_date.strftime('%d.%m.%Y %H:%M') }}</td>
+                <td data-label="Дата" style="cursor:pointer;text-decoration:underline dotted #888" hx-get="/api/fuel-graph/modal?vehicle_id={{ e.vehicle_id }}&imei={{ v.imei or '' }}&date_from={{ e.event_date.strftime('%Y-%m-%d') if e.event_date else '' }}&date_to={{ e.event_date.strftime('%Y-%m-%d') if e.event_date else '' }}" hx-target="#modal-container" hx-swap="innerHTML">{{ e.event_date.strftime('%d.%m.%Y %H:%M') }}</td>
                 <td data-label="Pilot">{{ '%.1f'|format(e.pilot_amount) if e.pilot_amount is not none else '—' }}</td>
                 <td data-label="Чек">{{ '%.1f'|format(e.actual_amount) if e.actual_amount is not none else '—' }}</td>
                 <td data-label="Разница">{{ '%.1f'|format(e.difference) if e.difference is not none else '—' }}</td>

@@ -117,10 +117,13 @@ def _render_critical_groups(sorted_groups: list, vmap: dict) -> str:
             df = f"{e.difference:.1f}" if e.difference is not None else "—"
             er = f"{e.error_percent:.1f}%" if e.error_percent is not None else "—"
             ds = e.event_date.strftime("%d.%m.%Y %H:%M") if e.event_date else "—"
+            date_ymd = e.event_date.strftime("%Y-%m-%d") if e.event_date else ""
+            imei_val = v.imei if v and v.imei else ""
             sc = class_map.get(e.comparison_status, "")
             sl = label_map.get(e.comparison_status, e.comparison_status or "—")
             actions = f'<button class="btn btn-sm btn-secondary" hx-get="/api/refuels/{e.id}/edit" hx-target="#modal-container" hx-swap="innerHTML">Правка</button>'
-            h += f"<tr><td data-label=\"Дата\">{ds}</td><td data-label=\"Pilot\">{pa}</td><td data-label=\"Чек\">{aa}</td><td data-label=\"Разница\">{df}</td><td data-label=\"Погрешность\">{er}</td><td data-label=\"Статус\"><span class=\"status-badge {sc}\">{sl}</span></td><td>{actions}</td></tr>"
+            date_link = f'hx-get="/api/fuel-graph/modal?vehicle_id={e.vehicle_id}&imei={imei_val}&date_from={date_ymd}&date_to={date_ymd}" hx-target="#modal-container" hx-swap="innerHTML"'
+            h += f"<tr><td data-label=\"Дата\" style=\"cursor:pointer;text-decoration:underline dotted #888\" {date_link}>{ds}</td><td data-label=\"Pilot\">{pa}</td><td data-label=\"Чек\">{aa}</td><td data-label=\"Разница\">{df}</td><td data-label=\"Погрешность\">{er}</td><td data-label=\"Статус\"><span class=\"status-badge {sc}\">{sl}</span></td><td>{actions}</td></tr>"
         h += "</tbody></table></div></div></div>"
     return h
 
