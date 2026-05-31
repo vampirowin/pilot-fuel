@@ -207,8 +207,7 @@ var fg = (function() {
     }).filter(Boolean);
 
     var dbRefuelSegments = dbRefuels.map(function(ev) {
-      if (ev.actual_amount === null || ev.actual_amount === undefined) return null;
-      var ts = ev.ts || 0, amount = ev.actual_amount || 0;
+      var ts = ev.ts || 0, amount = ev.actual_amount || ev.pilot_amount || 0;
       if (amount <= 0) return null;
       var idx = findNearestIdx(ts, dip, maxDist);
       return idx >= 0 ? { ts: ts, amount: amount, dipIdx: idx, source: ev.source || 'manual' } : null;
@@ -343,17 +342,27 @@ var fg = (function() {
               ctx2.restore();
             });
 
-            // DB refuel orange diamonds at top
+            // DB refuel orange dots at level position
             mergedDbRefuels.forEach(function(seg) {
               var x = xAxis.getPixelForValue(seg.dipIdx);
               if (isNaN(x)) return;
+              var levelVal = dip[seg.dipIdx] ? dip[seg.dipIdx].val : null;
+              if (levelVal === null || levelVal === undefined) return;
+              var y = yAxis.getPixelForValue(levelVal);
               ctx2.save();
+              // filled orange circle
+              ctx2.beginPath();
+              ctx2.arc(x, y, 6, 0, 2 * Math.PI);
               ctx2.fillStyle = colorOrange;
-              ctx2.font = 'bold 14px sans-serif';
+              ctx2.fill();
+              ctx2.strokeStyle = '#fff';
+              ctx2.lineWidth = 2;
+              ctx2.stroke();
+              // volume label above dot
+              ctx2.fillStyle = colorOrange;
+              ctx2.font = 'bold 11px sans-serif';
               ctx2.textAlign = 'center';
-              ctx2.fillText('\u25C6', x, yAxis.top + 8);
-              ctx2.font = '10px sans-serif';
-              ctx2.fillText((seg.amount || 0).toFixed(0) + 'л', x, yAxis.top + 24);
+              ctx2.fillText((seg.amount || 0).toFixed(0) + 'л', x, y - 10);
               ctx2.restore();
             });
 
