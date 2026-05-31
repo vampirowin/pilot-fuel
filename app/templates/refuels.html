@@ -29,6 +29,16 @@ function todayStr() { return new Date().toISOString().split('T')[0]; }
 
 function showCustom() { document.getElementById('custom-range').style.display = 'flex'; }
 
+function goMonth(val) {
+  if (!val) return;
+  var parts = val.split('-');
+  var y = parseInt(parts[0]), m = parseInt(parts[1]);
+  var from = val + '-01';
+  var last = new Date(y, m, 0).getDate();
+  var to = val + '-' + (last < 10 ? '0' : '') + last;
+  goDate(from, to);
+}
+
 var vehicleMap = { {% for v in all_vehicles %}{{ (v.plate_number or v.name)|tojson }}:{{ v.id }},{% endfor %} };
 
 function searchVehicle(val) {
@@ -57,7 +67,7 @@ document.addEventListener('DOMContentLoaded', function () {
   var presets = [
     '{{ today_str }},{{ today_str }}',
     '{{ days1_str }},{{ days1_str }}',
-    '{{ month_start_str }},{{ today_str }}',
+    '{{ month_start_str }},{{ month_end_str }}',
     '{{ days7_str }},{{ today_str }}',
     '{{ days14_str }},{{ today_str }}',
     '{{ days30_str }},{{ today_str }}',
@@ -100,11 +110,12 @@ document.body.addEventListener('refuelsChanged', function() {
   <div class="period-chips">
     <button type="button" class="chip{% if date_from == date_to and date_from == today_str %} active{% endif %}" onclick="goDate(todayStr(), todayStr())">Сегодня</button>
     <button type="button" class="chip{% if date_from == date_to and date_from == days1_str %} active{% endif %}" onclick="goDate(daysAgo(1), daysAgo(1))">Вчера</button>
-    <button type="button" class="chip{% if date_from == month_start_str and date_to == today_str %} active{% endif %}" onclick="goDate('{{ month_start_str }}', todayStr())">Месяц</button>
+    <button type="button" class="chip{% if date_from == month_start_str and date_to == month_end_str %} active{% endif %}" onclick="goDate('{{ month_start_str }}', '{{ month_end_str }}')">Месяц</button>
     <button type="button" class="chip{% if date_from == days7_str and date_to == today_str %} active{% endif %}" onclick="goDate(daysAgo(7), todayStr())">7 дней</button>
     <button type="button" class="chip{% if date_from == days14_str and date_to == today_str %} active{% endif %}" onclick="goDate(daysAgo(14), todayStr())">14 дней</button>
     <button type="button" class="chip{% if date_from == days30_str and date_to == today_str %} active{% endif %}" onclick="goDate(daysAgo(30), todayStr())">30 дней</button>
     <button type="button" class="chip chip-custom" onclick="showCustom()">Свой</button>
+    <input type="month" class="chip" id="month-picker" value="{{ picker_month }}" onchange="goMonth(this.value)" style="width:140px;cursor:pointer">
   </div>
   <div class="custom-date-range" id="custom-range" style="display:none">
     <input type="date" id="period-date-from" value="{{ date_from }}">

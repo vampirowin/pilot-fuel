@@ -254,8 +254,11 @@ async def refuels_page(
     local_now = datetime.now(timezone.utc).astimezone(user_tz)
     today_str = local_now.strftime("%Y-%m-%d")
     month_start_str = local_now.replace(day=1).strftime("%Y-%m-%d")
+    month_end = (local_now.replace(day=1) + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+    month_end_str = month_end.strftime("%Y-%m-%d")
     df_str = date_from_str or month_start_str
     dt_str = date_to_str or today_str
+    picker_month = df_str[:7] if df_str.endswith("-01") else month_start_str[:7]
 
     # Fetch all vehicles with company/site/folder filters
     all_vehicles_query = select(Vehicle).where(Vehicle.is_active == True, Vehicle.has_fuel_sensor == True)
@@ -377,7 +380,7 @@ async def refuels_page(
         "list_html": rendered,
         "page": page, "total_pages": total_pages,
         "date_from": df_str, "date_to": dt_str,
-        "today_str": today_str, "month_start_str": month_start_str,
+        "today_str": today_str, "month_start_str": month_start_str, "month_end_str": month_end_str, "picker_month": picker_month,
         "days1_str": days1_str, "days7_str": days7_str,
         "days14_str": days14_str, "days30_str": days30_str,
         "all_vehicles": all_vehicles,
