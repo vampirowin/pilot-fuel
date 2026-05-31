@@ -567,7 +567,12 @@ async def update_settings(
             db.add(Setting(key=key, value=val))
     await db.commit()
 
-    # Recalculate comparison_status for all entries with per-vehicle thresholds
+    await _recalculate_all(db)
+
+    return RedirectResponse(url="/admin/settings", status_code=302)
+
+
+async def _recalculate_all(db: AsyncSession):
     entries = (await db.execute(
         select(RefuelEntry).where(RefuelEntry.is_deleted == False)
     )).scalars().all()
@@ -590,7 +595,17 @@ async def update_settings(
             e.comparison_status = "pilot_missing"
     await db.commit()
 
-    return RedirectResponse(url="/admin/settings", status_code=302)
+
+@router.get("/admin/settings/recalculate")
+async def recalculate_all(
+    request: Request,
+    _=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if request.session.get("role") != "superadmin":
+        raise HTTPException(302, headers={"Location": "/"})
+    await _recalculate_all(db)
+    return RedirectResponse(url="/admin/settings?recalculated=1", status_code=302)
 
 
 # ─── API: Get sites for a company (for edit user form) ────────────

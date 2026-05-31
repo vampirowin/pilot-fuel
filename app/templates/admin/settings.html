@@ -17,6 +17,10 @@
       <span style="font-size:12px;color:var(--text-dim)">Погрешность до этого значения — расхождение, выше — недопустимо</span>
     </div>
     <button type="submit" class="btn btn-primary">Сохранить</button>
+    <button type="button" class="btn btn-secondary" style="margin-left:8px" onclick="if(confirm('Пересчитать статусы всех записей по текущим порогам?')){window.location='/admin/settings/recalculate'}">Пересчитать все записи</button>
   </form>
+  {% if request.query_params.get('recalculated') == '1' %}
+  <div class="alert alert-success" style="margin-top:12px;padding:8px 12px;border-radius:6px;background:var(--green-bg);color:var(--green);font-size:14px">Все записи пересчитаны по текущим порогам</div>
+  {% endif %}
 </div>
 {% endblock %}
