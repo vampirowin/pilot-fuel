@@ -150,6 +150,10 @@ var tm = (function() {
           window._tmArrows.forEach(function(l) { map.removeLayer(l); });
           window._tmArrows = null;
         }
+        if (window._tmDotGroup) {
+          map.removeLayer(window._tmDotGroup);
+          window._tmDotGroup = null;
+        }
         var pts = data.points || [];
         if (pts.length < 2) {
           document.getElementById('tm-stats').innerHTML = '<span style="color:var(--text-dim)">Нет данных за выбранный период</span>';
@@ -202,6 +206,18 @@ var tm = (function() {
           drawnCount++;
         }
         window._tmSegments = segs;
+        var dotGroup = L.layerGroup();
+        for (var pi = 0; pi < pts.length; pi++) {
+          var plat = parseFloat(pts[pi].lat), plon = parseFloat(pts[pi].lon);
+          if (isNaN(plat) || isNaN(plon)) continue;
+          L.circleMarker([plat, plon], {
+            radius: 3, color: '#fbbf24', fillColor: '#fbbf24',
+            fillOpacity: 0.6, weight: 1, opacity: 0.8, interactive: false
+          }).addTo(dotGroup);
+        }
+        dotGroup.addTo(map);
+        if (map.getZoom() < 14) map.removeLayer(dotGroup);
+        window._tmDotGroup = dotGroup;
         if (allLatLngs.length > 0) {
           var bounds = L.latLngBounds(allLatLngs);
           map.fitBounds(bounds.pad(0.1));
@@ -310,6 +326,11 @@ var tm = (function() {
   document.getElementById('tm-date-to').value = '{{ date_to }}';
   document.querySelector('.period-chips .chip:first-child').classList.add('active');
   window.addEventListener('resize', function() { if (map) setTimeout(function() { map.invalidateSize(); }, 200); });
+  map.on('zoomend', function() {
+    if (!window._tmDotGroup) return;
+    if (map.getZoom() >= 14) map.addLayer(window._tmDotGroup);
+    else map.removeLayer(window._tmDotGroup);
+  });
 
   function toggleRefuel() {
     if (!window._tmFuelMarkers) return;
