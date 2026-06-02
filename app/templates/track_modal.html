@@ -35,9 +35,10 @@
   </div>
 </div>
 <style>
-.tm-point-popup .leaflet-popup-content-wrapper { border-radius: 10px; padding: 0; box-shadow: 0 4px 20px rgba(0,0,0,0.25); }
+.tm-point-popup .leaflet-popup-content-wrapper { border-radius: 10px; padding: 0; box-shadow: 0 8px 32px rgba(0,0,0,0.5); background: #1c1c35; color: #e5e7eb; border: 1px solid #2a2a50; }
 .tm-point-popup .leaflet-popup-content { margin: 12px 14px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
-.tm-point-popup .leaflet-popup-tip { box-shadow: 0 4px 20px rgba(0,0,0,0.25); }
+.tm-point-popup .leaflet-popup-tip { background: #1c1c35; border: 1px solid #2a2a50; }
+.tm-point-popup .leaflet-popup-close-button { color: #9ca3af !important; }
 </style>
 <script>
 var tm = (function() {
@@ -92,11 +93,11 @@ var tm = (function() {
           }
 
           var html = '<div style="font-size:12px;line-height:1.6;min-width:240px">';
-          html += '<div style="font-weight:600;font-size:13px;padding-bottom:6px;border-bottom:1px solid #e5e7eb;margin-bottom:6px;color:#1f2937">📌 ' + new Date(nearest.ts * 1000).toLocaleString('ru-RU') + '</div>';
+          html += '<div style="font-weight:600;font-size:13px;padding-bottom:6px;border-bottom:1px solid #2a2a50;margin-bottom:6px;color:#fbbf24">📌 ' + new Date(nearest.ts * 1000).toLocaleString('ru-RU') + '</div>';
           html += '<div style="display:flex;gap:10px;margin-bottom:6px;flex-wrap:wrap">';
-          html += '<span style="display:inline-flex;align-items:center;gap:3px;background:#f3f4f6;padding:2px 8px;border-radius:10px;font-size:11px">🏎️ <b>' + (parseFloat(nearest.speed)||0) + '</b> км/ч</span>';
-          if (nearest.sat !== undefined) html += '<span style="display:inline-flex;align-items:center;gap:3px;background:#f3f4f6;padding:2px 8px;border-radius:10px;font-size:11px">🛰️ <b>' + nearest.sat + '</b></span>';
-          if (nearest.alt !== undefined) html += '<span style="display:inline-flex;align-items:center;gap:3px;background:#f3f4f6;padding:2px 8px;border-radius:10px;font-size:11px">🗻 <b>' + nearest.alt + '</b> м</span>';
+          html += '<span style="display:inline-flex;align-items:center;gap:3px;background:#2a2a50;color:#d1d5db;padding:2px 8px;border-radius:10px;font-size:11px">🏎️ <b>' + (parseFloat(nearest.speed)||0) + '</b> км/ч</span>';
+          if (nearest.sat !== undefined) html += '<span style="display:inline-flex;align-items:center;gap:3px;background:#2a2a50;color:#d1d5db;padding:2px 8px;border-radius:10px;font-size:11px">🛰️ <b>' + nearest.sat + '</b></span>';
+          if (nearest.alt !== undefined) html += '<span style="display:inline-flex;align-items:center;gap:3px;background:#2a2a50;color:#d1d5db;padding:2px 8px;border-radius:10px;font-size:11px">🗻 <b>' + nearest.alt + '</b> м</span>';
           html += '</div>';
 
           var sensors = nearest.sensors;
@@ -110,9 +111,9 @@ var tm = (function() {
               var sval = sensors[sid];
               var meta = sensorMeta(sname);
               if (typeof sval === 'number') sval = sval.toFixed(1);
-              sensorRows.push('<div style="display:flex;align-items:center;justify-content:space-between;padding:3px 0;border-bottom:1px solid #f3f4f6;font-size:12px">' +
-                '<span style="display:flex;align-items:center;gap:5px;color:#374151"><span style="font-size:14px">' + meta.icon + '</span>' + sname + '</span>' +
-                '<span style="font-weight:600;color:' + meta.color + '">' + sval + (meta.unit ? ' <span style="font-weight:400;color:#9ca3af;font-size:11px">' + meta.unit + '</span>' : '') + '</span></div>');
+              sensorRows.push('<div style="display:flex;align-items:center;justify-content:space-between;padding:3px 0;border-bottom:1px solid #2a2a50;font-size:12px">' +
+                '<span style="display:flex;align-items:center;gap:5px;color:#d1d5db"><span style="font-size:14px">' + meta.icon + '</span>' + sname + '</span>' +
+                '<span style="font-weight:600;color:' + meta.color + '">' + sval + (meta.unit ? ' <span style="font-weight:400;color:#6b7280;font-size:11px">' + meta.unit + '</span>' : '') + '</span></div>');
             }
             if (sensorRows.length > 0) {
               html += sensorRows.join('');
