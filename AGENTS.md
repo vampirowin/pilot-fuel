@@ -40,3 +40,12 @@
 - `run.py` — app entry point
 - `app/config.py` — configuration
 - `app/services/pilot_service.py` — async Pilot API client
+- `docs/pilot-api-v3.yaml` — Pilot GPS API v3 OpenAPI spec (reference for endpoint params/responses)
+
+## Pilot API v3 — Sensor Endpoints (used in track map)
+- `GET /api/v3/vehicles/status` — current position + all sensor values (`sensors[]` with `name, dig_value, hum_value`)
+- `GET /api/v3/vehicles/sensors/dip` — analog sensor history for period
+- `GET /api/v3/vehicles/sensors/discrete` — discrete sensor history for period
+- `GET /api/v3/vehicles/instant-status?imei=...&ts=...` — fuel_level + odometer at a timestamp
+- `GET /api/v3/vehicles/status-by-time?agent_id=...&ts=...` — sensor snapshot at a timestamp
+- `GET /api/v3/vehicles/events/raw` — raw GPS points (lat, lon, ts, speed, sat, alt)

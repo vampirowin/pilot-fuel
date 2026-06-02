@@ -55,6 +55,35 @@ var tm = (function() {
           maxZoom: 18,
           attribution: '&copy; OpenStreetMap'
         }).addTo(map);
+        map.on('click', function(e) {
+          var pts = window._tmPoints;
+          if (!pts || pts.length === 0) return;
+          var minDist = Infinity, nearest = null, idx = -1;
+          for (var i = 0; i < pts.length; i++) {
+            var d = map.distance(e.latlng, [parseFloat(pts[i].lat), parseFloat(pts[i].lon)]);
+            if (d < minDist) { minDist = d; nearest = pts[i]; idx = i; }
+          }
+          if (!nearest || minDist > 500) return;
+          var html = '<div style="font-size:13px;line-height:1.5">';
+          html += '<b>' + new Date(nearest.ts * 1000).toLocaleString('ru-RU') + '</b><br>';
+          html += 'Скорость: <b>' + (parseFloat(nearest.speed)||0) + '</b> км/ч<br>';
+          if (nearest.sat !== undefined) html += 'Спутники: ' + nearest.sat + '<br>';
+          if (nearest.alt !== undefined) html += 'Высота: ' + nearest.alt + ' м<br>';
+          var sensors = nearest.sensors;
+          if (sensors) {
+            var sinfo = window._tmSensorsInfo || [];
+            var nameMap = {};
+            for (var si = 0; si < sinfo.length; si++) nameMap[sinfo[si].id] = sinfo[si].name;
+            for (var sid in sensors) {
+              var sname = nameMap[sid] || ('sensor#' + sid);
+              var sval = sensors[sid];
+              if (typeof sval === 'number') sval = sval.toFixed(1);
+              html += sname + ': <b>' + sval + '</b><br>';
+            }
+          }
+          html += '</div>';
+          L.popup().setLatLng(e.latlng).setContent(html).openOn(map);
+        });
         tm.load();
       };
       document.body.appendChild(j);
@@ -142,6 +171,8 @@ var tm = (function() {
           }
         }
         window._tmMarkers = markers;
+        window._tmPoints = pts;
+        window._tmSensorsInfo = data.sensors_info || [];
       })
       .catch(function() {
         loading.style.display = 'none';

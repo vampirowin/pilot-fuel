@@ -139,7 +139,66 @@ async def vehicle_points(
     except Exception:
         refuels = []
 
-    return {"points": points, "refuels": refuels, "plate": plate, "truncated": truncated}
+    sensors_info = []
+    if vehicle.imei and vehicle.pilot_agent_id:
+        try:
+            sensor_data = await pilot.get_sensor_dip_history(token, node_id, vehicle.imei, vehicle.pilot_agent_id, ts_from, ts_to)
+            discrete_data = await pilot.get_discrete_sensor_data(token, node_id, vehicle.imei, vehicle.pilot_agent_id, ts_from, ts_to)
+            sensor_map = {}
+            for s in sensor_data:
+                sid = s.get("id")
+                name = s.get("name", "")
+                vals = []
+                for w in s.get("work", []):
+                    ts = w.get("ts")
+                    val = w.get("value") or (w.get("te") if w.get("ts") == w.get("te") else None)
+                    if ts and val is not None:
+                        vals.append({"ts": ts, "value": float(val)})
+                if vals:
+                    vals.sort(key=lambda x: x["ts"])
+                    sensor_map[sid] = {"name": name, "values": vals}
+            for s in discrete_data:
+                sid = s.get("id")
+                name = s.get("name", "")
+                vals = []
+                for w in s.get("work", []):
+                    ts = w.get("ts")
+                    val = w.get("value")
+                    if ts and val is not None:
+                        vals.append({"ts": ts, "value": float(val)})
+                if vals:
+                    vals.sort(key=lambda x: x["ts"])
+                    if sid in sensor_map:
+                        sensor_map[sid]["values"].extend(vals)
+                        sensor_map[sid]["values"].sort(key=lambda x: x["ts"])
+                    else:
+                        sensor_map[sid] = {"name": name, "values": vals}
+            import bisect
+            for pt in points:
+                pt_ts = pt.get("ts")
+                if pt_ts is None:
+                    continue
+                pt_sensors = {}
+                for sid, sdata in sensor_map.items():
+                    ts_list = [v["ts"] for v in sdata["values"]]
+                    idx = bisect.bisect_left(ts_list, pt_ts)
+                    nearest = None
+                    if idx == 0:
+                        nearest = sdata["values"][0]
+                    elif idx >= len(ts_list):
+                        nearest = sdata["values"][-1]
+                    else:
+                        before = sdata["values"][idx - 1]
+                        after = sdata["values"][idx]
+                        nearest = before if (pt_ts - before["ts"]) <= (after["ts"] - pt_ts) else after
+                    if nearest is not None:
+                        pt_sensors[str(sid)] = nearest["value"]
+                pt["sensors"] = pt_sensors
+            sensors_info = [{"id": sid, "name": sdata["name"]} for sid, sdata in sensor_map.items()]
+        except Exception:
+            pass
+
+    return {"points": points, "refuels": refuels, "sensors_info": sensors_info, "plate": plate, "truncated": truncated}
 
 
 @router.get("/api/vehicles/{vehicle_id}/track-data")

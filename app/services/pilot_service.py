@@ -364,6 +364,20 @@ class PilotService:
         except PilotAuthError:
             return []
 
+    async def get_discrete_sensor_data(
+        self, token: str, node_id: int,
+        imei: str, agent_id: int, ts_from: int, ts_to: int,
+        tag_id: str | None = None,
+    ) -> list[dict]:
+        path = f"/api/v3/vehicles/sensors/discrete?imei={imei}&agent_id={agent_id}&ts={ts_from}&te={ts_to}"
+        if tag_id:
+            path += f"&tag_id={tag_id}"
+        try:
+            data = await self._request("GET", path, token=token, node_id=node_id)
+            return data.get("data", [])
+        except PilotAuthError:
+            return []
+
     async def get_raw_events(
         self, token: str, node_id: int,
         imei: str, agent_id: int, ts_from: int, ts_to: int,
