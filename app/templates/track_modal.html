@@ -177,21 +177,33 @@ var tm = (function() {
         for (var i = 0; i < pts.length; i++) {
           if ((parseFloat(pts[i].speed)||0) > maxSpeed) maxSpeed = parseFloat(pts[i].speed);
         }
+        var trip = data.trip;
         var statsHtml = '<span>' + pts.length + ' точек</span>' +
           '<span>макс. ' + maxSpeed + ' км/ч</span>';
+        if (trip) {
+          var dist = trip.gps_km || trip.can_km;
+          if (dist) statsHtml += '<span style="color:var(--accent)">🛣️ <b>' + parseFloat(dist).toFixed(0) + ' км</b></span>';
+        }
         if (data.truncated) {
           statsHtml += '<span style="color:var(--warning)">⚠ Максимум 90 дней</span>';
         }
         var refs = data.refuels || [];
-        if (refs.length > 0) {
-          statsHtml += '<span style="color:var(--info)">⛽ ' + refs.length + ' заправок</span>';
-        }
+        var showRefuel = true;
+        var stops = data.stops || [];
+        statsHtml += '<span style="cursor:pointer;user-select:none;color:var(--info)" class="tm-toggle-refuel" onclick="tm.toggleRefuel()">' +
+          (showRefuel ? '⛽ ' + refs.length + ' заправок' : '⛽ скрыть') + '</span>';
+        statsHtml += '<span style="cursor:pointer;user-select:none;color:#60a5fa" class="tm-toggle-stops" onclick="tm.toggleStops()">' +
+          '🅿️ ' + stops.length + ' стоянок</span>';
         document.getElementById('tm-stats').innerHTML = statsHtml;
-        if (window._tmMarkers) {
-          window._tmMarkers.forEach(function(m) { map.removeLayer(m); });
-          window._tmMarkers = null;
+        if (window._tmFuelMarkers) {
+          window._tmFuelMarkers.forEach(function(m) { map.removeLayer(m); });
+          window._tmFuelMarkers = null;
         }
-        var markers = [];
+        if (window._tmStopMarkers) {
+          window._tmStopMarkers.forEach(function(m) { map.removeLayer(m); });
+          window._tmStopMarkers = null;
+        }
+        var fuelMarkers = [];
         if (refs.length > 0) {
           var fuelIcon = L.divIcon({
             html: '<div style="background:var(--warning,#ff9800);color:#fff;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:14px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.3)">⛽</div>',
@@ -206,10 +218,36 @@ var tm = (function() {
               (r.address || '');
             var m = L.marker([r.lat, r.lon], { icon: fuelIcon }).addTo(map)
               .bindPopup(popupText);
-            markers.push(m);
+            fuelMarkers.push(m);
           }
         }
-        window._tmMarkers = markers;
+        window._tmFuelMarkers = fuelMarkers;
+        window._tmShowFuel = true;
+
+        var stopMarkers = [];
+        if (stops.length > 0) {
+          var stopIcon = L.divIcon({
+            html: '<div style="background:#3b82f6;color:#fff;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:14px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.3)">🅿️</div>',
+            iconSize: [28, 28],
+            iconAnchor: [14, 14],
+            className: ''
+          });
+          for (var i = 0; i < stops.length; i++) {
+            var s = stops[i];
+            var dur = s.duration;
+            var durText = dur ? (Math.floor(dur / 3600) + 'ч ' + (Math.floor(dur % 3600 / 60)) + 'м') : '';
+            var popupText = '<b>🅿️ Стоянка</b><br>' +
+              (s.ts ? 'с ' + new Date(s.ts * 1000).toLocaleString('ru-RU') + '<br>' : '') +
+              (durText ? 'длительность: <b>' + durText + '</b><br>' : '') +
+              (s.address || '');
+            var m = L.marker([s.lat, s.lon], { icon: stopIcon }).addTo(map)
+              .bindPopup(popupText);
+            stopMarkers.push(m);
+          }
+        }
+        window._tmStopMarkers = stopMarkers;
+        window._tmShowStops = true;
+
         window._tmPoints = pts;
         window._tmSensorsInfo = data.sensors_info || [];
       })
@@ -240,6 +278,28 @@ var tm = (function() {
   document.querySelector('.period-chips .chip:first-child').classList.add('active');
   window.addEventListener('resize', function() { if (map) setTimeout(function() { map.invalidateSize(); }, 200); });
 
-  return { load: load, setPeriod: setPeriod };
+  function toggleRefuel() {
+    if (!window._tmFuelMarkers) return;
+    window._tmShowFuel = !window._tmShowFuel;
+    for (var i = 0; i < window._tmFuelMarkers.length; i++) {
+      if (window._tmShowFuel) map.addLayer(window._tmFuelMarkers[i]);
+      else map.removeLayer(window._tmFuelMarkers[i]);
+    }
+    var el = document.querySelector('.tm-toggle-refuel');
+    if (el) el.textContent = (window._tmShowFuel ? '⛽ ' + window._tmFuelMarkers.length + ' заправок' : '⛽ скрыть');
+  }
+
+  function toggleStops() {
+    if (!window._tmStopMarkers) return;
+    window._tmShowStops = !window._tmShowStops;
+    for (var i = 0; i < window._tmStopMarkers.length; i++) {
+      if (window._tmShowStops) map.addLayer(window._tmStopMarkers[i]);
+      else map.removeLayer(window._tmStopMarkers[i]);
+    }
+    var el = document.querySelector('.tm-toggle-stops');
+    if (el) el.textContent = (window._tmShowStops ? '🅿️ ' + window._tmStopMarkers.length + ' стоянок' : '🅿️ скрыть');
+  }
+
+  return { load: load, setPeriod: setPeriod, toggleRefuel: toggleRefuel, toggleStops: toggleStops };
 })();
 </script>

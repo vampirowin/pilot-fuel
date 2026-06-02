@@ -140,10 +140,19 @@ async def vehicle_points(
         refuels = []
 
     sensors_info = []
+    trip = None
+    stops = []
     if vehicle.imei and vehicle.pilot_agent_id:
         try:
-            sensor_data = await pilot.get_sensor_dip_history(token, node_id, vehicle.imei, vehicle.pilot_agent_id, ts_from, ts_to)
-            discrete_data = await pilot.get_discrete_sensor_data(token, node_id, vehicle.imei, vehicle.pilot_agent_id, ts_from, ts_to)
+            import asyncio
+            sensor_data_task = pilot.get_sensor_dip_history(token, node_id, vehicle.imei, vehicle.pilot_agent_id, ts_from, ts_to)
+            discrete_data_task = pilot.get_discrete_sensor_data(token, node_id, vehicle.imei, vehicle.pilot_agent_id, ts_from, ts_to)
+            trip_task = pilot.get_trip_summary(token, node_id, vehicle.imei, vehicle.pilot_agent_id, ts_from, ts_to)
+            stops_task = pilot.get_track_stops(token, node_id, vehicle.imei, vehicle.pilot_agent_id, ts_from, ts_to)
+            import bisect
+            sensor_data, discrete_data, trip, stops = await asyncio.gather(
+                sensor_data_task, discrete_data_task, trip_task, stops_task,
+            )
             sensor_map = {}
             for s in sensor_data:
                 sid = s.get("id")
@@ -173,7 +182,6 @@ async def vehicle_points(
                         sensor_map[sid]["values"].sort(key=lambda x: x["ts"])
                     else:
                         sensor_map[sid] = {"name": name, "values": vals}
-            import bisect
             for pt in points:
                 pt_ts = pt.get("ts")
                 if pt_ts is None:
@@ -198,7 +206,7 @@ async def vehicle_points(
         except Exception:
             pass
 
-    return {"points": points, "refuels": refuels, "sensors_info": sensors_info, "plate": plate, "truncated": truncated}
+    return {"points": points, "refuels": refuels, "stops": stops, "trip": trip, "sensors_info": sensors_info, "plate": plate, "truncated": truncated}
 
 
 @router.get("/api/vehicles/{vehicle_id}/track-data")

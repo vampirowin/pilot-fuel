@@ -392,6 +392,52 @@ class PilotService:
         except PilotAuthError:
             return []
 
+    async def get_trip_summary(
+        self, token: str, node_id: int,
+        imei: str, agent_id: int, ts_from: int, ts_to: int,
+    ) -> dict | None:
+        path = f"/api/v3/vehicles/trips?imei={imei}&agent_id={agent_id}&ts={ts_from}&te={ts_to}"
+        try:
+            data = await self._request("GET", path, token=token, node_id=node_id)
+            raw = data.get("data")
+            if isinstance(raw, dict):
+                return {
+                    "can_km": raw.get("can"),
+                    "gps_km": raw.get("gps"),
+                    "maxspeed": raw.get("maxspeed"),
+                    "avgspeed": raw.get("avgspeed"),
+                    "can_start": raw.get("can_start"),
+                    "can_end": raw.get("can_end"),
+                    "gps_start": raw.get("gps_start"),
+                    "gps_end": raw.get("gps_end"),
+                }
+            return None
+        except PilotAuthError:
+            return None
+
+    async def get_track_stops(
+        self, token: str, node_id: int,
+        imei: str, agent_id: int, ts_from: int, ts_to: int,
+    ) -> list[dict]:
+        path = f"/api/v3/vehicles/track/stops?imei={imei}&agent_id={agent_id}&ts={ts_from}&te={ts_to}"
+        try:
+            data = await self._request("GET", path, token=token, node_id=node_id)
+            stops = data.get("stops", data.get("parkings", []))
+            result = []
+            for s in stops if isinstance(stops, list) else []:
+                addr = s.get("address") or {}
+                result.append({
+                    "lat": s.get("lat"),
+                    "lon": s.get("lon"),
+                    "ts": s.get("ts"),
+                    "te": s.get("te"),
+                    "duration": s.get("duration"),
+                    "address": (addr.get("street") or addr.get("city") or addr.get("house") or ""),
+                })
+            return result
+        except PilotAuthError:
+            return []
+
     async def get_track(
         self, token: str, node_id: int,
         imei: str, agent_id: int, ts_from: int, ts_to: int,
