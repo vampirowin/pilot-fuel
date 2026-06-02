@@ -70,23 +70,25 @@ var tm = (function() {
           }
           if (!nearest || minDist > 500) return;
 
-          function sensorIcon(name) {
+          function sensorMeta(name) {
             var n = (name || '').toLowerCase();
-            if (n.includes('топлив') || n.includes('fuel') || n.includes('бенз') || n.includes('бак')) return ['⛽','#f59e0b'];
-            if (n.includes('зажиг') || n.includes('ignit') || n.includes('двиг') || n.includes('engine')) return ['🔌','#ef4444'];
-            if (n.includes('температур') || n.includes('temp') || n.includes('градус')) return ['🌡️','#f97316'];
-            if (n.includes('напряж') || n.includes('volt') || n.includes('акб') || n.includes('батар')) return ['⚡','#22c55e'];
-            if (n.includes('пробег') || n.includes('odom') || n.includes('километр') || n.includes('mile')) return ['📏','#a855f7'];
-            if (n.includes('скорост') || n.includes('speed')) return ['🏎️','#3b82f6'];
-            if (n.includes('оборот') || n.includes('rpm') || n.includes('частот')) return ['🔄','#06b6d4'];
-            if (n.includes('двер') || n.includes('door') || n.includes('крыш')) return ['🚪','#8b5cf6'];
-            if (n.includes('ось') || n.includes('axle') || n.includes('нагруз')) return ['⚖️','#ec4899'];
-            if (n.includes('can') || n.includes('шин')) return ['🖥️','#14b8a6'];
-            if (n.includes('вес') || n.includes('weight') || n.includes('масс')) return ['⚖️','#f43f5e'];
-            if (n.includes('время') || n.includes('time') || n.includes('моточас')) return ['⏱️','#64748b'];
-            if (n.includes('давлен') || n.includes('press') || n.includes('масл')) return ['🛢️','#eab308'];
-            if (n.includes('датчик') || n.includes('sensor')) return ['📡','#6366f1'];
-            return ['📊','#94a3b8'];
+            if (n.includes('топлив') || n.includes('fuel') || n.includes('бенз') || n.includes('бак')) return {icon:'⛽',color:'#f59e0b',unit:'л'};
+            if (n.includes('зажиг') || n.includes('ignit') || n.includes('двиг') || n.includes('engine')) return {icon:'🔌',color:'#ef4444',unit:''};
+            if (n.includes('температур') || n.includes('temp') || n.includes('градус')) return {icon:'🌡️',color:'#f97316',unit:'°C'};
+            if (n.includes('напряж') || n.includes('volt') || n.includes('акб') || n.includes('батар')) return {icon:'⚡',color:'#22c55e',unit:'В'};
+            if (n.includes('пробег') || n.includes('odom') || n.includes('километр') || n.includes('mile')) return {icon:'📏',color:'#a855f7',unit:'км'};
+            if (n.includes('скорост') || n.includes('speed')) return {icon:'🏎️',color:'#3b82f6',unit:'км/ч'};
+            if (n.includes('оборот') || n.includes('rpm') || n.includes('частот')) return {icon:'🔄',color:'#06b6d4',unit:'об/мин'};
+            if (n.includes('двер') || n.includes('door') || n.includes('крыш')) return {icon:'🚪',color:'#8b5cf6',unit:''};
+            if (n.includes('ось') || n.includes('axle') || n.includes('нагруз')) return {icon:'⚖️',color:'#ec4899',unit:'кг'};
+            if (n.includes('can') || n.includes('шин')) return {icon:'🖥️',color:'#14b8a6',unit:''};
+            if (n.includes('вес') || n.includes('weight') || n.includes('масс')) return {icon:'⚖️',color:'#f43f5e',unit:'кг'};
+            if (n.includes('время') || n.includes('time') || n.includes('моточас')) return {icon:'⏱️',color:'#64748b',unit:'ч'};
+            if (n.includes('давлен') || n.includes('press') || n.includes('масл')) return {icon:'🛢️',color:'#eab308',unit:'бар'};
+            if (n.includes('расход') || n.includes('consum')) return {icon:'📉',color:'#10b981',unit:'л/100км'};
+            if (n.includes('уровень') || n.includes('level')) return {icon:'📊',color:'#6366f1',unit:'%'};
+            if (n.includes('датчик') || n.includes('sensor')) return {icon:'📡',color:'#6366f1',unit:''};
+            return {icon:'📊',color:'#94a3b8',unit:''};
           }
 
           var html = '<div style="font-size:12px;line-height:1.6;min-width:240px">';
@@ -106,11 +108,11 @@ var tm = (function() {
             for (var sid in sensors) {
               var sname = nameMap[sid] || ('sensor#' + sid);
               var sval = sensors[sid];
+              var meta = sensorMeta(sname);
               if (typeof sval === 'number') sval = sval.toFixed(1);
-              var icon = sensorIcon(sname);
               sensorRows.push('<div style="display:flex;align-items:center;justify-content:space-between;padding:3px 0;border-bottom:1px solid #f3f4f6;font-size:12px">' +
-                '<span style="display:flex;align-items:center;gap:5px;color:#374151"><span style="font-size:14px">' + icon[0] + '</span>' + sname + '</span>' +
-                '<span style="font-weight:600;color:' + icon[1] + '">' + sval + '</span></div>');
+                '<span style="display:flex;align-items:center;gap:5px;color:#374151"><span style="font-size:14px">' + meta.icon + '</span>' + sname + '</span>' +
+                '<span style="font-weight:600;color:' + meta.color + '">' + sval + (meta.unit ? ' <span style="font-weight:400;color:#9ca3af;font-size:11px">' + meta.unit + '</span>' : '') + '</span></div>');
             }
             if (sensorRows.length > 0) {
               html += sensorRows.join('');
