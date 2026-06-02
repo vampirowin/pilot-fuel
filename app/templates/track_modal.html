@@ -34,6 +34,11 @@
     </div>
   </div>
 </div>
+<style>
+.tm-point-popup .leaflet-popup-content-wrapper { border-radius: 10px; padding: 0; box-shadow: 0 4px 20px rgba(0,0,0,0.25); }
+.tm-point-popup .leaflet-popup-content { margin: 12px 14px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+.tm-point-popup .leaflet-popup-tip { box-shadow: 0 4px 20px rgba(0,0,0,0.25); }
+</style>
 <script>
 var tm = (function() {
   var map = null, polyline = null;
@@ -64,25 +69,56 @@ var tm = (function() {
             if (d < minDist) { minDist = d; nearest = pts[i]; idx = i; }
           }
           if (!nearest || minDist > 500) return;
-          var html = '<div style="font-size:13px;line-height:1.5">';
-          html += '<b>' + new Date(nearest.ts * 1000).toLocaleString('ru-RU') + '</b><br>';
-          html += 'Скорость: <b>' + (parseFloat(nearest.speed)||0) + '</b> км/ч<br>';
-          if (nearest.sat !== undefined) html += 'Спутники: ' + nearest.sat + '<br>';
-          if (nearest.alt !== undefined) html += 'Высота: ' + nearest.alt + ' м<br>';
+
+          function sensorIcon(name) {
+            var n = (name || '').toLowerCase();
+            if (n.includes('топлив') || n.includes('fuel') || n.includes('бенз') || n.includes('бак')) return ['⛽','#f59e0b'];
+            if (n.includes('зажиг') || n.includes('ignit') || n.includes('двиг') || n.includes('engine')) return ['🔌','#ef4444'];
+            if (n.includes('температур') || n.includes('temp') || n.includes('градус')) return ['🌡️','#f97316'];
+            if (n.includes('напряж') || n.includes('volt') || n.includes('акб') || n.includes('батар')) return ['⚡','#22c55e'];
+            if (n.includes('пробег') || n.includes('odom') || n.includes('километр') || n.includes('mile')) return ['📏','#a855f7'];
+            if (n.includes('скорост') || n.includes('speed')) return ['🏎️','#3b82f6'];
+            if (n.includes('оборот') || n.includes('rpm') || n.includes('частот')) return ['🔄','#06b6d4'];
+            if (n.includes('двер') || n.includes('door') || n.includes('крыш')) return ['🚪','#8b5cf6'];
+            if (n.includes('ось') || n.includes('axle') || n.includes('нагруз')) return ['⚖️','#ec4899'];
+            if (n.includes('can') || n.includes('шин')) return ['🖥️','#14b8a6'];
+            if (n.includes('вес') || n.includes('weight') || n.includes('масс')) return ['⚖️','#f43f5e'];
+            if (n.includes('время') || n.includes('time') || n.includes('моточас')) return ['⏱️','#64748b'];
+            if (n.includes('давлен') || n.includes('press') || n.includes('масл')) return ['🛢️','#eab308'];
+            if (n.includes('датчик') || n.includes('sensor')) return ['📡','#6366f1'];
+            return ['📊','#94a3b8'];
+          }
+
+          var html = '<div style="font-size:12px;line-height:1.6;min-width:240px">';
+          html += '<div style="font-weight:600;font-size:13px;padding-bottom:6px;border-bottom:1px solid #e5e7eb;margin-bottom:6px;color:#1f2937">📌 ' + new Date(nearest.ts * 1000).toLocaleString('ru-RU') + '</div>';
+          html += '<div style="display:flex;gap:10px;margin-bottom:6px;flex-wrap:wrap">';
+          html += '<span style="display:inline-flex;align-items:center;gap:3px;background:#f3f4f6;padding:2px 8px;border-radius:10px;font-size:11px">🏎️ <b>' + (parseFloat(nearest.speed)||0) + '</b> км/ч</span>';
+          if (nearest.sat !== undefined) html += '<span style="display:inline-flex;align-items:center;gap:3px;background:#f3f4f6;padding:2px 8px;border-radius:10px;font-size:11px">🛰️ <b>' + nearest.sat + '</b></span>';
+          if (nearest.alt !== undefined) html += '<span style="display:inline-flex;align-items:center;gap:3px;background:#f3f4f6;padding:2px 8px;border-radius:10px;font-size:11px">🗻 <b>' + nearest.alt + '</b> м</span>';
+          html += '</div>';
+
           var sensors = nearest.sensors;
           if (sensors) {
             var sinfo = window._tmSensorsInfo || [];
             var nameMap = {};
             for (var si = 0; si < sinfo.length; si++) nameMap[sinfo[si].id] = sinfo[si].name;
+            var sensorRows = [];
             for (var sid in sensors) {
               var sname = nameMap[sid] || ('sensor#' + sid);
               var sval = sensors[sid];
               if (typeof sval === 'number') sval = sval.toFixed(1);
-              html += sname + ': <b>' + sval + '</b><br>';
+              var icon = sensorIcon(sname);
+              sensorRows.push('<div style="display:flex;align-items:center;justify-content:space-between;padding:3px 0;border-bottom:1px solid #f3f4f6;font-size:12px">' +
+                '<span style="display:flex;align-items:center;gap:5px;color:#374151"><span style="font-size:14px">' + icon[0] + '</span>' + sname + '</span>' +
+                '<span style="font-weight:600;color:' + icon[1] + '">' + sval + '</span></div>');
+            }
+            if (sensorRows.length > 0) {
+              html += sensorRows.join('');
             }
           }
+
           html += '</div>';
-          L.popup().setLatLng(e.latlng).setContent(html).openOn(map);
+          L.popup({maxWidth:320,className:'tm-point-popup'}).setLatLng(e.latlng).setContent(html).openOn(map);
         });
         tm.load();
       };
