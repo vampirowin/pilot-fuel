@@ -54,6 +54,70 @@ async def track_modal(
     })
 
 
+@router.get("/api/vehicles/{vehicle_id}/points")
+async def vehicle_points(
+    request: Request,
+    vehicle_id: int,
+    date_from: str = Query(...),
+    date_to: str = Query(...),
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    vehicle = await db.get(Vehicle, vehicle_id)
+    if not vehicle:
+        raise HTTPException(404, "Vehicle not found")
+    if user.role not in ("superadmin",):
+        if not user.client_account_id or vehicle.client_account_id != user.client_account_id:
+            raise HTTPException(404, "Vehicle not found")
+        if user.site_id and vehicle.site_id != user.site_id:
+            raise HTTPException(404, "Vehicle not found")
+
+    token = user.pilot_token or request.session.get("token")
+    node_id = user.pilot_node_id or request.session.get("node_id", 0)
+    if not token:
+        if vehicle.client_account_id:
+            admin = (
+                await db.execute(
+                    select(User).where(
+                        User.client_account_id == vehicle.client_account_id,
+                        User.role == "company_admin",
+                        User.pilot_token.isnot(None),
+                    )
+                )
+            ).scalar_one_or_none()
+            if admin and admin.pilot_token:
+                token = admin.pilot_token
+                node_id = admin.pilot_node_id or node_id
+    if not token:
+        return JSONResponse(status_code=401, content={"error": "Not authenticated"})
+
+    try:
+        df = datetime.strptime(date_from, "%Y-%m-%d")
+        dt = datetime.strptime(date_to, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+    except ValueError:
+        raise HTTPException(400, "Invalid date format, use YYYY-MM-DD")
+
+    ts_from = int(df.replace(tzinfo=timezone.utc).timestamp())
+    ts_to = int(dt.replace(tzinfo=timezone.utc).timestamp())
+
+    truncated = False
+    ninety_days = 90 * 24 * 3600
+    if ts_to - ts_from > ninety_days:
+        ts_from = ts_to - ninety_days
+        truncated = True
+
+    plate = vehicle.plate_number or vehicle.name or ""
+    pilot = PilotService()
+    points = []
+    if vehicle.imei and vehicle.pilot_agent_id:
+        try:
+            points = await pilot.get_raw_events(token, node_id, vehicle.imei, vehicle.pilot_agent_id, ts_from, ts_to)
+        except Exception:
+            points = []
+
+    return {"points": points, "plate": plate, "truncated": truncated}
+
+
 @router.get("/api/vehicles/{vehicle_id}/track-data")
 async def track_data(
     request: Request,

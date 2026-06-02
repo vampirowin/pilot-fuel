@@ -1,6 +1,5 @@
 import asyncio
 from datetime import datetime
-
 import httpx
 
 PILOT_AUTH_URL = "/api/v3/auth/token"
@@ -362,6 +361,20 @@ class PilotService:
         try:
             data = await self._request("GET", path, token=token, node_id=node_id)
             return data.get("data", [])
+        except PilotAuthError:
+            return []
+
+    async def get_raw_events(
+        self, token: str, node_id: int,
+        imei: str, agent_id: int, ts_from: int, ts_to: int,
+    ) -> list[dict]:
+        path = f"/api/v3/vehicles/events/raw?imei={imei}&agent_id={agent_id}&ts={ts_from}&te={ts_to}"
+        try:
+            data = await self._request("GET", path, token=token, node_id=node_id)
+            raw = data.get("data", {})
+            if isinstance(raw, dict):
+                return raw.get("raw", [])
+            return []
         except PilotAuthError:
             return []
 

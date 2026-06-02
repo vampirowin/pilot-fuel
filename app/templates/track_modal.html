@@ -67,50 +67,54 @@ var tm = (function() {
     if (!df || !dt) return;
     var loading = document.getElementById('tm-loading');
     loading.style.display = 'flex';
-    fetch('/api/vehicles/' + vehId + '/track-data?date_from=' + df + '&date_to=' + dt)
+    fetch('/api/vehicles/' + vehId + '/points?date_from=' + df + '&date_to=' + dt)
       .then(function(r) { return r.json(); })
       .then(function(data) {
-        console.log('TRACK DATA:', JSON.stringify(data, null, 2));
         loading.style.display = 'none';
         if (!map) return;
         if (polyline) { map.removeLayer(polyline); polyline = null; }
-        var segs = data.segments || [];
-        if (segs.length === 0) {
-          document.getElementById('tm-stats').innerHTML = '<span style="color:var(--text-dim)">Нет данных трека за выбранный период</span>';
-          return;
+        if (window._tmSegments) {
+          window._tmSegments.forEach(function(l) { map.removeLayer(l); });
+          window._tmSegments = null;
         }
-        var points = [], totalLen = 0, maxSpd = 0;
-        segs.sort(function(a,b) { return (a.ts||0) - (b.ts||0); });
-        for (var i = 0; i < segs.length; i++) {
-          var s = segs[i];
-          // Если есть массив промежуточных точек — используем его
-          if (s.points && s.points.length > 0) {
-            for (var j = 0; j < s.points.length; j++) {
-              var p = s.points[j];
-              var lat = parseFloat(p.lat !== undefined ? p.lat : p.latitude);
-              var lon = parseFloat(p.lon !== undefined ? p.lon : p.longitude);
-              if (!isNaN(lat) && !isNaN(lon)) points.push([lat, lon]);
-            }
-          } else {
-            var latS = parseFloat(s.lat_start), lonS = parseFloat(s.lon_start);
-            var latE = parseFloat(s.lat_end), lonE = parseFloat(s.lon_end);
-            if (isNaN(latS) || isNaN(lonS) || isNaN(latE) || isNaN(lonE)) continue;
-            if (i === 0 || points.length === 0) points.push([latS, lonS]);
-            points.push([latE, lonE]);
+        var pts = data.points || [];
+        if (pts.length < 2) {
+          document.getElementById('tm-stats').innerHTML = '<span style="color:var(--text-dim)">Нет данных за выбранный период</span>';
+          if (data.truncated) {
+            document.getElementById('tm-stats').innerHTML += '<span style="color:var(--warning);margin-left:8px">⚠ Максимум 3 дня</span>';
           }
-          totalLen += s.length || 0;
-          if ((s.maxspeed||0) > maxSpd) maxSpd = s.maxspeed;
-        }
-        if (points.length < 2) {
-          document.getElementById('tm-stats').innerHTML = '<span style="color:var(--text-dim)">Недостаточно точек для построения трека</span>';
           return;
         }
-        polyline = L.polyline(points, {color: '#2979ff', weight: 4, opacity: 0.9}).addTo(map);
-        map.fitBounds(polyline.getBounds().pad(0.1));
-        document.getElementById('tm-stats').innerHTML =
-          '<span>' + segs.length + ' сегментов</span>' +
-          '<span>' + totalLen.toFixed(1) + ' км</span>' +
-          '<span>макс. ' + maxSpd + ' км/ч</span>';
+        pts.sort(function(a,b) { return (a.ts||0) - (b.ts||0); });
+        var segs = [], allLatLngs = [];
+        for (var i = 0; i < pts.length - 1; i++) {
+          var lat1 = parseFloat(pts[i].lat), lon1 = parseFloat(pts[i].lon);
+          var lat2 = parseFloat(pts[i+1].lat), lon2 = parseFloat(pts[i+1].lon);
+          if (isNaN(lat1) || isNaN(lon1) || isNaN(lat2) || isNaN(lon2)) continue;
+          allLatLngs.push([lat1, lon1]);
+          if (i === pts.length - 2) allLatLngs.push([lat2, lon2]);
+          var speed = parseFloat(pts[i].speed) || 0;
+          var color = speed < 40 ? '#4caf50' : speed < 80 ? '#ff9800' : '#f44336';
+          var seg = L.polyline([[lat1,lon1],[lat2,lon2]], {
+            color: color, weight: 3, opacity: 0.8
+          }).addTo(map);
+          segs.push(seg);
+        }
+        window._tmSegments = segs;
+        if (allLatLngs.length > 0) {
+          var bounds = L.latLngBounds(allLatLngs);
+          map.fitBounds(bounds.pad(0.1));
+        }
+        var maxSpeed = 0;
+        for (var i = 0; i < pts.length; i++) {
+          if ((parseFloat(pts[i].speed)||0) > maxSpeed) maxSpeed = parseFloat(pts[i].speed);
+        }
+        var statsHtml = '<span>' + pts.length + ' точек</span>' +
+          '<span>макс. ' + maxSpeed + ' км/ч</span>';
+        if (data.truncated) {
+          statsHtml += '<span style="color:var(--warning)">⚠ Максимум 3 дня</span>';
+        }
+        document.getElementById('tm-stats').innerHTML = statsHtml;
       })
       .catch(function() {
         loading.style.display = 'none';
