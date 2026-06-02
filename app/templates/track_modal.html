@@ -1,7 +1,7 @@
 <div class="modal-overlay" onclick="if(event.target===this)this.remove()">
   <div class="modal" style="width: 95vw; max-width: 100%; max-height: 92vh;">
     <div class="modal-header">
-      <h2>Трек — {{ plate }}</h2>
+      <h2 id="tm-title">Трек — {{ plate }}</h2>
       <button type="button" class="modal-close" onclick="this.closest('.modal-overlay').remove()">&times;</button>
     </div>
     <div class="modal-body">
@@ -140,6 +140,7 @@ var tm = (function() {
       .then(function(data) {
         loading.style.display = 'none';
         if (!map) return;
+        if (data.plate) document.getElementById('tm-title').textContent = '🚛 ' + data.plate;
         if (polyline) { map.removeLayer(polyline); polyline = null; }
         if (window._tmSegments) {
           window._tmSegments.forEach(function(l) { map.removeLayer(l); });
