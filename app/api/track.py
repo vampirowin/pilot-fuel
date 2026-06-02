@@ -143,16 +143,25 @@ async def vehicle_points(
     trip = None
     stops = []
     if vehicle.imei and vehicle.pilot_agent_id:
+        import asyncio
+        import bisect
+        sensor_data = []
+        discrete_data = []
         try:
-            import asyncio
-            sensor_data_task = pilot.get_sensor_dip_history(token, node_id, vehicle.imei, vehicle.pilot_agent_id, ts_from, ts_to)
-            discrete_data_task = pilot.get_discrete_sensor_data(token, node_id, vehicle.imei, vehicle.pilot_agent_id, ts_from, ts_to)
-            trip_task = pilot.get_trip_summary(token, node_id, vehicle.imei, vehicle.pilot_agent_id, ts_from, ts_to)
-            stops_task = pilot.get_track_stops(token, node_id, vehicle.imei, vehicle.pilot_agent_id, ts_from, ts_to)
-            import bisect
-            sensor_data, discrete_data, trip, stops = await asyncio.gather(
-                sensor_data_task, discrete_data_task, trip_task, stops_task,
+            results = await asyncio.gather(
+                asyncio.wait_for(pilot.get_sensor_dip_history(token, node_id, vehicle.imei, vehicle.pilot_agent_id, ts_from, ts_to), timeout=10),
+                asyncio.wait_for(pilot.get_discrete_sensor_data(token, node_id, vehicle.imei, vehicle.pilot_agent_id, ts_from, ts_to), timeout=10),
+                asyncio.wait_for(pilot.get_trip_summary(token, node_id, vehicle.imei, vehicle.pilot_agent_id, ts_from, ts_to), timeout=5),
+                asyncio.wait_for(pilot.get_track_stops(token, node_id, vehicle.imei, vehicle.pilot_agent_id, ts_from, ts_to), timeout=5),
+                return_exceptions=True,
             )
+            if isinstance(results[0], list): sensor_data = results[0]
+            if isinstance(results[1], list): discrete_data = results[1]
+            if isinstance(results[2], dict): trip = results[2]
+            if isinstance(results[3], list): stops = results[3]
+        except Exception:
+            pass
+        try:
             sensor_map = {}
             for s in sensor_data:
                 sid = s.get("id")
@@ -187,22 +196,22 @@ async def vehicle_points(
                 if pt_ts is None:
                     continue
                 pt_sensors = {}
-                for sid, sdata in sensor_map.items():
-                    ts_list = [v["ts"] for v in sdata["values"]]
+                for sid, sdata2 in sensor_map.items():
+                    ts_list = [v["ts"] for v in sdata2["values"]]
                     idx = bisect.bisect_left(ts_list, pt_ts)
                     nearest = None
                     if idx == 0:
-                        nearest = sdata["values"][0]
+                        nearest = sdata2["values"][0]
                     elif idx >= len(ts_list):
-                        nearest = sdata["values"][-1]
+                        nearest = sdata2["values"][-1]
                     else:
-                        before = sdata["values"][idx - 1]
-                        after = sdata["values"][idx]
+                        before = sdata2["values"][idx - 1]
+                        after = sdata2["values"][idx]
                         nearest = before if (pt_ts - before["ts"]) <= (after["ts"] - pt_ts) else after
                     if nearest is not None:
                         pt_sensors[str(sid)] = nearest["value"]
                 pt["sensors"] = pt_sensors
-            sensors_info = [{"id": sid, "name": sdata["name"]} for sid, sdata in sensor_map.items()]
+            sensors_info = [{"id": sid, "name": sdata2["name"]} for sid, sdata2 in sensor_map.items()]
         except Exception:
             pass
 

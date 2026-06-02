@@ -422,9 +422,13 @@ class PilotService:
         path = f"/api/v3/vehicles/track/stops?imei={imei}&agent_id={agent_id}&ts={ts_from}&te={ts_to}"
         try:
             data = await self._request("GET", path, token=token, node_id=node_id)
-            stops = data.get("stops", data.get("parkings", []))
+            stops_raw = data.get("data") or data
+            if isinstance(stops_raw, dict):
+                stops_raw = stops_raw.get("stops") or stops_raw.get("parkings") or []
+            if not isinstance(stops_raw, list):
+                stops_raw = []
             result = []
-            for s in stops if isinstance(stops, list) else []:
+            for s in stops_raw:
                 addr = s.get("address") or {}
                 result.append({
                     "lat": s.get("lat"),
@@ -432,7 +436,7 @@ class PilotService:
                     "ts": s.get("ts"),
                     "te": s.get("te"),
                     "duration": s.get("duration"),
-                    "address": (addr.get("street") or addr.get("city") or addr.get("house") or ""),
+                    "address": (addr.get("street") or addr.get("city") or addr.get("house") or "") if isinstance(addr, dict) else str(addr),
                 })
             return result
         except PilotAuthError:
