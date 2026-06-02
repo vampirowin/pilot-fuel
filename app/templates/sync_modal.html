@@ -13,7 +13,7 @@
           <select name="vehicle_id" id="sync-vehicle-select" size="6" style="height:auto">
             <option value="">Все ТС</option>
             {% for v in all_vehicles %}
-            <option value="{{ v.id }}">{{ v.plate_number or v.name }}</option>
+            <option value="{{ v.id }}"{% if selected_vehicle_id and v.id == selected_vehicle_id %} selected{% endif %}>{{ v.plate_number or v.name }}</option>
             {% endfor %}
           </select>
         </div>

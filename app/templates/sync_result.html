@@ -1,5 +1,5 @@
 <div class="modal-overlay" onclick="if(event.target===this)this.remove()">
-  <div class="modal" style="max-width:500px">
+  <div class="modal">
     <div class="modal-header">
       <h2>Синхронизация завершена</h2>
       <button type="button" class="modal-close" onclick="this.closest('.modal-overlay').remove()">&times;</button>
@@ -26,10 +26,10 @@
               <tbody>
                 {% for e in new_entries %}
                 <tr>
-                  <td><strong>{{ e.plate }}</strong></td>
-                  <td style="font-size:12px;color:var(--text-secondary)">{{ e.site_name }}</td>
-                  <td style="font-size:12px">{{ e.event_date }}</td>
-                  <td>{{ '%.1f'|format(e.amount) }}</td>
+                  <td data-label="ТС"><strong>{{ e.plate }}</strong></td>
+                  <td data-label="Площадка" style="font-size:12px;color:var(--text-secondary)">{{ e.site_name }}</td>
+                  <td data-label="Дата/время" style="font-size:12px">{{ e.event_date }}</td>
+                  <td data-label="Литры">{{ '%.1f'|format(e.amount) }}</td>
                 </tr>
                 {% endfor %}
               </tbody>
@@ -64,10 +64,48 @@
         {% if not new_count and not replaced_count and not skipped_count and not errors and not unmatched %}
         <div class="empty-state"><p>Нет изменений.</p></div>
         {% endif %}
+        {% if event_log %}
+        <div style="margin-top:8px;border:1px solid rgba(59,130,246,0.3);border-radius:8px;overflow:hidden">
+          <div onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'table':'none'" style="cursor:pointer;padding:10px 14px;font-weight:600;font-size:13px;background:rgba(59,130,246,0.08)">
+            📋 Детали синхронизации ({{ event_log|length }} событий) ▼
+          </div>
+          <div style="display:none;max-height:300px;overflow-y:auto">
+            <table style="width:100%;font-size:12px">
+              <thead>
+                <tr>
+                  <th>ТС</th>
+                  <th>Дата</th>
+                  <th>Pilot было</th>
+                  <th>Pilot стало</th>
+                  <th>Чек</th>
+                  <th>Статус</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% set status_labels = {"unmatched": "Не найдено ТС", "bad_ts": "Некорректная дата", "bad_amount": "Некорректный объём", "manual_skipped": "Ручная пропущена", "manual_linked": "Ручная связана", "new": "Новая", "orphan_skipped": "Сирота пропущена", "orphan_linked": "Сирота связана", "identical": "Идентична", "conflict_skipped": "Пропущен", "replaced": "Заменён"} %}
+                {% for e in event_log %}
+                {% set row_style = '' %}
+                {% if e.status in ('conflict_skipped', 'replaced') and e.old_amount is not none and (e.old_amount - e.amount)|abs > 0.001 %}
+                  {% set row_style = ' style="background:rgba(234,179,8,0.1)"' %}
+                {% endif %}
+                <tr{{ row_style|safe }}>
+                  <td data-label="ТС" style="font-size:11px">{{ e.plate }}</td>
+                  <td data-label="Дата" style="font-size:11px">{{ e.event_date }}</td>
+                  <td data-label="Pilot было" style="font-size:11px">{{ '%.1f'|format(e.old_amount) if e.old_amount else '—' }}</td>
+                  <td data-label="Pilot стало" style="font-size:11px;font-weight:700">{{ '%.1f'|format(e.amount) if e.amount else '—' }}</td>
+                  <td data-label="Чек" style="font-size:11px">{{ '%.1f'|format(e.check_value) if e.check_value else '—' }}</td>
+                  <td data-label="Статус"><span class="status-badge" style="font-size:10px;padding:1px 6px">{{ status_labels.get(e.status, e.status) }}</span></td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        {% endif %}
       </div>
     </div>
     <div class="modal-footer">
-      <button type="button" class="btn btn-primary" onclick="this.closest('.modal-overlay').remove(); location.reload()">Готово</button>
+      <button type="button" class="btn btn-primary" onclick="var m=this.closest('.modal-overlay'); m.remove(); document.dispatchEvent(new Event('refresh-refuels-list'))">Готово</button>
     </div>
   </div>
 </div>

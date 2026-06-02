@@ -1,11 +1,10 @@
 <div class="modal-overlay" onclick="if(event.target===this)this.remove()">
-  <div class="modal" style="max-width:750px">
+  <div class="modal">
     <div class="modal-header">
       <h2>Предпросмотр импорта чеков</h2>
       <button type="button" class="modal-close" onclick="this.closest('.modal-overlay').remove()">&times;</button>
     </div>
-    <form hx-post="/api/refuels/import-checks-apply" hx-target="#modal-container" hx-swap="innerHTML"
-          hx-on::after-request="if(event.detail.successful && event.detail.xhr.response) { setTimeout(function(){ location.reload() }, 1500) }">
+    <form hx-post="/api/refuels/import-checks-apply" hx-target="#modal-container" hx-swap="innerHTML">
       <div class="modal-body">
         <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
           {% if summary.new %}
@@ -25,13 +24,61 @@
           {% endif %}
         </div>
 
+        <p style="margin-bottom:8px;font-size:13px;color:var(--text-secondary)">Все распознанные строки. Проверьте соответствие машин, затем подтвердите импорт.</p>
+        <div class="table-container" style="max-height:400px;overflow-y:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Исходные данные</th>
+                <th>Найдено ТС</th>
+                <th>Дата/время</th>
+                <th>Объём</th>
+                <th>Действие</th>
+                <th>Текущее значение</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for c in preview_items %}
+              <tr style="{% if c.type == 'skip' %}opacity:0.4{% endif %}">
+                <td data-label="#" style="font-size:11px">{{ c.idx + 1 }}</td>
+                <td data-label="Исходные данные" style="font-size:11px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ c.input_plate if c.input_plate is defined else c.plate }}">{{ c.input_plate if c.input_plate is defined else c.plate }}</td>
+                <td data-label="Найдено ТС" style="font-size:12px"><strong>{{ c.plate }}</strong></td>
+                <td data-label="Дата/время" style="font-size:12px">{{ c.event_date }}</td>
+                <td data-label="Объём" style="font-size:12px"><strong>{{ '%.1f'|format(c.new_amount) }}</strong></td>
+                <td data-label="Действие">
+                  {% if c.type == 'new' %}
+                    <span class="status-badge status-normal">Создать</span>
+                  {% elif c.type == 'update' %}
+                    <span class="status-badge status-small-deviation">Обновить</span>
+                  {% elif c.type == 'conflict' %}
+                    <span class="status-badge status-unacceptable">Конфликт</span>
+                  {% elif c.type == 'identical' %}
+                    <span class="status-badge" style="background:rgba(107,114,128,0.15);color:#9ca3af;border:1px solid rgba(107,114,128,0.3)">Идентично</span>
+                  {% elif c.type == 'skip' %}
+                    <span class="status-badge" style="background:rgba(107,114,128,0.15);color:#9ca3af;border:1px solid rgba(107,114,128,0.3)">Пропуск</span>
+                  {% endif %}
+                </td>
+                <td data-label="Текущее значение" style="font-size:12px">
+                  {% if c.old_amount is not none %}
+                    {{ '%.1f'|format(c.old_amount) }}
+                  {% else %}
+                    <span style="color:var(--text-secondary)">—</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
         {% if conflicts %}
-        <p style="margin-bottom:8px;font-size:13px;color:var(--text-secondary)">Выберите действие для конфликтных записей:</p>
+        <p style="margin-top:12px;margin-bottom:8px;font-size:13px;color:var(--text-secondary)">Конфликтные записи — выберите действие:</p>
         <div style="margin-bottom:8px;display:flex;gap:8px">
           <button type="button" class="btn btn-sm btn-secondary" onclick="document.querySelectorAll('[value=replace]').forEach(function(r){r.checked=true})">Все Заменить</button>
           <button type="button" class="btn btn-sm btn-secondary" onclick="document.querySelectorAll('[value=skip]').forEach(function(r){r.checked=true})">Все Пропустить</button>
         </div>
-        <div class="table-container" style="max-height:400px;overflow-y:auto">
+        <div class="table-container" style="max-height:200px;overflow-y:auto;margin-bottom:8px">
           <table>
             <thead>
               <tr>
@@ -39,19 +86,17 @@
                 <th>Дата/время</th>
                 <th>Чек (из данных)</th>
                 <th>Текущий чек</th>
-                <th>Статус</th>
                 <th>Действие</th>
               </tr>
             </thead>
             <tbody>
               {% for c in conflicts %}
               <tr>
-                <td><strong>{{ c.plate }}</strong></td>
-                <td style="font-size:12px">{{ c.event_date }}</td>
-                <td style="font-size:12px"><strong>{{ '%.1f'|format(c.new_amount) }}</strong></td>
-                <td style="font-size:12px">{{ '%.1f'|format(c.old_amount) if c.old_amount is not none else '—' }}</td>
-                <td><span class="status-badge status-unacceptable">Конфликт</span></td>
-                <td>
+                <td data-label="ТС"><strong>{{ c.plate }}</strong></td>
+                <td data-label="Дата/время" style="font-size:12px">{{ c.event_date }}</td>
+                <td data-label="Чек (из данных)" style="font-size:12px"><strong>{{ '%.1f'|format(c.new_amount) }}</strong></td>
+                <td data-label="Текущий чек" style="font-size:12px">{{ '%.1f'|format(c.old_amount) if c.old_amount is not none else '—' }}</td>
+                <td data-label="Действие">
                   <label style="margin-right:6px;font-size:12px;cursor:pointer">
                     <input type="radio" name="action_{{ c.idx }}" value="replace" checked> Зам
                   </label>
@@ -64,8 +109,6 @@
             </tbody>
           </table>
         </div>
-        {% else %}
-        <div class="empty-state"><p>Конфликтов нет. Новые будут созданы, пустые заполнены, идентичные пропущены.</p></div>
         {% endif %}
 
         <input type="hidden" name="parsed_json" value="{{ parsed_json }}">

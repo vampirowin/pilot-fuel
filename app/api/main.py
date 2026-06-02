@@ -69,7 +69,7 @@ async def critical_page(
         RefuelEntry.is_false == False,
         RefuelEntry.comparison_status.in_(["pilot_missing", "unacceptable"]),
         RefuelEntry.vehicle_id.in_(matched_ids),
-    ).order_by(RefuelEntry.event_date.desc())
+    ).order_by(RefuelEntry.event_date.asc())
     query = apply_refuel_filter(query, user, RefuelEntry, Vehicle)
     entries = (await db.execute(query)).scalars().all()
 
@@ -123,7 +123,13 @@ def _render_critical_groups(sorted_groups: list, vmap: dict) -> str:
             sl = label_map.get(e.comparison_status, e.comparison_status or "—")
             actions = f'<button class="btn btn-sm btn-secondary" hx-get="/api/refuels/{e.id}/edit" hx-target="#modal-container" hx-swap="innerHTML">Правка</button>'
             date_link = f'hx-get="/api/fuel-graph/modal?vehicle_id={e.vehicle_id}&imei={imei_val}&date_from={date_ymd}&date_to={date_ymd}" hx-target="#modal-container" hx-swap="innerHTML"'
-            h += f"<tr><td data-label=\"Дата\" style=\"cursor:pointer;text-decoration:underline dotted #888\" {date_link}>{ds}</td><td data-label=\"Pilot\">{pa}</td><td data-label=\"Чек\">{aa}</td><td data-label=\"Разница\">{df}</td><td data-label=\"Погрешность\">{er}</td><td data-label=\"Статус\"><span class=\"status-badge {sc}\">{sl}</span></td><td>{actions}</td></tr>"
+            diff_style = ""
+            if e.difference is not None:
+                if e.difference < 0:
+                    diff_style = ' style="color:var(--warning);font-weight:600"'
+                elif e.difference > 0:
+                    diff_style = ' style="color:var(--danger);font-weight:600"'
+            h += f"<tr><td data-label=\"Дата\" style=\"cursor:pointer;text-decoration:underline dotted #888\" {date_link}>{ds}</td><td data-label=\"Pilot\">{pa}</td><td data-label=\"Чек\">{aa}</td><td data-label=\"Разница\"{diff_style}>{df}</td><td data-label=\"Погрешность\">{er}</td><td data-label=\"Статус\"><span class=\"status-badge {sc}\">{sl}</span></td><td>{actions}</td></tr>"
         h += "</tbody></table></div></div></div>"
     return h
 
@@ -149,8 +155,10 @@ async def sync_logs_page(
     request: Request,
     user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    type: str = Query(default="auto"),
 ):
-    query = select(SyncLog).where(SyncLog.sync_type == "auto_refuels")
+    sync_type = "auto_refuels" if type == "auto" else "refuels"
+    query = select(SyncLog).where(SyncLog.sync_type == sync_type)
     if user.role != "superadmin":
         query = query.where(SyncLog.created_by == user.username)
     query = query.order_by(desc(SyncLog.started_at)).limit(100)
@@ -187,6 +195,7 @@ async def sync_logs_page(
         "is_superadmin": user.role == "superadmin",
         "admins": admins,
         "company_map": company_map,
+        "current_type": type,
     })
 
 

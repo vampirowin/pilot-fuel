@@ -449,12 +449,14 @@ var fg = (function() {
         zoomMax = Math.min(chart.data.labels.length - 1, Math.round(idx + range * factor * (right / (total || 1))));
         applyZoom();
       };
+      if (!canvas) return;
       canvas.addEventListener('wheel', wheelHandler, { passive: false });
 
       // Drag-to-zoom
       (function() {
         var startX = 0, isDragging = false;
         function onDown(e) {
+          if (!canvas) return;
           var rect = canvas.getBoundingClientRect();
           startX = (e.clientX || e.touches[0].clientX) - rect.left;
           isDragging = true;
@@ -463,7 +465,7 @@ var fg = (function() {
           isDragging = false;
         }
         function onMove(e) {
-          if (!isDragging || !chart) return;
+          if (!isDragging || !chart || !canvas) return;
           var rect = canvas.getBoundingClientRect();
           var endX = (e.clientX || e.touches[0].clientX) - rect.left;
           var dist = endX - startX;
@@ -486,22 +488,25 @@ var fg = (function() {
           if (e.touches.length === 1) { e.preventDefault(); onMove(e); }
         }
         function onTouchEnd() { isDragging = false; }
-        canvas.addEventListener('mousedown', onDown);
-        canvas.addEventListener('mousemove', onMove);
-        canvas.addEventListener('mouseup', onUp);
-        canvas.addEventListener('mouseleave', onUp);
-        canvas.addEventListener('touchstart', onTouchStart, { passive: true });
-        canvas.addEventListener('touchmove', onTouchMove, { passive: false });
-        canvas.addEventListener('touchend', onTouchEnd);
+        if (canvas) {
+          canvas.addEventListener('mousedown', onDown);
+          canvas.addEventListener('mousemove', onMove);
+          canvas.addEventListener('mouseup', onUp);
+          canvas.addEventListener('mouseleave', onUp);
+          canvas.addEventListener('touchstart', onTouchStart, { passive: true });
+          canvas.addEventListener('touchmove', onTouchMove, { passive: false });
+          canvas.addEventListener('touchend', onTouchEnd);
+        }
         dragState = { down: onDown, move: onMove, up: onUp, touchStart: onTouchStart, touchMove: onTouchMove, touchEnd: onTouchEnd };
       })();
 
       // Click on marker → show location map
       var clickStartPos = null;
-      canvas.addEventListener('mousedown', function(e) {
-        clickStartPos = { x: e.clientX, y: e.clientY };
-      });
-      canvas.addEventListener('mouseup', function(e) {
+      if (canvas) {
+        canvas.addEventListener('mousedown', function(e) {
+          clickStartPos = { x: e.clientX, y: e.clientY };
+        });
+        canvas.addEventListener('mouseup', function(e) {
         if (!clickStartPos || !chart || !markers.length) { clickStartPos = null; return; }
         var dx = e.clientX - clickStartPos.x;
         var dy = e.clientY - clickStartPos.y;
@@ -519,6 +524,7 @@ var fg = (function() {
         if (!hit) { closeMap(); return; }
         showMarkerMap(hit);
       });
+      }
 
     } catch (e) {
       showError('Ошибка рендеринга графика');

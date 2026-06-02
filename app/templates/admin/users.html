@@ -15,9 +15,9 @@
       <tbody>
         {% for u in users %}
         <tr>
-          <td style="color:var(--text-dim)">{{ u.id }}</td>
-          <td><strong>{{ u.username }}</strong></td>
-          <td>
+          <td data-label="ID" style="color:var(--text-dim)">{{ u.id }}</td>
+          <td data-label="Логин"><strong>{{ u.username }}</strong></td>
+          <td data-label="Роль">
             {% if u.role == 'superadmin' %}
               <span class="status-badge status-normal">суперадмин</span>
             {% elif u.role == 'company_admin' %}
@@ -26,11 +26,11 @@
               <span class="status-badge">пользователь</span>
             {% endif %}
           </td>
-          <td>{{ companies.get(u.client_account_id, '—') }}</td>
-          <td>{{ u.site_id or '—' }}</td>
-          <td>{% if u.is_active %}<span class="status-badge status-normal">активен</span>{% else %}<span class="status-badge status-false-reading">заблокирован</span>{% endif %}</td>
-          <td>{{ u.last_login.strftime('%d.%m.%Y %H:%M') if u.last_login else '—' }}</td>
-          <td>
+          <td data-label="Компания">{{ companies.get(u.client_account_id, '—') }}</td>
+          <td data-label="Площадка">{{ u.site_id or '—' }}</td>
+          <td data-label="Статус">{% if u.is_active %}<span class="status-badge status-normal">активен</span>{% else %}<span class="status-badge status-false-reading">заблокирован</span>{% endif %}</td>
+          <td data-label="Последний вход">{{ u.last_login.strftime('%d.%m.%Y %H:%M') if u.last_login else '—' }}</td>
+          <td data-label="Действия">
             <a href="/admin/users/{{ u.id }}/edit" class="btn btn-sm btn-secondary">Правка</a>
             {% if u.role != 'superadmin' %}
             <form action="/admin/users/{{ u.id }}/delete" method="POST" style="display:inline" onsubmit="return confirm('Удалить пользователя?')">
@@ -40,7 +40,7 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="8" style="text-align:center;color:var(--text-dim)">Нет пользователей</td></tr>
+        <tr><td colspan="8" data-label="" style="text-align:center;color:var(--text-dim)">Нет пользователей</td></tr>
         {% endfor %}
       </tbody>
     </table>

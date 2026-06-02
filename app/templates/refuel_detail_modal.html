@@ -1,82 +1,130 @@
 <div class="modal-overlay" onclick="if(event.target===this)this.remove()">
   <div class="modal">
     <div class="modal-header">
-      <h2>Детали заправки — {{ plate }}</h2>
+      <h2>{{ plate }}</h2>
       <button type="button" class="modal-close" onclick="this.closest('.modal-overlay').remove()">&times;</button>
     </div>
     <div class="modal-body">
       <div class="detail-grid">
-        <div class="detail-row">
-          <span class="detail-label">Дата</span>
-          <span class="detail-value">{{ entry.event_date.strftime('%d.%m.%Y %H:%M') if entry.event_date else '—' }}</span>
+
+        <div class="detail-card">
+          <div class="detail-card-item">
+            <span class="label">Pilot</span>
+            <span class="value" style="color:var(--accent)">{{ '%.1f'|format(entry.pilot_amount) if entry.pilot_amount is not none else '—' }}</span>
+          </div>
+          <div class="detail-card-item">
+            <span class="label">Чек</span>
+            <span class="value" style="color:var(--success)">{{ '%.1f'|format(entry.actual_amount) if entry.actual_amount is not none else '—' }}</span>
+          </div>
+          <div class="detail-card-item">
+            <span class="label">Разница</span>
+            <span class="value" style="color:{% if entry.difference is not none and entry.difference < 0 %}var(--warning){% elif entry.difference is not none and entry.difference > 0 %}var(--danger){% else %}var(--text-primary){% endif %}">{{ '%.1f'|format(entry.difference) if entry.difference is not none else '—' }}</span>
+          </div>
+          <div class="detail-card-item">
+            <span class="label">Погрешность</span>
+            <span class="value" style="color:var(--info)">{{ '%.1f'|format(entry.error_percent) ~ '%' if entry.error_percent is not none else '—' }}</span>
+          </div>
         </div>
-        <div class="detail-row">
-          <span class="detail-label">Pilot (л)</span>
-          <span class="detail-value">{{ '%.1f'|format(entry.pilot_amount) if entry.pilot_amount is not none else '—' }}</span>
+
+        <div class="detail-group">
+          <div class="detail-group-header">Основное</div>
+          <div class="detail-row">
+            <span class="detail-label">Дата</span>
+            <span class="detail-value mono">{{ entry.event_date.strftime('%d.%m.%Y %H:%M') if entry.event_date else '—' }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Статус</span>
+            <span class="detail-value"><span class="status-badge {{ STATUS_MAP.get(entry.comparison_status, '') }}">{{ STATUS_LABELS.get(entry.comparison_status, entry.comparison_status or '—') }}</span></span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Источник</span>
+            <span class="detail-value">{{ {'manual': 'Ручная', 'pilot_sync': 'Pilot'}.get(entry.source, entry.source or '—') }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Номер чека</span>
+            <span class="detail-value mono">{{ entry.receipt_number or '—' }}</span>
+          </div>
         </div>
-        <div class="detail-row">
-          <span class="detail-label">Чек (л)</span>
-          <span class="detail-value">{{ '%.1f'|format(entry.actual_amount) if entry.actual_amount is not none else '—' }}</span>
-        </div>
-        <div class="detail-row">
-          <span class="detail-label">Разница</span>
-          <span class="detail-value">{{ '%.1f'|format(entry.difference) if entry.difference is not none else '—' }}</span>
-        </div>
-        <div class="detail-row">
-          <span class="detail-label">Погрешность</span>
-          <span class="detail-value">{{ '%.1f'|format(entry.error_percent) ~ '%' if entry.error_percent is not none else '—' }}</span>
-        </div>
-        <div class="detail-row">
-          <span class="detail-label">Статус</span>
-          <span class="detail-value"><span class="status-badge {{ STATUS_MAP.get(entry.comparison_status, '') }}">{{ STATUS_LABELS.get(entry.comparison_status, entry.comparison_status or '—') }}</span></span>
-        </div>
-        <div class="detail-row">
-          <span class="detail-label">Источник</span>
-          <span class="detail-value">{{ {'manual': 'Ручная', 'pilot_sync': 'Pilot'}.get(entry.source, entry.source or '—') }}</span>
-        </div>
-        <div class="detail-row">
-          <span class="detail-label">Номер чека</span>
-          <span class="detail-value">{{ entry.receipt_number or '—' }}</span>
-        </div>
-        <div class="detail-row">
-          <span class="detail-label">Добавил</span>
-          <span class="detail-value">{{ entry.created_by or '—' }}</span>
-        </div>
-        {% if entry.created_at %}
-        <div class="detail-row">
-          <span class="detail-label">Создано</span>
-          <span class="detail-value">{{ entry.created_at.strftime('%d.%m.%Y %H:%M') }}</span>
+
+        {% if pilot_refuel and (pilot_refuel.start_level is not none or pilot_refuel.end_level is not none) %}
+        <div class="detail-group">
+          <div class="detail-group-header">Уровни топлива</div>
+          {% if pilot_refuel.start_level is not none %}
+          <div class="detail-row">
+            <span class="detail-label">До</span>
+            <span class="detail-value mono accent">{{ '%.1f'|format(pilot_refuel.start_level) }} л</span>
+          </div>
+          {% endif %}
+          {% if pilot_refuel.end_level is not none %}
+          <div class="detail-row">
+            <span class="detail-label">После</span>
+            <span class="detail-value mono accent">{{ '%.1f'|format(pilot_refuel.end_level) }} л</span>
+          </div>
+          {% endif %}
         </div>
         {% endif %}
-        {% if entry.updated_at %}
-        <div class="detail-row">
-          <span class="detail-label">Обновлено</span>
-          <span class="detail-value">{{ entry.updated_at.strftime('%d.%m.%Y %H:%M') }}</span>
+
+        <div class="detail-group">
+          <div class="detail-group-header">Метаданные</div>
+          <div class="detail-row">
+            <span class="detail-label">Добавил</span>
+            <span class="detail-value">{{ entry.created_by or '—' }}</span>
+          </div>
+          {% if entry.created_at %}
+          <div class="detail-row">
+            <span class="detail-label">Создано</span>
+            <span class="detail-value mono">{{ entry.created_at.strftime('%d.%m.%Y %H:%M') }}</span>
+          </div>
+          {% endif %}
+          {% if entry.updated_at %}
+          <div class="detail-row">
+            <span class="detail-label">Обновлено</span>
+            <span class="detail-value mono">{{ entry.updated_at.strftime('%d.%m.%Y %H:%M') }}</span>
+          </div>
+          {% endif %}
+          {% if entry.is_false %}
+          <div class="detail-row">
+            <span class="detail-label" style="color:var(--warning)">Ложная причина</span>
+            <span class="detail-value">{{ entry.false_reason or '—' }}</span>
+          </div>
+          {% endif %}
+        </div>
+
+        {% if pilot_refuel and pilot_refuel.address is not none or (pilot_refuel and pilot_refuel.lat is not none and pilot_refuel.lon is not none) %}
+        <div class="detail-group">
+          <div class="detail-group-header">Локация</div>
+          <div class="detail-row">
+            <span class="detail-label">Адрес</span>
+            <span class="detail-value" style="cursor:{% if pilot_refuel.lat is not none and pilot_refuel.lon is not none %}pointer{% endif %};color:{% if pilot_refuel.lat is not none and pilot_refuel.lon is not none %}var(--accent){% endif %}" {% if pilot_refuel.lat is not none and pilot_refuel.lon is not none %}onclick="showAddressMap({{ pilot_refuel.lat }}, {{ pilot_refuel.lon }})"{% endif %}>{{ pilot_refuel.address or ('%.6f, %.6f'|format(pilot_refuel.lat, pilot_refuel.lon)) }}</span>
+          </div>
+          <div id="map-container" style="display:none;margin-top:4px;border-radius:var(--radius-sm);overflow:hidden;position:relative">
+            <div id="address-map" style="height:160px;width:100%"></div>
+            <button type="button" onclick="closeAddressMap()" style="position:absolute;top:4px;right:4px;z-index:1000;background:rgba(0,0,0,0.5);color:#fff;border:none;border-radius:4px;width:24px;height:24px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center">&times;</button>
+          </div>
         </div>
         {% endif %}
+
         {% if entry.comment %}
-        <div class="detail-row">
-          <span class="detail-label">Комментарий</span>
-          <span class="detail-value">{{ entry.comment }}</span>
+        <div class="detail-group full">
+          <div class="detail-group-header">Комментарий</div>
+          <div class="detail-row">
+            <span class="detail-value" style="text-align:left;max-width:none;color:var(--text-secondary);font-size:12px;line-height:1.4">{{ entry.comment }}</span>
+          </div>
         </div>
         {% endif %}
-        {% if entry.is_false %}
-        <div class="detail-row">
-          <span class="detail-label">Ложная причина</span>
-          <span class="detail-value">{{ entry.false_reason or '—' }}</span>
-        </div>
-        {% endif %}
+
       </div>
-      <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-sm btn-secondary" hx-get="/api/fuel-graph/modal?vehicle_id={{ entry.vehicle_id }}&imei={{ vehicle.imei or '' }}&date_from={{ entry.event_date.strftime('%Y-%m-%d') if entry.event_date else '' }}&date_to={{ entry.event_date.strftime('%Y-%m-%d') if entry.event_date else '' }}" hx-target="#modal-container" hx-swap="innerHTML">График топлива</button>
-        <button class="btn btn-sm btn-secondary" hx-get="/api/refuels/{{ entry.id }}/edit" hx-target="#modal-container" hx-swap="innerHTML">Редактировать</button>
+
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">
+        <button class="btn btn-sm btn-secondary" hx-get="/api/fuel-graph/modal?vehicle_id={{ entry.vehicle_id }}&imei={{ vehicle.imei or '' }}&date_from={{ entry.event_date.strftime('%Y-%m-%d') if entry.event_date else '' }}&date_to={{ entry.event_date.strftime('%Y-%m-%d') if entry.event_date else '' }}" hx-target="#modal-container" hx-swap="innerHTML">График</button>
+        <button class="btn btn-sm btn-secondary" hx-get="/api/refuels/{{ entry.id }}/edit" hx-target="#modal-container" hx-swap="innerHTML">Правка</button>
         {% if entry.is_false %}
-        <button type="button" class="btn btn-sm btn-secondary" hx-post="/api/refuels/{{ entry.id }}/unmark-false" hx-on::after-request="if(event.detail.successful) this.closest('.modal-overlay').remove()">Снять отметку «Ложная»</button>
+        <button type="button" class="btn btn-sm btn-secondary" hx-post="/api/refuels/{{ entry.id }}/unmark-false" hx-on::after-request="if(event.detail.successful) this.closest('.modal-overlay').remove()">Снять ложную</button>
         {% else %}
-        <button type="button" class="btn btn-sm btn-secondary" hx-get="/api/refuels/{{ entry.id }}/mark-false-form" hx-target="#modal-container" hx-swap="innerHTML">Отметить как ложную</button>
+        <button type="button" class="btn btn-sm btn-secondary" hx-get="/api/refuels/{{ entry.id }}/mark-false-form" hx-target="#modal-container" hx-swap="innerHTML">Отметить ложной</button>
         {% endif %}
         {% if is_admin or entry.source == 'manual' %}
-        <button type="button" class="btn btn-sm btn-danger" hx-post="/api/refuels/{{ entry.id }}/delete" hx-confirm="Удалить запись из БД?" hx-on::after-request="if(event.detail.successful) this.closest('.modal-overlay').remove()">Удалить запись</button>
+        <button type="button" class="btn btn-sm btn-danger" hx-post="/api/refuels/{{ entry.id }}/delete" hx-confirm="Удалить запись из БД?" hx-on::after-request="if(event.detail.successful) this.closest('.modal-overlay').remove()" style="margin-left:auto">Удалить</button>
         {% endif %}
       </div>
     </div>
@@ -85,3 +133,35 @@
     </div>
   </div>
 </div>
+<script>
+var mapInstance = null;
+var leafletLoaded = false;
+
+function loadLeaflet(callback) {
+  if (leafletLoaded) { callback(); return; }
+  var link = document.createElement('link');
+  link.rel = 'stylesheet'; link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+  document.head.appendChild(link);
+  var script = document.createElement('script');
+  script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+  script.onload = function() { leafletLoaded = true; callback(); };
+  document.body.appendChild(script);
+}
+
+function showAddressMap(lat, lon) {
+  document.getElementById('map-container').style.display = 'block';
+  loadLeaflet(function() {
+    if (mapInstance) mapInstance.remove();
+    mapInstance = L.map('address-map', { zoomControl: false, attributionControl: false })
+      .setView([lat, lon], 15);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(mapInstance);
+    L.marker([lat, lon]).addTo(mapInstance);
+    setTimeout(function() { mapInstance.invalidateSize(); }, 200);
+  });
+}
+
+function closeAddressMap() {
+  document.getElementById('map-container').style.display = 'none';
+  if (mapInstance) { mapInstance.remove(); mapInstance = null; }
+}
+</script>

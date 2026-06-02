@@ -1,11 +1,10 @@
 <div class="modal-overlay" onclick="if(event.target===this)this.remove()">
-  <div class="modal" style="max-width:750px">
+  <div class="modal">
     <div class="modal-header">
       <h2>Предпросмотр синхронизации</h2>
       <button type="button" class="modal-close" onclick="this.closest('.modal-overlay').remove()">&times;</button>
     </div>
-    <form hx-post="/api/refuels/sync/preview" hx-target="#modal-container" hx-swap="innerHTML"
-          hx-on::after-request="if(event.detail.successful && event.detail.xhr.response) { setTimeout(function(){ location.reload() }, 1500) }">
+    <form hx-post="/api/refuels/sync/preview" hx-target="#modal-container" hx-swap="innerHTML">
       <div class="modal-body">
         <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
           {% if new_count %}
@@ -24,7 +23,7 @@
 
         {% if conflicts %}
         <p style="margin-bottom:8px;font-size:13px;color:var(--text-secondary)">Выберите действие для конфликтных записей:</p>
-        <div style="margin-bottom:8px;display:flex;gap:8px">
+        <div style="margin-bottom:8px;display:flex;gap:8px;flex-wrap:wrap">
           <button type="button" class="btn btn-sm btn-secondary" onclick="document.querySelectorAll('[value=replace]').forEach(function(r){r.checked=true})">Все Заменить</button>
           <button type="button" class="btn btn-sm btn-secondary" onclick="document.querySelectorAll('[value=skip]').forEach(function(r){r.checked=true})">Все Пропустить</button>
         </div>
@@ -35,7 +34,9 @@
                 <th>ТС</th>
                 <th>Площадка</th>
                 <th>Дата/время</th>
-                <th>Pilot (было→стало)</th>
+                <th>Pilot сейчас</th>
+                <th>Pilot новый</th>
+                <th>Чек</th>
                 <th>Статус</th>
                 <th>Действие</th>
               </tr>
@@ -43,24 +44,20 @@
             <tbody>
               {% for c in conflicts %}
               <tr>
-                <td><strong>{{ c.plate }}</strong></td>
-                <td style="font-size:12px;color:var(--text-secondary)">{{ c.site_name }}</td>
-                <td style="font-size:12px">{{ c.event_date }}</td>
-                <td style="font-size:12px">
-                  {% if c.old_amount is not none %}
-                  <span style="color:var(--text-dim)">{{ '%.1f'|format(c.old_amount) }}</span> → <strong>{{ '%.1f'|format(c.new_amount) }}</strong>
-                  {% else %}
-                  <strong>{{ '%.1f'|format(c.new_amount) }}</strong>
-                  {% endif %}
-                </td>
-                <td>
+                <td data-label="ТС"><strong>{{ c.plate }}</strong></td>
+                <td data-label="Площадка" style="font-size:12px;color:var(--text-secondary)">{{ c.site_name }}</td>
+                <td data-label="Дата/время" style="font-size:12px">{{ c.event_date }}</td>
+                <td data-label="Pilot сейчас" style="font-size:12px">{{ '%.1f'|format(c.old_amount) if c.old_amount else '—' }}</td>
+                <td data-label="Pilot новый" style="font-size:12px;font-weight:700;color:var(--accent)">{{ '%.1f'|format(c.new_amount) }}</td>
+                <td data-label="Чек" style="font-size:12px">{{ '%.1f'|format(c.check_value) if c.check_value else '—' }}</td>
+                <td data-label="Статус">
                   {% if c.is_false %}
                   <span class="status-badge status-false-reading">Ложная</span>
                   {% else %}
                   <span class="status-badge status-small-deviation">Расхождение</span>
                   {% endif %}
                 </td>
-                <td>
+                <td data-label="Действие">
                   <label style="margin-right:6px;font-size:12px;cursor:pointer">
                     <input type="radio" name="action_{{ c.idx }}" value="replace"{% if not c.is_false %} checked{% endif %}> Зам
                   </label>
@@ -79,6 +76,7 @@
         <input type="hidden" name="date_from" value="{{ date_from }}">
         <input type="hidden" name="date_to" value="{{ date_to }}">
         <input type="hidden" name="vehicle_id" value="{{ vehicle_id }}">
+        <input type="hidden" name="confirmed" value="1">
         <input type="hidden" name="conflict_actions" id="conflict-actions" value="">
       </div>
       <div class="modal-footer">

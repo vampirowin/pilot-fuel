@@ -2,7 +2,7 @@
 {% block title %}UI fuel — ТС площадки{% endblock %}
 {% block head %}
 <style>
-.search-input { padding:8px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg-card);color:var(--text);font-size:14px;width:280px;outline:none }
+.search-input { padding:8px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg-card);color:var(--text);font-size:14px;width:280px;max-width:100%;outline:none }
 .search-input:focus { border-color:var(--accent) }
 </style>
 {% endblock %}
@@ -78,7 +78,7 @@
 <script>
 let selectedVehicles = new Set();
 
-document.getElementById('assign-form').addEventListener('change', function(e) {
+var af = document.getElementById('assign-form'); if (af) af.addEventListener('change', function(e) {
   if (e.target.name === 'vehicle_ids') {
     if (e.target.checked) selectedVehicles.add(e.target.value);
     else selectedVehicles.delete(e.target.value);

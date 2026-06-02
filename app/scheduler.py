@@ -130,11 +130,13 @@ async def _sync_company(admin: User) -> dict:
         errors = []
         vehicle_updates = []
         thresh_cache = {}
+        event_log = []
 
         for ev in all_events:
             v = _match_vehicle(ev, vehicles)
             if not v:
                 errors.append(ev.get("name", "?")[:30])
+                event_log.append({"plate": "—", "event_date": "", "old_amount": None, "new_amount": ev.get("refuel_amount"), "check_value": None, "action": "unmatched", "name": ev.get("name", "?")})
                 continue
 
             if v.id not in thresh_cache:
@@ -143,13 +145,18 @@ async def _sync_company(admin: User) -> dict:
 
             ev_ts = _parse_timestamp(ev.get("ts"))
             if not ev_ts:
+                event_log.append({"plate": v.plate_number or "—", "event_date": "", "old_amount": None, "new_amount": ev.get("refuel_amount"), "check_value": None, "action": "bad_ts", "name": ev.get("name", "?")})
                 continue
             if ev_ts.tzinfo is not None:
                 ev_ts = ev_ts.replace(tzinfo=None)
 
             amount = ev.get("refuel_amount")
             if not amount or amount <= 0:
+                event_log.append({"plate": v.plate_number or "—", "event_date": ev_ts.strftime("%d.%m.%Y %H:%M"), "old_amount": None, "new_amount": ev.get("refuel_amount"), "check_value": None, "action": "bad_amount", "name": ev.get("name", "?")})
                 continue
+
+            ev_date_str = ev_ts.strftime("%d.%m.%Y %H:%M")
+            plate = v.plate_number or v.name or "—"
 
             existing = await db.execute(
                 select(PilotRefuel).where(
@@ -160,11 +167,9 @@ async def _sync_company(admin: User) -> dict:
             )
             existing_pr = existing.scalar_one_or_none()
 
-            plate = v.plate_number or v.name or "—"
-
             if existing_pr:
-                existing_pr.amount = amount
-                existing_pr.event_date = ev_ts
+                old_amount = existing_pr.amount
+                check_value = None
 
                 existing_entry = await db.execute(
                     select(RefuelEntry).where(
@@ -173,6 +178,11 @@ async def _sync_company(admin: User) -> dict:
                     )
                 )
                 existing_entry = existing_entry.scalar_one_or_none()
+                if existing_entry:
+                    check_value = existing_entry.actual_amount
+
+                existing_pr.amount = amount
+                existing_pr.event_date = ev_ts
 
                 if existing_entry:
                     existing_entry.pilot_amount = amount
@@ -187,12 +197,19 @@ async def _sync_company(admin: User) -> dict:
                         existing_entry.error_percent = None
                         existing_entry.comparison_status = "pilot_missing" if existing_entry.actual_amount else None
                     updated_count += 1
-                    vehicle_updates.append({
-                        "plate": plate,
-                        "date": ev_ts.strftime("%d.%m.%Y %H:%M"),
-                        "amount": f"{amount:.1f}",
-                        "action": "обновлено",
-                    })
+
+                action = "identical" if abs((old_amount or 0) - amount) < 0.001 else "conflict" if check_value else "updated"
+                vehicle_updates.append({
+                    "plate": plate,
+                    "date": ev_date_str,
+                    "amount": f"{amount:.1f}",
+                    "action": action,
+                })
+                event_log.append({
+                    "plate": plate, "event_date": ev_date_str,
+                    "old_amount": old_amount, "new_amount": amount,
+                    "check_value": check_value, "action": action, "name": ev.get("name", "?"),
+                })
             else:
                 pr = PilotRefuel(
                     vehicle_id=v.id,
@@ -219,9 +236,14 @@ async def _sync_company(admin: User) -> dict:
                 new_count += 1
                 vehicle_updates.append({
                     "plate": plate,
-                    "date": ev_ts.strftime("%d.%m.%Y %H:%M"),
+                    "date": ev_date_str,
                     "amount": f"{amount:.1f}",
                     "action": "+",
+                })
+                event_log.append({
+                    "plate": plate, "event_date": ev_date_str,
+                    "old_amount": None, "new_amount": amount,
+                    "check_value": None, "action": "new", "name": ev.get("name", "?"),
                 })
 
         details = f"new={new_count}, updated={updated_count}, pilot_events={total_events}"
@@ -233,7 +255,7 @@ async def _sync_company(admin: User) -> dict:
             status="completed" if not errors else "partial",
             records_affected=new_count + updated_count,
             details=details,
-            details_json={"vehicle_updates": vehicle_updates, "errors": errors[:20]},
+            details_json={"vehicle_updates": vehicle_updates, "errors": errors[:20], "event_log": event_log},
             created_by=admin.username,
         )
         db.add(log)

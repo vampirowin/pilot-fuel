@@ -22,6 +22,7 @@
       <div style="margin:4px 0 12px 16px">
         <button class="btn btn-sm btn-secondary" onclick="toggleDetail('vu-{{ loop.index }}')">Подробнее &#9660;</button>
         <div id="vu-{{ loop.index }}" style="display:none;margin-top:6px">
+          <div class="table-container" style="overflow-x:auto">
           <table class="detail-table">
             <thead>
               <tr><th style="text-align:left">ТС</th><th style="text-align:left">Дата</th><th style="text-align:right">Объём</th><th style="text-align:center">Действие</th></tr>
@@ -29,10 +30,10 @@
             <tbody>
               {% for vu in r.vehicle_updates %}
               <tr>
-                <td>{{ vu.plate }}</td>
-                <td>{{ vu.date }}</td>
-                <td style="text-align:right">{{ vu.amount }} л</td>
-                <td style="text-align:center">
+                <td data-label="ТС">{{ vu.plate }}</td>
+                <td data-label="Дата">{{ vu.date }}</td>
+                <td data-label="Объём" style="text-align:right">{{ vu.amount }} л</td>
+                <td data-label="Действие" style="text-align:center">
                   {% if vu.action == '+' %}
                   <span class="status-badge status-normal" style="font-size:0.75rem">новый</span>
                   {% else %}
@@ -43,6 +44,7 @@
               {% endfor %}
             </tbody>
           </table>
+          </div>
         </div>
       </div>
       {% endif %}

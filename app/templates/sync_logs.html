@@ -2,8 +2,12 @@
 {% block title %}UI fuel — Лог синхронизации{% endblock %}
 {% block content %}
 <div class="page-header">
-  <h1>Лог автосинхронизации</h1>
+  <h1>Лог синхронизации</h1>
   <div class="page-header-actions">
+    <div style="display:flex;gap:6px;margin-right:12px">
+      <a href="/sync-logs?type=auto" class="btn btn-sm {{ 'btn-primary' if current_type == 'auto' else 'btn-secondary' }}">Авто</a>
+      <a href="/sync-logs?type=manual" class="btn btn-sm {{ 'btn-primary' if current_type == 'manual' else 'btn-secondary' }}">Ручные</a>
+    </div>
     {% if is_superadmin %}
     <button class="btn btn-primary" onclick="openSyncModal()">Запустить синхронизацию</button>
     {% endif %}
@@ -45,20 +49,60 @@
             <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation();toggleDetail('log-vu-{{ log.id }}')">Подробнее &#9660;</button>
           </div>
           <div id="log-vu-{{ log.id }}" style="display:none">
+            <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;align-items:center">
+              <span style="font-size:13px;font-weight:600">События синхронизации</span>
+              <button class="btn btn-sm btn-primary" onclick="event.stopPropagation();openManualSync('{{ log.started_at.strftime('%Y-%m-%d') if log.started_at else '' }}')">Ручная синхр. за эту дату</button>
+            </div>
             {% set dj = log.details_json or {} %}
+            {% set el = dj.get('event_log', []) %}
+            {% if el %}
+            <div style="margin-bottom:8px;font-size:13px;font-weight:600">События синхронизации ({{ el|length }})</div>
+            <div style="max-height:350px;overflow:auto">
+            <table class="detail-table">
+              <thead><tr>
+                <th style="text-align:left">ТС</th>
+                <th style="text-align:left">Дата</th>
+                <th style="text-align:right">Pilot было</th>
+                <th style="text-align:right">Pilot стало</th>
+                <th style="text-align:right">Чек</th>
+                <th style="text-align:center">Действие</th>
+              </tr></thead>
+              <tbody>
+              {% set action_labels = {"new": "➕ новый", "updated": "🔄 обновлён", "identical": "✓ идентичен", "conflict": "⚡ конфликт", "unmatched": "✕ не найден", "bad_ts": "✕ дата", "bad_amount": "✕ объём"} %}
+              {% set action_classes = {"new": "status-normal", "updated": "status-small-deviation", "identical": "", "conflict": "status-unacceptable", "unmatched": "status-false-reading", "bad_ts": "status-false-reading", "bad_amount": "status-false-reading"} %}
+              {% for e in el %}
+              {% set is_conflict = e.action == 'conflict' %}
+              <tr{% if is_conflict %} style="background:rgba(234,179,8,0.12)"{% endif %}>
+                <td data-label="ТС" style="text-align:left;font-size:11px">{{ e.plate }}</td>
+                <td data-label="Дата" style="text-align:left;font-size:11px">{{ e.event_date }}</td>
+                <td data-label="Pilot было" style="text-align:right;font-size:11px{% if is_conflict %};color:var(--text-dim){% endif %}">{{ '%.1f'|format(e.old_amount) if e.old_amount else '—' }}</td>
+                <td data-label="Pilot стало" style="text-align:right;font-size:11px;font-weight:{% if is_conflict %}700{% else %}400{% endif %}{% if is_conflict %};color:var(--warning){% endif %}">{{ '%.1f'|format(e.new_amount) if e.new_amount else '—' }}</td>
+                <td data-label="Чек" style="text-align:right;font-size:11px">{{ '%.1f'|format(e.check_value) if e.check_value else '—' }}</td>
+                <td data-label="Действие" style="text-align:center"><span class="status-badge {{ action_classes.get(e.action, '') }}" style="font-size:10px;padding:1px 6px">{{ action_labels.get(e.action, e.action) }}</span></td>
+              </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+            </div>
             {% set vu = dj.get('vehicle_updates', []) %}
             {% if vu %}
+            <div style="margin-top:8px;font-size:13px;font-weight:600">Изменения ТС ({{ vu|length }})</div>
+            <div style="overflow-x:auto">
             <table class="detail-table">
               <thead><tr><th style="text-align:left">ТС</th><th style="text-align:left">Дата</th><th style="text-align:right">Объём</th><th style="text-align:center">Действие</th></tr></thead>
               <tbody>
               {% for v in vu %}
               <tr>
-                <td>{{ v.plate }}</td>
-                <td>{{ v.date }}</td>
-                <td style="text-align:right">{{ v.amount }} л</td>
-                <td style="text-align:center">
-                  {% if v.action == '+' %}
+                <td data-label="ТС">{{ v.plate }}</td>
+                <td data-label="Дата">{{ v.date }}</td>
+                <td data-label="Объём" style="text-align:right">{{ v.amount }} л</td>
+                <td data-label="Действие" style="text-align:center">
+                  {% if v.action == '+' or v.action == 'new' %}
                   <span class="status-badge status-normal" style="font-size:0.75rem">новый</span>
+                  {% elif v.action == 'conflict' %}
+                  <span class="status-badge status-unacceptable" style="font-size:0.75rem">конфликт</span>
+                  {% elif v.action == 'identical' %}
+                  <span style="font-size:0.75rem;color:var(--text-dim)">идентичен</span>
                   {% else %}
                   <span class="status-badge status-small-deviation" style="font-size:0.75rem">{{ v.action }}</span>
                   {% endif %}
@@ -67,6 +111,8 @@
               {% endfor %}
               </tbody>
             </table>
+            </div>
+            {% endif %}
             {% else %}
             <div style="font-size:0.85rem;white-space:pre-wrap;word-break:break-word">{{ log.details or 'Нет подробных данных' }}</div>
             {% endif %}
@@ -140,6 +186,10 @@ function startSync() {
 function toggleDetail(id) {
   var el = document.getElementById(id);
   if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+function openManualSync(date) {
+  var d = date || new Date().toISOString().slice(0,10);
+  htmx.ajax('GET', '/api/refuels/sync-modal?date=' + d, { target: '#modal-container', swap: 'innerHTML' });
 }
 </script>
 {% endblock %}

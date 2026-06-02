@@ -48,7 +48,7 @@ class PilotService:
         if token:
             headers["Authorization"] = f"Bearer {token}"
         if node_id:
-            headers["X-Node-Id"] = str(node_id)
+            headers["X-Node"] = str(node_id)
         headers.setdefault("Content-Type", "application/json")
         headers.setdefault("X-Requested-With", "XMLHttpRequest")
 
@@ -362,5 +362,21 @@ class PilotService:
         try:
             data = await self._request("GET", path, token=token, node_id=node_id)
             return data.get("data", [])
+        except PilotAuthError:
+            return []
+
+    async def get_track(
+        self, token: str, node_id: int,
+        imei: str, agent_id: int, ts_from: int, ts_to: int,
+    ) -> list[dict]:
+        path = f"/api/v3/vehicles/track?imei={imei}&agent_id={agent_id}&ts={ts_from}&te={ts_to}"
+        try:
+            data = await self._request("GET", path, token=token, node_id=node_id)
+            raw = data.get("data", [])
+            if isinstance(raw, list):
+                return raw
+            if isinstance(raw, dict):
+                return raw.get("tracks", [])
+            return []
         except PilotAuthError:
             return []

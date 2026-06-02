@@ -12,10 +12,10 @@
       <tbody>
         {% for c in companies %}
         <tr>
-          <td style="color:var(--text-dim)">{{ c.id }}</td>
-          <td><strong>{{ c.name }}</strong></td>
-          <td>{{ c.created_at.strftime('%d.%m.%Y') }}</td>
-          <td>
+          <td data-label="ID" style="color:var(--text-dim)">{{ c.id }}</td>
+          <td data-label="Название"><strong>{{ c.name }}</strong></td>
+          <td data-label="Дата создания">{{ c.created_at.strftime('%d.%m.%Y') }}</td>
+          <td data-label="Действия">
             <a href="/admin/companies/{{ c.id }}/edit" class="btn btn-sm btn-secondary">Правка</a>
             <a href="/admin/companies/{{ c.id }}/sites" class="btn btn-sm btn-secondary">Площадки</a>
             <form action="/admin/companies/{{ c.id }}/delete" method="POST" style="display:inline" onsubmit="return confirm('Удалить компанию?')">
@@ -24,7 +24,7 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="4" style="text-align:center;color:var(--text-dim)">Нет компаний</td></tr>
+        <tr><td colspan="4" data-label="" style="text-align:center;color:var(--text-dim)">Нет компаний</td></tr>
         {% endfor %}
       </tbody>
     </table>

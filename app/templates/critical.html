@@ -55,11 +55,19 @@
               {% for e in entries %}
               {% set class_map = {'normal': 'status-normal', 'small_deviation': 'status-small-deviation', 'unacceptable': 'status-unacceptable', 'pilot_missing': 'status-pilot-missing', 'false_reading': 'status-false-reading'} %}
               {% set label_map = {'normal': 'Норма', 'small_deviation': 'Расхождение', 'unacceptable': 'Недопустимо', 'pilot_missing': 'Нет в Pilot', 'false_reading': 'Ложная'} %}
+              {% set diff_style = '' %}
+              {% if e.difference is not none %}
+                {% if e.difference < 0 %}
+                  {% set diff_style = ' style="color:var(--warning);font-weight:600"' %}
+                {% elif e.difference > 0 %}
+                  {% set diff_style = ' style="color:var(--danger);font-weight:600"' %}
+                {% endif %}
+              {% endif %}
               <tr>
                 <td data-label="Дата" style="cursor:pointer;text-decoration:underline dotted #888" hx-get="/api/fuel-graph/modal?vehicle_id={{ e.vehicle_id }}&imei={{ v.imei or '' }}&date_from={{ e.event_date.strftime('%Y-%m-%d') if e.event_date else '' }}&date_to={{ e.event_date.strftime('%Y-%m-%d') if e.event_date else '' }}" hx-target="#modal-container" hx-swap="innerHTML">{{ e.event_date.strftime('%d.%m.%Y %H:%M') }}</td>
                 <td data-label="Pilot">{{ '%.1f'|format(e.pilot_amount) if e.pilot_amount is not none else '—' }}</td>
                 <td data-label="Чек">{{ '%.1f'|format(e.actual_amount) if e.actual_amount is not none else '—' }}</td>
-                <td data-label="Разница">{{ '%.1f'|format(e.difference) if e.difference is not none else '—' }}</td>
+                <td data-label="Разница"{{ diff_style|safe }}>{{ '%.1f'|format(e.difference) if e.difference is not none else '—' }}</td>
                 <td data-label="Погрешность">{{ '%.1f'|format(e.error_percent) + '%' if e.error_percent is not none else '—' }}</td>
                 <td data-label="Статус"><span class="status-badge {{ class_map.get(e.comparison_status, '') }}">{{ label_map.get(e.comparison_status, e.comparison_status or '—') }}</span></td>
                 <td>

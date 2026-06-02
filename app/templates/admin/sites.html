@@ -13,10 +13,10 @@
       <tbody>
         {% for s in sites %}
         <tr>
-          <td style="color:var(--text-dim)">{{ s.id }}</td>
-          <td><strong>{{ s.name }}</strong></td>
-          <td><a href="/admin/companies/{{ company.id }}/sites/{{ s.id }}/vehicles" class="btn btn-sm btn-secondary">ТС</a></td>
-          <td>
+          <td data-label="ID" style="color:var(--text-dim)">{{ s.id }}</td>
+          <td data-label="Название"><strong>{{ s.name }}</strong></td>
+          <td data-label="ТС"><a href="/admin/companies/{{ company.id }}/sites/{{ s.id }}/vehicles" class="btn btn-sm btn-secondary">ТС</a></td>
+          <td data-label="Действия">
             <a href="/admin/companies/{{ company.id }}/sites/{{ s.id }}/edit" class="btn btn-sm btn-secondary">Правка</a>
             <form action="/admin/companies/{{ company.id }}/sites/{{ s.id }}/delete" method="POST" style="display:inline" onsubmit="return confirm('Удалить площадку? ТС останутся без площадки.')">
               <button class="btn btn-sm btn-danger">Удалить</button>
@@ -24,7 +24,7 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="4" style="text-align:center;color:var(--text-dim)">Нет площадок</td></tr>
+        <tr><td colspan="4" data-label="" style="text-align:center;color:var(--text-dim)">Нет площадок</td></tr>
         {% endfor %}
       </tbody>
     </table>

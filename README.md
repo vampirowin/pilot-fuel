@@ -1,6 +1,6 @@
 # UI fuel
 
-> **Система мониторинга и анализа топлива** — загрузка данных с Pilot GPS, сравнение с чеками, расчёт погрешностей и визуализация.
+> **Система мониторинга и анализа топлива** — загрузка данных с Pilot GPS, сравнение с чеками, расчёт погрешностей, трекинг на карте, синхронизация.
 
 ---
 
@@ -13,20 +13,25 @@
 | **Транспорт** | Иерархия Компания → Площадка → Тип ТС с коллапсами, цветные бейджи, поиск, bulk-операции, статус датчика, per-vehicle пороги |
 | **Заправки** | Иерархия Компания → Площадка → Тип ТС → ТС, данные Pilot vs чек, погрешность, статус, сортировка, поиск по номеру, комментарии, исключение из статистики |
 | **Синхронизация** | Ручная (preview + apply) и автоматическая ежедневная (APScheduler, 03:00 MSK) |
-| **Автосинхронизация** | APScheduler, force-overwrite, перелогин при 401 (если сохранён пароль), логирование в SyncLog с vehicle_updates |
-| **Лог синхронизации** | Таблица с деталями, vehicle-уровень, раскрытие «Подробнее», компания вместо логина |
-| **График топлива** | Chart.js: drag-to-zoom, колёсико, auto-scale Y, loading/error/empty стейты, кластеризация событий, карта местоположения (Leaflet, ленивая загрузка) |
+| **Автосинхронизация** | APScheduler, force-overwrite, перелогин при 401, логирование событий `vehicle_updates` |
+| **Лог синхронизации** | Таблица с event_log, детализация на уровне ТС, раскрытие «Подробнее», компания вместо логина |
+| **График топлива** | Chart.js: drag-to-zoom, колёсико, auto-scale Y, loading/error/empty стейты, кластеризация событий |
 | **Чеки на графике** | Оранжевые точки на линии уровня с подписью объёма |
-| **Карта заправок** | Leaflet (лениво), клик на маркер → карта 200px с адресом |
-| **Ручной ввод** | Добавление заправок с авто-подбором Pilot, отслеживание `created_by` с tooltip при наведении |
+| **Карта заправок** | Leaflet (лениво), клик на маркер → карта с адресом |
+| **Трек на карте** | Кнопка в каждой строке, Leaflet полилиния `#2979ff`, раскраска по скорости (зелёный/жёлтый/красный), периоды 7дн/14дн/30дн/Свой |
+| **GPS-точки (сырые)** | `/api/v3/vehicles/points`, непрерывный трек по всем точкам, макс. 3 дня |
+| **Ручной ввод** | Добавление заправок с авто-подбором Pilot, отслеживание `created_by` с ФИО в тултипе |
 | **Импорт чеков** | Из буфера обмена (табуляция), предпросмотр, классификация new/update/identical/conflict |
-| **Профиль** | Выбор часового пояса (13 российских + основные мировые) |
-| **Фильтры** | По компании (superadmin), площадке, типу ТС, статусу, дате, госномеру |
+| **Экспорт в Excel** | openpyxl, выбор ТС, учёт фильтров, замороженная шапка, синий заголовок |
+| **Детальная модалка** | 2-колоночные bordered-карточки: Основное/Уровни/Локация/Метаданные/Комментарий |
+| **Профиль** | Выбор часового пояса (13 российских + основные мировые), ФИО |
+| **Фильтры** | По компании (superadmin), площадке, типу ТС, статусу, дате (пресет Месяц), госномеру |
 | **Разметка «Ложная»** | Отметка ошибочных показаний в модалке |
-| **Пороги точности** | Глобальные + per-vehicle override, абсолютная разница (литры), кнопка пересчёта всех записей |
+| **Пороги точности** | Глобальные (норма 3%, предупреждение 10%) + per-vehicle override (проценты + абсолютные литры), кнопка пересчёта |
 | **Multi-tenant** | Компании, площадки, роли (superadmin / company_admin / user) |
 | **Блокировка** | Отключение доступа без удаления |
 | **ТС без датчиков** | Отдельная страница с иерархией и bulk-возвратом |
+| **Мобильная адаптация** | `data-label` на <768px, скроллящаяся навигация, touch-цели 48px, `overflow-x: auto` |
 
 ---
 
@@ -38,11 +43,12 @@
 | **ORM** | SQLAlchemy 2.0 (async) |
 | **Миграции** | Alembic |
 | **База данных** | PostgreSQL 16 |
-| **Фронтенд** | Jinja2 + HTMX |
+| **Фронтенд** | Jinja2 + HTMX + HX-Trigger |
 | **Графики** | Chart.js |
-| **Карты** | Leaflet (ленивая загрузка, OpenStreetMap) |
+| **Карты** | Leaflet 1.9.4 (ленивая загрузка, OpenStreetMap) |
 | **Планировщик** | APScheduler (AsyncioIOScheduler) |
 | **HTTP клиент** | httpx (async) |
+| **Экспорт** | openpyxl |
 | **Дизайн** | Тёмная тема (амбер) |
 
 ---
@@ -119,21 +125,22 @@ python run.py
 ```
 pilot-fuel/
 ├── app/
-│   ├── api/            # Маршруты (auth, vehicles, refuels, admin, main, fuel_graph)
+│   ├── api/            # Маршруты (auth, vehicles, refuels, admin, main, fuel_graph, track)
 │   ├── models/         # SQLAlchemy модели (10 шт.)
-│   ├── services/       # Сервисы (Pilot API client)
-│   ├── templates/      # Jinja2 шаблоны (20+)
-│   ├── static/         # CSS, JS
+│   ├── services/       # Сервисы (Pilot API client, httpx)
+│   ├── templates/      # Jinja2 шаблоны (25+)
+│   ├── static/         # CSS
 │   ├── __init__.py     # FastAPI app factory + lifespan
 │   ├── config.py       # Настройки
 │   ├── database.py     # SQLAlchemy engine + async session
 │   ├── scheduler.py    # APScheduler (ежедневная синхронизация)
+│   ├── timezone_utils.py # Часовые пояса
 │   └── dependencies.py # Хелперы фильтрации
 ├── alembic/            # Миграции БД
 ├── run.py              # Точка входа
 ├── requirements.txt
 ├── seed.py             # Сидирование
-├── MEMORY.md           # Памятка
+├── MEMORY.md           # Памятка (детальный план, решения, схема)
 └── AGENTS.md           # Правила для AI
 ```
 
@@ -160,7 +167,7 @@ refuel_entries     — id, vehicle_id (FK), pilot_refuel_id (FK), event_date, pi
                      comment, exclude_from_stats, created_at, updated_at
 settings           — id, key, value (норма 3%, предупреждение 10%)
 sync_log           — id, vehicle_id, sync_type, status, records_affected, details,
-                     details_json (JSONB), created_by, started_at, completed_at
+                     details_json (JSONB), event_log (JSONB), created_by, started_at, completed_at
 ```
 
 ---
@@ -175,7 +182,7 @@ sync_log           — id, vehicle_id, sync_type, status, records_affected, deta
 | `GET /vehicles` | Список ТС (иерархия + поиск) |
 | `GET /refuels` | Заправки (иерархия + фильтры) |
 | `GET /critical` | Критические события (иерархия) |
-| `GET /sync-logs` | Лог автосинхронизации |
+| `GET /sync-logs` | Лог синхронизации |
 | `GET /admin/*` | Администрирование |
 | `POST /logout` | Выход |
 
@@ -183,7 +190,7 @@ sync_log           — id, vehicle_id, sync_type, status, records_affected, deta
 
 | Маршрут | Описание |
 |---|---|
-| `GET /profile` | Профиль пользователя (часовой пояс) |
+| `GET /profile` | Профиль пользователя (часовой пояс, ФИО) |
 | `POST /profile` | Сохранить часовой пояс |
 | `POST /api/vehicles/sync` | Синхронизация ТС из Pilot |
 | `POST /api/vehicles/{id}/delete` | Удаление ТС (админ, каскад) |
@@ -204,10 +211,14 @@ sync_log           — id, vehicle_id, sync_type, status, records_affected, deta
 | `GET /api/refuels/import-checks-form` | Форма импорта чеков |
 | `POST /api/refuels/import-checks-preview` | Предпросмотр импорта |
 | `POST /api/refuels/import-checks-apply` | Применить импорт |
+| `GET /api/refuels/export/xlsx` | Экспорт в Excel |
 | `GET /api/fuel-graph/modal` | Модалка графика топлива |
 | `GET /api/fuel-graph/data` | Данные графика (JSON) |
 | `GET /api/critical-count` | Счётчик критических |
 | `POST /api/sync-logs/trigger` | Запустить синхронизацию |
+| `GET /api/vehicles/{id}/track-modal` | Модалка трека на карте |
+| `GET /api/vehicles/{id}/track-data` | Данные трека (JSON) |
+| `GET /api/vehicles/{id}/points` | Сырые GPS-точки (JSON) |
 | `GET /api/admin/vehicles-no-sensor` | ТС без датчиков |
 | `GET /api/admin/vehicles-no-sensor/search` | Поиск среди ТС без датчиков |
 | `POST /api/admin/vehicles-no-sensor/bulk-restore` | Bulk: вернуть датчики |
@@ -233,7 +244,7 @@ sync_log           — id, vehicle_id, sync_type, status, records_affected, deta
 - Если absolute выключен или литровый порог превышен → сравнивается по процентам
 - Null-поля → fallback на глобальные настройки
 
-Настраивается через кнопку **«Пороги»** на странице `/vehicles` (superadmin/company_admin).
+Настраивается через кнопку **«Пороги»** на странице `/vehicles`.
 
 ---
 

@@ -30,6 +30,7 @@ def create_app() -> FastAPI:
     from app.api.refuels import router as refuels_router
     from app.api.admin import router as admin_router
     from app.api.fuel_graph import router as fuel_graph_router
+    from app.api.track import router as track_router
 
     app.include_router(auth_router)
     app.include_router(main_router)
@@ -37,5 +38,6 @@ def create_app() -> FastAPI:
     app.include_router(refuels_router)
     app.include_router(admin_router)
     app.include_router(fuel_graph_router)
+    app.include_router(track_router)
 
     return app
