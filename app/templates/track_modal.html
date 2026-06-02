@@ -146,6 +146,10 @@ var tm = (function() {
           window._tmSegments.forEach(function(l) { map.removeLayer(l); });
           window._tmSegments = null;
         }
+        if (window._tmArrows) {
+          window._tmArrows.forEach(function(l) { map.removeLayer(l); });
+          window._tmArrows = null;
+        }
         var pts = data.points || [];
         if (pts.length < 2) {
           document.getElementById('tm-stats').innerHTML = '<span style="color:var(--text-dim)">Нет данных за выбранный период</span>';
@@ -156,13 +160,22 @@ var tm = (function() {
         }
         pts.sort(function(a,b) { return (a.ts||0) - (b.ts||0); });
         var segs = [], allLatLngs = [];
-        var GAP_THRESHOLD = 900;
+        var GAP_THRESHOLD = 900, DIST_THRESHOLD = 5000;
+        function bearing(lat1, lon1, lat2, lon2) {
+          var dLon = (lon2 - lon1) * Math.PI / 180;
+          var y = Math.sin(dLon) * Math.cos(lat2 * Math.PI / 180);
+          var x = Math.cos(lat1 * Math.PI / 180) * Math.sin(lat2 * Math.PI / 180) -
+                  Math.sin(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.cos(dLon);
+          return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+        }
+        var drawnCount = 0;
         for (var i = 0; i < pts.length - 1; i++) {
           var lat1 = parseFloat(pts[i].lat), lon1 = parseFloat(pts[i].lon);
           var lat2 = parseFloat(pts[i+1].lat), lon2 = parseFloat(pts[i+1].lon);
           if (isNaN(lat1) || isNaN(lon1) || isNaN(lat2) || isNaN(lon2)) continue;
           var gap = (pts[i+1].ts || 0) - (pts[i].ts || 0);
           if (gap > GAP_THRESHOLD) continue;
+          if (map.distance([lat1,lon1],[lat2,lon2]) > DIST_THRESHOLD) continue;
           allLatLngs.push([lat1, lon1]);
           if (i === pts.length - 2) allLatLngs.push([lat2, lon2]);
           var speed = parseFloat(pts[i].speed) || 0;
@@ -171,6 +184,22 @@ var tm = (function() {
             color: color, weight: 3, opacity: 0.8
           }).addTo(map);
           segs.push(seg);
+          if (drawnCount % 8 === 0 && drawnCount > 0) {
+            var bear = bearing(lat1, lon1, lat2, lon2);
+            var midLat = (lat1 + lat2) / 2, midLon = (lon1 + lon2) / 2;
+            var arrow = L.marker([midLat, midLon], {
+              icon: L.divIcon({
+                html: '<div style="transform:rotate(' + bear + 'deg);font-size:14px;color:' + color + ';opacity:0.8">▲</div>',
+                iconSize: [14, 14],
+                iconAnchor: [7, 7],
+                className: ''
+              }),
+              interactive: false
+            }).addTo(map);
+            if (!window._tmArrows) window._tmArrows = [];
+            window._tmArrows.push(arrow);
+          }
+          drawnCount++;
         }
         window._tmSegments = segs;
         if (allLatLngs.length > 0) {
