@@ -115,7 +115,31 @@ async def vehicle_points(
         except Exception:
             points = []
 
-    return {"points": points, "plate": plate, "truncated": truncated}
+    refuels = []
+    try:
+        from app.models.pilot_refuel import PilotRefuel
+        from sqlalchemy import and_
+        refuel_rows = await db.execute(
+            select(PilotRefuel).where(
+                PilotRefuel.vehicle_id == vehicle_id,
+                PilotRefuel.lat.isnot(None),
+                PilotRefuel.lon.isnot(None),
+                PilotRefuel.event_date >= df,
+                PilotRefuel.event_date <= dt,
+            ).order_by(PilotRefuel.event_date)
+        )
+        for pr in refuel_rows.scalars().all():
+            refuels.append({
+                "lat": pr.lat,
+                "lon": pr.lon,
+                "ts": int(pr.event_date.timestamp()),
+                "amount": pr.amount,
+                "address": pr.address or "",
+            })
+    except Exception:
+        refuels = []
+
+    return {"points": points, "refuels": refuels, "plate": plate, "truncated": truncated}
 
 
 @router.get("/api/vehicles/{vehicle_id}/track-data")

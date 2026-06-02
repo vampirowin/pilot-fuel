@@ -80,8 +80,8 @@ var tm = (function() {
         var pts = data.points || [];
         if (pts.length < 2) {
           document.getElementById('tm-stats').innerHTML = '<span style="color:var(--text-dim)">Нет данных за выбранный период</span>';
-          if (data.truncated) {
-            document.getElementById('tm-stats').innerHTML += '<span style="color:var(--warning);margin-left:8px">⚠ Максимум 3 дня</span>';
+            if (data.truncated) {
+            document.getElementById('tm-stats').innerHTML += '<span style="color:var(--warning);margin-left:8px">⚠ Максимум 90 дней</span>';
           }
           return;
         }
@@ -112,9 +112,36 @@ var tm = (function() {
         var statsHtml = '<span>' + pts.length + ' точек</span>' +
           '<span>макс. ' + maxSpeed + ' км/ч</span>';
         if (data.truncated) {
-          statsHtml += '<span style="color:var(--warning)">⚠ Максимум 3 дня</span>';
+          statsHtml += '<span style="color:var(--warning)">⚠ Максимум 90 дней</span>';
+        }
+        var refs = data.refuels || [];
+        if (refs.length > 0) {
+          statsHtml += '<span style="color:var(--info)">⛽ ' + refs.length + ' заправок</span>';
         }
         document.getElementById('tm-stats').innerHTML = statsHtml;
+        if (window._tmMarkers) {
+          window._tmMarkers.forEach(function(m) { map.removeLayer(m); });
+          window._tmMarkers = null;
+        }
+        var markers = [];
+        if (refs.length > 0) {
+          var fuelIcon = L.divIcon({
+            html: '<div style="background:var(--warning,#ff9800);color:#fff;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:14px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.3)">⛽</div>',
+            iconSize: [28, 28],
+            iconAnchor: [14, 14],
+            className: ''
+          });
+          for (var i = 0; i < refs.length; i++) {
+            var r = refs[i];
+            var popupText = '<b>⛽ Заправка</b><br>' + (r.amount ? 'Объем: <b>' + r.amount.toFixed(1) + ' л</b><br>' : '') +
+              (r.ts ? new Date(r.ts * 1000).toLocaleString('ru-RU') + '<br>' : '') +
+              (r.address || '');
+            var m = L.marker([r.lat, r.lon], { icon: fuelIcon }).addTo(map)
+              .bindPopup(popupText);
+            markers.push(m);
+          }
+        }
+        window._tmMarkers = markers;
       })
       .catch(function() {
         loading.style.display = 'none';
