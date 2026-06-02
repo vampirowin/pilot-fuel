@@ -156,10 +156,13 @@ var tm = (function() {
         }
         pts.sort(function(a,b) { return (a.ts||0) - (b.ts||0); });
         var segs = [], allLatLngs = [];
+        var GAP_THRESHOLD = 900;
         for (var i = 0; i < pts.length - 1; i++) {
           var lat1 = parseFloat(pts[i].lat), lon1 = parseFloat(pts[i].lon);
           var lat2 = parseFloat(pts[i+1].lat), lon2 = parseFloat(pts[i+1].lon);
           if (isNaN(lat1) || isNaN(lon1) || isNaN(lat2) || isNaN(lon2)) continue;
+          var gap = (pts[i+1].ts || 0) - (pts[i].ts || 0);
+          if (gap > GAP_THRESHOLD) continue;
           allLatLngs.push([lat1, lon1]);
           if (i === pts.length - 2) allLatLngs.push([lat2, lon2]);
           var speed = parseFloat(pts[i].speed) || 0;

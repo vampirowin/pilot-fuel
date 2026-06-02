@@ -352,10 +352,10 @@ class PilotService:
 
     async def get_sensor_dip_history(
         self, token: str, node_id: int,
-        imei: str, ts_from: int, ts_to: int,
+        imei: str, agent_id: int, ts_from: int, ts_to: int,
         tag_id: str | None = None,
     ) -> list[dict]:
-        path = f"{PILOT_SENSOR_DIP_URL}?imei={imei}&ts={ts_from}&te={ts_to}"
+        path = f"{PILOT_SENSOR_DIP_URL}?imei={imei}&agent_id={agent_id}&ts={ts_from}&te={ts_to}"
         if tag_id:
             path += f"&tag_id={tag_id}"
         try:
