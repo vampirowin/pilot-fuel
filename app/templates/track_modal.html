@@ -1,5 +1,5 @@
 <div class="modal-overlay" onclick="if(event.target===this)this.remove()">
-  <div class="modal" style="width: 800px; max-width: 95vw;">
+  <div class="modal" style="width: 95vw; max-width: 100%; max-height: 92vh;">
     <div class="modal-header">
       <h2>Трек — {{ plate }}</h2>
       <button type="button" class="modal-close" onclick="this.closest('.modal-overlay').remove()">&times;</button>
@@ -25,7 +25,7 @@
         <div id="tm-loading" style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;background:rgba(0,0,0,0.4);z-index:1000;border-radius:8px">
           <span style="color:var(--text-secondary);font-size:14px">Загрузка...</span>
         </div>
-        <div id="tm-map" style="height:450px;width:100%"></div>
+        <div id="tm-map" style="height:calc(92vh - 170px);width:100%;min-height:300px"></div>
       </div>
       <div id="tm-stats" style="display:flex;gap:16px;margin-top:8px;font-size:13px;color:var(--text-secondary);flex-wrap:wrap"></div>
     </div>
@@ -238,6 +238,7 @@ var tm = (function() {
   document.getElementById('tm-date-from').value = '{{ date_from }}';
   document.getElementById('tm-date-to').value = '{{ date_to }}';
   document.querySelector('.period-chips .chip:first-child').classList.add('active');
+  window.addEventListener('resize', function() { if (map) setTimeout(function() { map.invalidateSize(); }, 200); });
 
   return { load: load, setPeriod: setPeriod };
 })();
