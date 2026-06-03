@@ -25,6 +25,10 @@ from app.config import get_settings
 from app.timezone_utils import format_dt, get_user_timezone, utc_to_tz, utcnow
 
 async def _resolve_pilot_credentials(user, db) -> tuple[str | None, int]:
+    """
+    Получить Pilot token для пользователя.
+    Fallback: если у пользователя нет своего token — берём у админа его компании.
+    """
     token = user.pilot_token
     node_id = user.pilot_node_id or 0
     if token:
@@ -44,6 +48,15 @@ PER_PAGE = 10
 
 
 def build_refuel_hierarchy(entries: list, vmap: dict) -> list:
+    """
+    Строит дерево: Компания → Площадка → Папка → ТС → записи.
+
+    vmap: {vehicle_id: {company, site, folder, plate_number}}
+    Результат: [(company, count, [(site, count, [(folder, count, [(vid, plate, entries)])])])]
+
+    Если у компании/площадки/папки только одна дочерняя группа с плейсхолдером ("Без ..."),
+    она схлопывается в __flat__ — один уровень вместо двух.
+    """
     tree = {}
     for entry in entries:
         vin = vmap.get(entry.vehicle_id, {})
@@ -1035,6 +1048,12 @@ async def sync_refuels_preview(
 
 
 async def _get_effective_thresholds(db: AsyncSession, vehicle_id: int | None = None) -> tuple[float, float, float, float, bool]:
+    """
+    Пороги сравнения объёмов: сначала глобальные настройки (Setting),
+    затем переопределение на конкретное ТС.
+
+    Возвращает: (n_pct, w_pct, n_abs, w_abs, enable_abs)
+    """
     n_pct, w_pct = 3.0, 10.0
     n_abs, w_abs = 0.0, 0.0
     enable_abs = False
@@ -1064,6 +1083,13 @@ async def _get_effective_thresholds(db: AsyncSession, vehicle_id: int | None = N
 
 
 def _calc_comparison(pilot_amount: float | None, actual_amount: float | None, n_pct: float, w_pct: float, n_abs: float = 0.0, w_abs: float = 0.0, enable_abs: bool = False) -> tuple:
+    """
+    Сравнить объём по Pilot и по чеку.
+
+    Пороги срабатывания: сначала абсолютные (enable_abs), потом процентные.
+    normal → small_deviation → unacceptable — по возрастанию отклонения.
+    Если нет pilot_amount — статус pilot_missing.
+    """
     if pilot_amount is not None and actual_amount is not None and pilot_amount > 0:
         diff = actual_amount - pilot_amount
         err = abs(diff) / pilot_amount * 100
@@ -1247,6 +1273,8 @@ async def edit_refuel(
     db.add(log)
     await db.commit()
 
+    # HX-Trigger: клиент (base.html) слушает событие refresh-refuels-list и перезапрашивает список
+    # Важно: возвращаем пустое тело — HTMX сам обновит #refuels-list
     return HTMLResponse("", headers={"HX-Trigger": "refresh-refuels-list"})
 
 
@@ -1839,6 +1867,12 @@ async def import_checks_apply(
 
 
 def _match_vehicle(event: dict, vehicles: list) -> Vehicle | None:
+    """
+    Сопоставить событие заправки из Pilot с ТС в локальной БД.
+
+    Pilot присылает name (строка вида "ГАЗЕЛЬ NEXT А321АО18").
+    Разбиваем на токены и ищем вхождение госномера.
+    """
     ev_name_lower = (event.get("name") or "").strip().lower()
     ev_tokens = {t.strip() for t in ev_name_lower.replace("-", " ").replace("(", " ").replace(")", " ").replace("_", " ").split() if t.strip()}
     for db_v in vehicles:
@@ -1858,6 +1892,11 @@ def _match_vehicle(event: dict, vehicles: list) -> Vehicle | None:
 
 
 def _parse_timestamp(val) -> datetime | None:
+    """
+    Преобразовать Unix timestamp из Pilot в datetime.
+
+    Иногда Pilot присылает timestamp в миллисекундах — нормализуем.
+    """
     if not val:
         return None
     try:

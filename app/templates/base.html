@@ -167,7 +167,7 @@ function toggleGroup(id) {
   });
 })();
 document.addEventListener('refresh-refuels-list', function() {
-  htmx.ajax('GET', window.location.href, {target: '#refuels-list', swap: 'innerHTML', select: '#refuels-list'});
+  htmx.ajax('GET', window.location.href, {target: '#refuels-list', swap: 'innerHTML'});
 });
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function() {

@@ -22,8 +22,9 @@
         </div>
       </div>
       <div id="tm-map-container" style="border-radius:8px;overflow:hidden;border:1px solid var(--border);position:relative">
-        <div id="tm-loading" style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;background:rgba(0,0,0,0.4);z-index:1000;border-radius:8px">
-          <span style="color:var(--text-secondary);font-size:14px">Загрузка...</span>
+        <div id="tm-loading" style="display:flex;position:absolute;inset:0;flex-direction:column;align-items:center;justify-content:center;background:rgba(10,10,25,0.65);z-index:1000;border-radius:8px;backdrop-filter:blur(2px)">
+          <div class="tm-spinner"></div>
+          <span id="tm-loading-text" style="color:var(--text-secondary);font-size:14px;margin-top:14px">Загружаем карту...</span>
         </div>
         <div id="tm-map" style="height:calc(92vh - 170px);width:100%;min-height:300px"></div>
       </div>
@@ -39,132 +40,178 @@
 .tm-point-popup .leaflet-popup-content { margin: 12px 14px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
 .tm-point-popup .leaflet-popup-tip { background: #1c1c35; border: 1px solid #2a2a50; }
 .tm-point-popup .leaflet-popup-close-button { color: #9ca3af !important; }
+.tm-spinner { width: 44px; height: 44px; border: 4px solid rgba(251,191,36,0.2); border-top-color: #fbbf24; border-radius: 50%; animation: tm-spin 0.8s linear infinite; }
+@keyframes tm-spin { to { transform: rotate(360deg); } }
+@keyframes tm-pop {
+  0% { transform: scale(0); opacity: 0; }
+  60% { transform: scale(1.2); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
 </style>
 <script>
 var tm = (function() {
   var map = null, polyline = null;
   var vehId = {{ vehicle_id }};
 
-  function loadMap() {
-    if (map) return;
-    var container = document.getElementById('tm-map');
-    if (!container._leaflet_loaded) {
-      container._leaflet_loaded = true;
-      var s = document.createElement('link');
-      s.rel = 'stylesheet'; s.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-      document.head.appendChild(s);
-      var j = document.createElement('script');
-      j.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-      j.onload = function() {
-        map = L.map('tm-map').setView([55.75, 37.61], 6);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          maxZoom: 18,
-          attribution: '&copy; OpenStreetMap'
-        }).addTo(map);
-        map.on('click', function(e) {
-          var pts = window._tmPoints;
-          if (!pts || pts.length === 0) return;
-          var minDist = Infinity, nearest = null, idx = -1;
-          for (var i = 0; i < pts.length; i++) {
-            var d = map.distance(e.latlng, [parseFloat(pts[i].lat), parseFloat(pts[i].lon)]);
-            if (d < minDist) { minDist = d; nearest = pts[i]; idx = i; }
-          }
-          if (!nearest || minDist > 500) return;
-
-          function sensorMeta(name) {
-            var n = (name || '').toLowerCase();
-            if (n.includes('топлив') || n.includes('fuel') || n.includes('бенз') || n.includes('бак')) return {icon:'⛽',color:'#f59e0b',unit:'л'};
-            if (n.includes('зажиг') || n.includes('ignit') || n.includes('двиг') || n.includes('engine')) return {icon:'🔌',color:'#ef4444',unit:''};
-            if (n.includes('температур') || n.includes('temp') || n.includes('градус')) return {icon:'🌡️',color:'#f97316',unit:'°C'};
-            if (n.includes('напряж') || n.includes('volt') || n.includes('акб') || n.includes('батар')) return {icon:'⚡',color:'#22c55e',unit:'В'};
-            if (n.includes('пробег') || n.includes('odom') || n.includes('километр') || n.includes('mile')) return {icon:'📏',color:'#a855f7',unit:'км'};
-            if (n.includes('скорост') || n.includes('speed')) return {icon:'🏎️',color:'#3b82f6',unit:'км/ч'};
-            if (n.includes('оборот') || n.includes('rpm') || n.includes('частот')) return {icon:'🔄',color:'#06b6d4',unit:'об/мин'};
-            if (n.includes('двер') || n.includes('door') || n.includes('крыш')) return {icon:'🚪',color:'#8b5cf6',unit:''};
-            if (n.includes('ось') || n.includes('axle') || n.includes('нагруз')) return {icon:'⚖️',color:'#ec4899',unit:'кг'};
-            if (n.includes('can') || n.includes('шин')) return {icon:'🖥️',color:'#14b8a6',unit:''};
-            if (n.includes('вес') || n.includes('weight') || n.includes('масс')) return {icon:'⚖️',color:'#f43f5e',unit:'кг'};
-            if (n.includes('время') || n.includes('time') || n.includes('моточас')) return {icon:'⏱️',color:'#64748b',unit:'ч'};
-            if (n.includes('давлен') || n.includes('press') || n.includes('масл')) return {icon:'🛢️',color:'#eab308',unit:'бар'};
-            if (n.includes('расход') || n.includes('consum')) return {icon:'📉',color:'#10b981',unit:'л/100км'};
-            if (n.includes('уровень') || n.includes('level')) return {icon:'📊',color:'#6366f1',unit:'%'};
-            if (n.includes('датчик') || n.includes('sensor')) return {icon:'📡',color:'#6366f1',unit:''};
-            return {icon:'📊',color:'#94a3b8',unit:''};
-          }
-
-          var html = '<div style="font-size:12px;line-height:1.6;min-width:240px">';
-          html += '<div style="font-weight:600;font-size:13px;padding-bottom:6px;border-bottom:1px solid #2a2a50;margin-bottom:6px;color:#fbbf24">📌 ' + new Date(nearest.ts * 1000).toLocaleString('ru-RU') + '</div>';
-          html += '<div style="display:flex;gap:10px;margin-bottom:6px;flex-wrap:wrap">';
-          html += '<span style="display:inline-flex;align-items:center;gap:3px;background:#2a2a50;color:#d1d5db;padding:2px 8px;border-radius:10px;font-size:11px">🏎️ <b>' + (parseFloat(nearest.speed)||0) + '</b> км/ч</span>';
-          if (nearest.sat !== undefined) html += '<span style="display:inline-flex;align-items:center;gap:3px;background:#2a2a50;color:#d1d5db;padding:2px 8px;border-radius:10px;font-size:11px">🛰️ <b>' + nearest.sat + '</b></span>';
-          if (nearest.alt !== undefined) html += '<span style="display:inline-flex;align-items:center;gap:3px;background:#2a2a50;color:#d1d5db;padding:2px 8px;border-radius:10px;font-size:11px">🗻 <b>' + nearest.alt + '</b> м</span>';
-          html += '</div>';
-
-          var sensors = nearest.sensors;
-          if (sensors) {
-            var sinfo = window._tmSensorsInfo || [];
-            var nameMap = {};
-            for (var si = 0; si < sinfo.length; si++) nameMap[sinfo[si].id] = sinfo[si].name;
-            var sensorRows = [];
-            for (var sid in sensors) {
-              var sname = nameMap[sid] || ('sensor#' + sid);
-              var sval = sensors[sid];
-              var meta = sensorMeta(sname);
-              if (typeof sval === 'number') sval = sval.toFixed(1);
-              sensorRows.push('<div style="display:flex;align-items:center;justify-content:space-between;padding:3px 0;border-bottom:1px solid #2a2a50;font-size:12px">' +
-                '<span style="display:flex;align-items:center;gap:5px;color:#d1d5db"><span style="font-size:14px">' + meta.icon + '</span>' + sname + '</span>' +
-                '<span style="font-weight:600;color:' + meta.color + '">' + sval + (meta.unit ? ' <span style="font-weight:400;color:#6b7280;font-size:11px">' + meta.unit + '</span>' : '') + '</span></div>');
-            }
-            if (sensorRows.length > 0) {
-              html += sensorRows.join('');
-            }
-          }
-
-          html += '</div>';
-          L.popup({maxWidth:320,className:'tm-point-popup'}).setLatLng(e.latlng).setContent(html).openOn(map);
-        });
-        tm.load();
-      };
-      document.body.appendChild(j);
-    }
+  function showLoading(text) {
+    var el = document.getElementById('tm-loading');
+    var txt = document.getElementById('tm-loading-text');
+    if (txt && text) txt.textContent = text;
+    if (el) el.style.display = 'flex';
+  }
+  function hideLoading() {
+    var el = document.getElementById('tm-loading');
+    if (el) el.style.display = 'none';
   }
 
+  // Подписки на события карты — ТОЛЬКО после создания map
+  function attachMapHandlers() {
+    map.on('zoomend', function() {
+      if (!window._tmDotGroup) return;
+      if (map.getZoom() >= 14) map.addLayer(window._tmDotGroup);
+      else map.removeLayer(window._tmDotGroup);
+    });
+    window.addEventListener('resize', function() {
+      if (map) setTimeout(function() { map.invalidateSize(); }, 200);
+    });
+    // Клик по карте → ближайшая точка с инфо
+    map.on('click', function(e) {
+      var pts = window._tmPoints;
+      if (!pts || pts.length === 0) return;
+      var minDist = Infinity, nearest = null;
+      for (var i = 0; i < pts.length; i++) {
+        var d = map.distance(e.latlng, [parseFloat(pts[i].lat), parseFloat(pts[i].lon)]);
+        if (d < minDist) { minDist = d; nearest = pts[i]; }
+      }
+      if (!nearest || minDist > 500) return;
+
+      function sensorMeta(name) {
+        var n = (name || '').toLowerCase();
+        if (n.includes('топлив') || n.includes('fuel') || n.includes('бенз') || n.includes('бак')) return {icon:'⛽',color:'#f59e0b',unit:'л'};
+        if (n.includes('зажиг') || n.includes('ignit') || n.includes('двиг') || n.includes('engine')) return {icon:'🔌',color:'#ef4444',unit:''};
+        if (n.includes('температур') || n.includes('temp') || n.includes('градус')) return {icon:'🌡️',color:'#f97316',unit:'°C'};
+        if (n.includes('напряж') || n.includes('volt') || n.includes('акб') || n.includes('батар')) return {icon:'⚡',color:'#22c55e',unit:'В'};
+        if (n.includes('пробег') || n.includes('odom') || n.includes('километр') || n.includes('mile')) return {icon:'📏',color:'#a855f7',unit:'км'};
+        if (n.includes('скорост') || n.includes('speed')) return {icon:'🏎️',color:'#3b82f6',unit:'км/ч'};
+        if (n.includes('оборот') || n.includes('rpm') || n.includes('частот')) return {icon:'🔄',color:'#06b6d4',unit:'об/мин'};
+        if (n.includes('двер') || n.includes('door') || n.includes('крыш')) return {icon:'🚪',color:'#8b5cf6',unit:''};
+        if (n.includes('давлен') || n.includes('press') || n.includes('масл')) return {icon:'🛢️',color:'#eab308',unit:'бар'};
+        if (n.includes('уровень') || n.includes('level')) return {icon:'📊',color:'#6366f1',unit:'%'};
+        return {icon:'📊',color:'#94a3b8',unit:''};
+      }
+
+      var html = '<div style="font-size:12px;line-height:1.6;min-width:240px">';
+      html += '<div style="font-weight:600;font-size:13px;padding-bottom:6px;border-bottom:1px solid #2a2a50;margin-bottom:6px;color:#fbbf24">📌 ' + new Date(nearest.ts * 1000).toLocaleString('ru-RU') + '</div>';
+      html += '<div style="display:flex;gap:10px;margin-bottom:6px;flex-wrap:wrap">';
+      html += '<span style="display:inline-flex;align-items:center;gap:3px;background:#2a2a50;color:#d1d5db;padding:2px 8px;border-radius:10px;font-size:11px">🏎️ <b>' + (parseFloat(nearest.speed)||0) + '</b> км/ч</span>';
+      if (nearest.sat !== undefined) html += '<span style="display:inline-flex;align-items:center;gap:3px;background:#2a2a50;color:#d1d5db;padding:2px 8px;border-radius:10px;font-size:11px">🛰️ <b>' + nearest.sat + '</b></span>';
+      if (nearest.alt !== undefined) html += '<span style="display:inline-flex;align-items:center;gap:3px;background:#2a2a50;color:#d1d5db;padding:2px 8px;border-radius:10px;font-size:11px">🗻 <b>' + nearest.alt + '</b> м</span>';
+      html += '</div>';
+
+      var sensors = nearest.sensors;
+      if (sensors) {
+        var sinfo = window._tmSensorsInfo || [];
+        var nameMap = {};
+        for (var si = 0; si < sinfo.length; si++) nameMap[sinfo[si].id] = sinfo[si].name;
+        var sensorRows = [];
+        for (var sid in sensors) {
+          var sname = nameMap[sid] || ('sensor#' + sid);
+          var sval = sensors[sid];
+          var meta = sensorMeta(sname);
+          if (typeof sval === 'number') sval = sval.toFixed(1);
+          sensorRows.push('<div style="display:flex;align-items:center;justify-content:space-between;padding:3px 0;border-bottom:1px solid #2a2a50;font-size:12px">' +
+            '<span style="display:flex;align-items:center;gap:5px;color:#d1d5db"><span style="font-size:14px">' + meta.icon + '</span>' + sname + '</span>' +
+            '<span style="font-weight:600;color:' + meta.color + '">' + sval + (meta.unit ? ' <span style="font-weight:400;color:#6b7280;font-size:11px">' + meta.unit + '</span>' : '') + '</span></div>');
+        }
+        if (sensorRows.length > 0) html += sensorRows.join('');
+      }
+
+      html += '</div>';
+      L.popup({maxWidth:320,className:'tm-point-popup'}).setLatLng(e.latlng).setContent(html).openOn(map);
+    });
+  }
+
+  // === ЗАГРУЗКА LEAFLET (асинхронно) ===
+  function loadMap() {
+    if (map) return;
+    showLoading('Загружаем карту...');
+    var container = document.getElementById('tm-map');
+    if (container._leaflet_loaded) return;
+    container._leaflet_loaded = true;
+
+    // Если Leaflet уже подгружен (повторное открытие модалки) — сразу инициализируем
+    if (window.L) {
+      initMap();
+      return;
+    }
+
+    var s = document.createElement('link');
+    s.rel = 'stylesheet';
+    s.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+    document.head.appendChild(s);
+
+    var j = document.createElement('script');
+    j.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    j.onload = initMap;
+    j.onerror = function() {
+      showLoading('❌ Ошибка загрузки карты. Проверьте интернет.');
+    };
+    document.body.appendChild(j);
+  }
+
+  function initMap() {
+    map = L.map('tm-map').setView([55.75, 37.61], 6);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 18,
+      attribution: '&copy; OpenStreetMap'
+    }).addTo(map);
+    attachMapHandlers();
+    setTimeout(function() { if (map) map.invalidateSize(); }, 100);
+    load();
+  }
+
+  // === ЗАГРУЗКА + ОТРИСОВКА ТРЕКА С АНИМАЦИЕЙ ===
   function load() {
+    if (!map) return;
     var df = document.getElementById('tm-date-from').value;
     var dt = document.getElementById('tm-date-to').value;
     if (!df || !dt) return;
-    var loading = document.getElementById('tm-loading');
-    loading.style.display = 'flex';
+
+    // Отменяем анимацию, если идёт
+    if (window._tmAnimTimer) {
+      clearTimeout(window._tmAnimTimer);
+      window._tmAnimTimer = null;
+    }
+
+    showLoading('Загружаем трек...');
     fetch('/api/vehicles/' + vehId + '/points?date_from=' + df + '&date_to=' + dt)
       .then(function(r) { return r.json(); })
       .then(function(data) {
-        loading.style.display = 'none';
+        hideLoading();
         if (!map) return;
         if (data.plate) document.getElementById('tm-title').textContent = '🚛 ' + data.plate;
+
+        // Очистка предыдущего
         if (polyline) { map.removeLayer(polyline); polyline = null; }
-        if (window._tmSegments) {
-          window._tmSegments.forEach(function(l) { map.removeLayer(l); });
-          window._tmSegments = null;
-        }
-        if (window._tmArrows) {
-          window._tmArrows.forEach(function(l) { map.removeLayer(l); });
-          window._tmArrows = null;
-        }
-        if (window._tmDotGroup) {
-          map.removeLayer(window._tmDotGroup);
-          window._tmDotGroup = null;
-        }
+        if (window._tmSegments) { window._tmSegments.forEach(function(l) { map.removeLayer(l); }); window._tmSegments = null; }
+        if (window._tmArrows)   { window._tmArrows.forEach(function(l) { map.removeLayer(l); });   window._tmArrows = null; }
+        if (window._tmDotGroup) { map.removeLayer(window._tmDotGroup); window._tmDotGroup = null; }
+        if (window._tmFuelMarkers) { window._tmFuelMarkers.forEach(function(m) { map.removeLayer(m); }); window._tmFuelMarkers = null; }
+        if (window._tmStopMarkers) { window._tmStopMarkers.forEach(function(m) { map.removeLayer(m); }); window._tmStopMarkers = null; }
+
         var pts = data.points || [];
         if (pts.length < 2) {
           document.getElementById('tm-stats').innerHTML = '<span style="color:var(--text-dim)">Нет данных за выбранный период</span>';
-            if (data.truncated) {
-            document.getElementById('tm-stats').innerHTML += '<span style="color:var(--warning);margin-left:8px">⚠ Максимум 90 дней</span>';
-          }
+          if (data.truncated) document.getElementById('tm-stats').innerHTML += '<span style="color:var(--warning);margin-left:8px">⚠ Максимум 90 дней</span>';
           return;
         }
         pts.sort(function(a,b) { return (a.ts||0) - (b.ts||0); });
-        var segs = [], allLatLngs = [];
+
+        // === Подготовка валидных сегментов ===
         var GAP_THRESHOLD = 900, DIST_THRESHOLD = 5000;
+        var validSegs = [];
+        var allLatLngs = [];
+
         function bearing(lat1, lon1, lat2, lon2) {
           var dLon = (lon2 - lon1) * Math.PI / 180;
           var y = Math.sin(dLon) * Math.cos(lat2 * Math.PI / 180);
@@ -172,7 +219,7 @@ var tm = (function() {
                   Math.sin(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.cos(dLon);
           return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
         }
-        var drawnCount = 0;
+
         for (var i = 0; i < pts.length - 1; i++) {
           var lat1 = parseFloat(pts[i].lat), lon1 = parseFloat(pts[i].lon);
           var lat2 = parseFloat(pts[i+1].lat), lon2 = parseFloat(pts[i+1].lon);
@@ -180,130 +227,169 @@ var tm = (function() {
           var gap = (pts[i+1].ts || 0) - (pts[i].ts || 0);
           if (gap > GAP_THRESHOLD) continue;
           if (map.distance([lat1,lon1],[lat2,lon2]) > DIST_THRESHOLD) continue;
-          allLatLngs.push([lat1, lon1]);
-          if (i === pts.length - 2) allLatLngs.push([lat2, lon2]);
           var speed = parseFloat(pts[i].speed) || 0;
           var color = speed < 40 ? '#4caf50' : speed < 80 ? '#ff9800' : '#f44336';
-          var seg = L.polyline([[lat1,lon1],[lat2,lon2]], {
-            color: color, weight: 3, opacity: 0.8
-          }).addTo(map);
-          segs.push(seg);
-          if (drawnCount % 8 === 0 && drawnCount > 0) {
-            var bear = bearing(lat1, lon1, lat2, lon2);
-            var midLat = (lat1 + lat2) / 2, midLon = (lon1 + lon2) / 2;
-            var arrow = L.marker([midLat, midLon], {
-              icon: L.divIcon({
-                html: '<div style="transform:rotate(' + bear + 'deg);font-size:14px;color:' + color + ';opacity:0.8">▲</div>',
-                iconSize: [14, 14],
-                iconAnchor: [7, 7],
-                className: ''
-              }),
-              interactive: false
-            }).addTo(map);
-            if (!window._tmArrows) window._tmArrows = [];
-            window._tmArrows.push(arrow);
-          }
-          drawnCount++;
+          validSegs.push({lat1:lat1, lon1:lon1, lat2:lat2, lon2:lon2, speed:speed, color:color});
+          allLatLngs.push([lat1, lon1]);
+          if (i === pts.length - 2) allLatLngs.push([lat2, lon2]);
         }
-        window._tmSegments = segs;
-        var dotGroup = L.layerGroup();
-        for (var pi = 0; pi < pts.length; pi++) {
-          var plat = parseFloat(pts[pi].lat), plon = parseFloat(pts[pi].lon);
-          if (isNaN(plat) || isNaN(plon)) continue;
-          L.circleMarker([plat, plon], {
-            radius: 3, color: '#fbbf24', fillColor: '#fbbf24',
-            fillOpacity: 0.6, weight: 1, opacity: 0.8, interactive: false
-          }).addTo(dotGroup);
-        }
-        dotGroup.addTo(map);
-        if (map.getZoom() < 14) map.removeLayer(dotGroup);
-        window._tmDotGroup = dotGroup;
+
+        // Зум на весь маршрут СРАЗУ
         if (allLatLngs.length > 0) {
-          var bounds = L.latLngBounds(allLatLngs);
-          map.fitBounds(bounds.pad(0.1));
+          map.fitBounds(L.latLngBounds(allLatLngs).pad(0.1));
         }
-        var maxSpeed = 0;
-        for (var i = 0; i < pts.length; i++) {
-          if ((parseFloat(pts[i].speed)||0) > maxSpeed) maxSpeed = parseFloat(pts[i].speed);
-        }
-        var trip = data.trip;
-        var statsHtml = '<span>' + pts.length + ' точек</span>' +
-          '<span>макс. ' + maxSpeed + ' км/ч</span>';
-        if (trip) {
-          var dist = trip.gps_km || trip.can_km;
-          if (dist) statsHtml += '<span style="color:var(--accent)">🛣️ <b>' + parseFloat(dist).toFixed(0) + ' км</b></span>';
-        }
-        if (data.truncated) {
-          statsHtml += '<span style="color:var(--warning)">⚠ Максимум 90 дней</span>';
-        }
-        var refs = data.refuels || [];
-        var showRefuel = true;
-        var stops = data.stops || [];
-        statsHtml += '<span style="cursor:pointer;user-select:none;color:var(--info)" class="tm-toggle-refuel" onclick="tm.toggleRefuel()">' +
-          (showRefuel ? '⛽ ' + refs.length + ' заправок' : '⛽ скрыть') + '</span>';
-        statsHtml += '<span style="cursor:pointer;user-select:none;color:#60a5fa" class="tm-toggle-stops" onclick="tm.toggleStops()">' +
-          '🅿️ ' + stops.length + ' стоянок</span>';
-        document.getElementById('tm-stats').innerHTML = statsHtml;
-        if (window._tmFuelMarkers) {
-          window._tmFuelMarkers.forEach(function(m) { map.removeLayer(m); });
-          window._tmFuelMarkers = null;
-        }
-        if (window._tmStopMarkers) {
-          window._tmStopMarkers.forEach(function(m) { map.removeLayer(m); });
-          window._tmStopMarkers = null;
-        }
-        var fuelMarkers = [];
-        if (refs.length > 0) {
-          var fuelIcon = L.divIcon({
-            html: '<div style="background:var(--warning,#ff9800);color:#fff;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:14px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.3)">⛽</div>',
-            iconSize: [28, 28],
-            iconAnchor: [14, 14],
-            className: ''
-          });
-          for (var i = 0; i < refs.length; i++) {
-            var r = refs[i];
-            var popupText = '<b>⛽ Заправка</b><br>' + (r.amount ? 'Объем: <b>' + r.amount.toFixed(1) + ' л</b><br>' : '') +
-              (r.ts ? new Date(r.ts * 1000).toLocaleString('ru-RU') + '<br>' : '') +
-              (r.address || '');
-            var m = L.marker([r.lat, r.lon], { icon: fuelIcon }).addTo(map)
-              .bindPopup(popupText);
-            fuelMarkers.push(m);
+
+        // === Анимированная отрисовка ===
+        var segs = [];
+        var arrows = [];
+        window._tmSegments = segs;
+        window._tmArrows = arrows;
+
+        var total = validSegs.length;
+        var batchSize = total <2100 ? 1 : total < 800 ? 3 : total < 2000 ? 5 : 12;
+        var targetMs = 5000;
+        var tickMs = Math.max(20, Math.floor(targetMs / Math.max(1, Math.ceil(total / batchSize))));
+
+        var idx = 0, drawnCount = 0;
+
+        function drawBatch() {
+          if (!map) return;
+          var end = Math.min(idx + batchSize, total);
+          for (; idx < end; idx++) {
+            var s = validSegs[idx];
+            var seg = L.polyline([[s.lat1, s.lon1], [s.lat2, s.lon2]], {
+              color: s.color, weight: 3, opacity: 0.85
+            }).addTo(map);
+            segs.push(seg);
+
+            if (drawnCount > 0 && drawnCount % 8 === 0) {
+              var bear = bearing(s.lat1, s.lon1, s.lat2, s.lon2);
+              var arrow = L.marker([(s.lat1+s.lat2)/2, (s.lon1+s.lon2)/2], {
+                icon: L.divIcon({
+                  html: '<div style="transform:rotate(' + bear + 'deg);font-size:14px;color:' + s.color + ';opacity:0.8">▲</div>',
+                  iconSize: [14, 14], iconAnchor: [7, 7], className: ''
+                }),
+                interactive: false
+              }).addTo(map);
+              arrows.push(arrow);
+            }
+            drawnCount++;
+          }
+
+          // Обновляем прогресс
+          var pEl = document.getElementById('tm-anim-progress');
+          if (pEl) pEl.textContent = Math.round((idx / total) * 100) + '%';
+
+          if (idx < total) {
+            window._tmAnimTimer = setTimeout(drawBatch, tickMs);
+          } else {
+            window._tmAnimTimer = null;
+            finishDrawing();
           }
         }
-        window._tmFuelMarkers = fuelMarkers;
-        window._tmShowFuel = true;
 
-        var stopMarkers = [];
-        if (stops.length > 0) {
-          var stopIcon = L.divIcon({
-            html: '<div style="background:#3b82f6;color:#fff;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:14px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.3)">🅿️</div>',
-            iconSize: [28, 28],
-            iconAnchor: [14, 14],
-            className: ''
-          });
-          for (var i = 0; i < stops.length; i++) {
-            var s = stops[i];
-            var dur = s.duration;
-            var durText = dur ? (Math.floor(dur / 3600) + 'ч ' + (Math.floor(dur % 3600 / 60)) + 'м') : '';
-            var popupText = '<b>🅿️ Стоянка</b><br>' +
-              (s.ts ? 'с ' + new Date(s.ts * 1000).toLocaleString('ru-RU') + '<br>' : '') +
-              (durText ? 'длительность: <b>' + durText + '</b><br>' : '') +
-              (s.address || '');
-            var m = L.marker([s.lat, s.lon], { icon: stopIcon }).addTo(map)
-              .bindPopup(popupText);
-            stopMarkers.push(m);
+        function finishDrawing() {
+          // Жёлтые точки (видны при zoom >= 14)
+          var dotGroup = L.layerGroup();
+          for (var pi = 0; pi < pts.length; pi++) {
+            var plat = parseFloat(pts[pi].lat), plon = parseFloat(pts[pi].lon);
+            if (isNaN(plat) || isNaN(plon)) continue;
+            L.circleMarker([plat, plon], {
+              radius: 3, color: '#fbbf24', fillColor: '#fbbf24',
+              fillOpacity: 0.6, weight: 1, opacity: 0.8, interactive: false
+            }).addTo(dotGroup);
           }
-        }
-        window._tmStopMarkers = stopMarkers;
-        window._tmShowStops = true;
+          dotGroup.addTo(map);
+          if (map.getZoom() < 14) map.removeLayer(dotGroup);
+          window._tmDotGroup = dotGroup;
 
-        window._tmPoints = pts;
-        window._tmSensorsInfo = data.sensors_info || [];
+          // Заправки
+          var refs = data.refuels || [];
+          var fuelMarkers = [];
+          if (refs.length > 0) {
+            var fuelIcon = L.divIcon({
+              html: '<div style="background:var(--warning,#ff9800);color:#fff;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:14px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.3);animation:tm-pop 0.3s ease-out">⛽</div>',
+              iconSize: [28, 28], iconAnchor: [14, 14], className: ''
+            });
+            for (var fi = 0; fi < refs.length; fi++) {
+              var r = refs[fi];
+              var popupText = '<b>⛽ Заправка</b><br>' + (r.amount ? 'Объем: <b>' + r.amount.toFixed(1) + ' л</b><br>' : '') +
+                (r.ts ? new Date(r.ts * 1000).toLocaleString('ru-RU') + '<br>' : '') + (r.address || '');
+              var m = L.marker([r.lat, r.lon], { icon: fuelIcon }).addTo(map).bindPopup(popupText);
+              fuelMarkers.push(m);
+            }
+          }
+          window._tmFuelMarkers = fuelMarkers;
+          window._tmShowFuel = true;
+
+          // Стоянки
+          var stops = data.stops || [];
+          var stopMarkers = [];
+          if (stops.length > 0) {
+            var stopIcon = L.divIcon({
+              html: '<div style="background:#3b82f6;color:#fff;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:14px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.3);animation:tm-pop 0.3s ease-out">🅿️</div>',
+              iconSize: [28, 28], iconAnchor: [14, 14], className: ''
+            });
+            for (var si = 0; si < stops.length; si++) {
+              var st = stops[si];
+              var dur = st.duration;
+              var durText = dur ? (Math.floor(dur / 3600) + 'ч ' + (Math.floor(dur % 3600 / 60)) + 'м') : '';
+              var popupText = '<b>🅿️ Стоянка</b><br>' +
+                (st.ts ? 'с ' + new Date(st.ts * 1000).toLocaleString('ru-RU') + '<br>' : '') +
+                (durText ? 'длительность: <b>' + durText + '</b><br>' : '') +
+                (st.address || '');
+              var m = L.marker([st.lat, st.lon], { icon: stopIcon }).addTo(map).bindPopup(popupText);
+              stopMarkers.push(m);
+            }
+          }
+          window._tmStopMarkers = stopMarkers;
+          window._tmShowStops = true;
+
+          // Финальная статистика
+          var maxSpeed = 0;
+          for (var i = 0; i < pts.length; i++) {
+            if ((parseFloat(pts[i].speed)||0) > maxSpeed) maxSpeed = parseFloat(pts[i].speed);
+          }
+          var trip = data.trip;
+          var statsHtml = '<span>' + pts.length + ' точек</span>' +
+            '<span>макс. ' + maxSpeed + ' км/ч</span>';
+          if (trip) {
+            var dist = trip.gps_km || trip.can_km;
+            if (dist) statsHtml += '<span style="color:var(--accent)">🛣️ <b>' + parseFloat(dist).toFixed(0) + ' км</b></span>';
+          }
+          if (data.truncated) {
+            statsHtml += '<span style="color:var(--warning)">⚠ Максимум 90 дней</span>';
+          }
+          statsHtml += '<span style="cursor:pointer;user-select:none;color:var(--info)" class="tm-toggle-refuel" onclick="tm.toggleRefuel()">⛽ ' + refs.length + ' заправок</span>';
+          statsHtml += '<span style="cursor:pointer;user-select:none;color:#60a5fa" class="tm-toggle-stops" onclick="tm.toggleStops()">🅿️ ' + stops.length + ' стоянок</span>';
+          document.getElementById('tm-stats').innerHTML = statsHtml;
+
+          window._tmPoints = pts;
+          window._tmSensorsInfo = data.sensors_info || [];
+        }
+
+        // Прогресс анимации в плашке статистики
+        document.getElementById('tm-stats').innerHTML =
+          '<span style="color:var(--accent)">⏳ Прорисовка маршрута... <span id="tm-anim-progress">0%</span></span>' +
+          ' <span style="cursor:pointer;color:var(--text-dim);text-decoration:underline;margin-left:8px" onclick="tm.skipAnim()">пропустить</span>';
+
+        // Старт
+        drawBatch();
       })
-      .catch(function() {
-        loading.style.display = 'none';
+      .catch(function(err) {
+        hideLoading();
         document.getElementById('tm-stats').innerHTML = '<span style="color:var(--danger)">Ошибка загрузки трека</span>';
+        console.error('Track load error:', err);
       });
+  }
+
+  // Мгновенно дорисовать оставшиеся сегменты
+  function skipAnim() {
+    // ничего не делаем — просто перерисовываем
+    if (!window._tmAnimTimer) return;
+    clearTimeout(window._tmAnimTimer);
+    window._tmAnimTimer = null;
+    load();
   }
 
   function setPeriod(daysBack, btn) {
@@ -320,17 +406,6 @@ var tm = (function() {
     }
     load();
   }
-
-  loadMap();
-  document.getElementById('tm-date-from').value = '{{ date_from }}';
-  document.getElementById('tm-date-to').value = '{{ date_to }}';
-  document.querySelector('.period-chips .chip:first-child').classList.add('active');
-  window.addEventListener('resize', function() { if (map) setTimeout(function() { map.invalidateSize(); }, 200); });
-  map.on('zoomend', function() {
-    if (!window._tmDotGroup) return;
-    if (map.getZoom() >= 14) map.addLayer(window._tmDotGroup);
-    else map.removeLayer(window._tmDotGroup);
-  });
 
   function toggleRefuel() {
     if (!window._tmFuelMarkers) return;
@@ -354,6 +429,20 @@ var tm = (function() {
     if (el) el.textContent = (window._tmShowStops ? '🅿️ ' + window._tmStopMarkers.length + ' стоянок' : '🅿️ скрыть');
   }
 
-  return { load: load, setPeriod: setPeriod, toggleRefuel: toggleRefuel, toggleStops: toggleStops };
+  // ===== ИНИЦИАЛИЗАЦИЯ =====
+  document.getElementById('tm-date-from').value = '{{ date_from }}';
+  document.getElementById('tm-date-to').value = '{{ date_to }}';
+  document.querySelector('.period-chips .chip:first-child').classList.add('active');
+
+  // Запускаем загрузку Leaflet → initMap() → load()
+  loadMap();
+
+  return {
+    load: load,
+    setPeriod: setPeriod,
+    toggleRefuel: toggleRefuel,
+    toggleStops: toggleStops,
+    skipAnim: skipAnim
+  };
 })();
 </script>

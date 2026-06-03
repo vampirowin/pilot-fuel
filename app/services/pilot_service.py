@@ -2,12 +2,15 @@ import asyncio
 from datetime import datetime
 import httpx
 
+# Pilot API v3 endpoints (некоторые эндпоинты — /backend — используют cookie-авторизацию вместо Bearer)
+
 PILOT_AUTH_URL = "/api/v3/auth/token"
 PILOT_VEHICLES_URL = "/api/v3/vehicles"
 PILOT_VEHICLE_STATUS_URL = "/api/v3/vehicles/status"
-PILOT_REPORTS_URL = "/backend/ax/reports.php"
+PILOT_REPORTS_URL = "/backend/ax/reports.php"  # POST с form-data и cookie PILOTID
 PILOT_SENSOR_DIP_URL = "/api/v3/vehicles/sensors/dip"
 
+# Единый HTTP-клиент на весь процесс. Connection pool разделяется между всеми запросами.
 _client: httpx.AsyncClient | None = None
 
 
@@ -43,6 +46,8 @@ class PilotService:
         self.base_url = (base_url or settings.pilot_api_base_url).rstrip("/")
 
     async def _request(self, method: str, path: str, token: str | None = None, node_id: int = 0, cookies: dict | None = None, **kwargs) -> dict:
+        # Для /backend/ax/reports.php авторизация через cookie (PILOTID)
+        # Для основных API v3 — через Bearer token + X-Node
         headers = kwargs.pop("headers", {})
         if token:
             headers["Authorization"] = f"Bearer {token}"
@@ -52,18 +57,20 @@ class PilotService:
         headers.setdefault("X-Requested-With", "XMLHttpRequest")
 
         client = _get_client()
-        client.cookies.clear()
+        client.cookies.clear()  # сбрасываем, т.к. куки передаём явно
         resp = await client.request(method, f"{self.base_url}{path}", headers=headers, cookies=cookies or {}, **kwargs)
         await _log_sync(f"[request] {method} {path} -> {resp.status_code} ({len(resp.content)} bytes)")
         data = resp.json()
 
         await _log_sync(f"[response] {path} -> {str(data)[:300]}")
 
+        # Pilot API сигнализирует ошибку через success: false или code != 0
         if data.get("success") is False or data.get("code", 0) != 0:
             raise PilotAuthError(data.get("msg", "Unknown API error"))
         return data
 
     async def login(self, username: str, password: str) -> dict:
+        """Аутентификация в Pilot API. Возвращает Bearer token + node_id (раздел сервера)."""
         data = await self._request("POST", PILOT_AUTH_URL, json={"username": username, "password": password})
         return {
             "token": data.get("token"),
@@ -94,10 +101,14 @@ class PilotService:
         stop_date: str,
     ) -> list[dict]:
         """
-        Fetch refuel report from Pilot API (report_type=38).
+        Отчёт по заправкам из Pilot API (report_type=38).
 
-        start_date / stop_date: format DD.MM.YYYY HH:MM
-        Returns flat list of events: [{name, ts, start_level, refuel_amount, end_level, lat, lon}]
+        Внимание: этот эндпоинт — /backend/ax/reports.php — НЕ поддерживает Bearer token.
+        Авторизация через cookie PILOTID + node.
+        Параметры передаются как application/x-www-form-urlencoded (не JSON).
+
+        start_date / stop_date: формат "DD.MM.YYYY HH:MM"
+        Response: вложенная структура data.{date}.{ts_key}.[name, ts, start_level, refuel_amount, end_level, {lat, lon, address}]
         """
         veh_str = ",".join(str(v) for v in veh_ids)
 
@@ -171,6 +182,12 @@ class PilotService:
         return self._parse_refuel_report(data)
 
     def _parse_refuel_report(self, raw: dict) -> list[dict]:
+        """
+        Парсинг ответа report_type=38.
+
+        Структура: data.{date_string}.{timestamp_key}.{array_of_values}
+        Массив: [name, ts_unix, start_level, refuel_amount, end_level, {lat, lon, address}]
+        """
         events = []
         raw_data = raw.get("data", {})
         if not isinstance(raw_data, dict):
@@ -206,10 +223,11 @@ class PilotService:
         start_date: str, stop_date: str,
     ) -> dict:
         """
-        Fetch fuel graph report from Pilot API (report_type=16).
+        Отчёт по графику топлива (report_type=16).
 
-        start_date / stop_date: format DD.MM.YYYY HH:MM
-        Returns dict with combined fuel graph data: {levels, refuels, drains}
+        Возвращает: {levels: [{ts, val, name}], refuels: [{ts, level, amount, lat, lon, name}], drains: [{ts, amount, name}], sensor_names: [str]}
+
+        Структура ответа: data.{date}.{veh_name}.{sensors: {Summary: [[ts, val], ...], ...}, fillings: [{...}], spills: [{...}]}
         """
         veh_str = ",".join(str(v) for v in veh_ids)
 
@@ -284,6 +302,14 @@ class PilotService:
         return self._parse_fuel_graph(data)
 
     def _parse_fuel_graph(self, raw: dict) -> dict:
+        """
+        Парсинг ответа report_type=16.
+
+        data.{date}.{veh_name}:
+          - sensors: { "Summary": [[ts, val], ...], "Датчик1:-:...": [...] }
+          - fillings: [{unixtimestamp, fuel_start, fuel, lat, lon}, ...]
+          - spills:  [{unixtimestamp, fuel}, ...]
+        """
         result = {"levels": [], "refuels": [], "drains": [], "sensor_names": []}
         raw_data = raw.get("data", {})
         if not isinstance(raw_data, dict):
@@ -301,6 +327,7 @@ class PilotService:
                     all_keys = [k for k in sensors if k != "Summary" and isinstance(sensors[k], list)]
                     result["sensor_names"] = [k.split(":-:")[0].strip() if ":-:" in k else k for k in all_keys]
 
+                    # Summary — агрегированный уровень топлива. Если нет — берём первый попавшийся сенсор
                     summary = sensors.get("Summary")
                     source = summary if isinstance(summary, list) and len(summary) > 0 else None
                     if not source:
@@ -355,6 +382,12 @@ class PilotService:
         imei: str, agent_id: int, ts_from: int, ts_to: int,
         tag_id: str | None = None,
     ) -> list[dict]:
+        """
+        Аналоговые сенсоры за период.
+
+        Response: data[] — каждый сенсор содержит {id, name, work: [{ts, value, ...}]}
+        ВНИМАНИЕ: параметр agent_id обязателен (помимо imei). Без него ts/te сдвигаются.
+        """
         path = f"{PILOT_SENSOR_DIP_URL}?imei={imei}&agent_id={agent_id}&ts={ts_from}&te={ts_to}"
         if tag_id:
             path += f"&tag_id={tag_id}"
@@ -369,6 +402,7 @@ class PilotService:
         imei: str, agent_id: int, ts_from: int, ts_to: int,
         tag_id: str | None = None,
     ) -> list[dict]:
+        """Дискретные сенсоры (вкл/выкл, зажигание, двери) за период. Аналогичная структура dip."""
         path = f"/api/v3/vehicles/sensors/discrete?imei={imei}&agent_id={agent_id}&ts={ts_from}&te={ts_to}"
         if tag_id:
             path += f"&tag_id={tag_id}"
@@ -382,6 +416,12 @@ class PilotService:
         self, token: str, node_id: int,
         imei: str, agent_id: int, ts_from: int, ts_to: int,
     ) -> list[dict]:
+        """
+        GPS-точки (raw events) за период.
+
+        Response: data.raw[] — массив точек с {lat, lon, ts, speed, sat, alt, ...}
+        Внимание: ответ вложен глубже, чем у других эндпоинтов: data = {raw: [...]}
+        """
         path = f"/api/v3/vehicles/events/raw?imei={imei}&agent_id={agent_id}&ts={ts_from}&te={ts_to}"
         try:
             data = await self._request("GET", path, token=token, node_id=node_id)
@@ -396,6 +436,12 @@ class PilotService:
         self, token: str, node_id: int,
         imei: str, agent_id: int, ts_from: int, ts_to: int,
     ) -> dict | None:
+        """
+        Сводка по поездке: пробег (can и gps) и скорости.
+
+        Response: data {can: км, gps: км, maxspeed, avgspeed, ...}
+        can_km — пробег по CAN-шине, gps_km — по GPS (точнее на коротких дистанциях).
+        """
         path = f"/api/v3/vehicles/trips?imei={imei}&agent_id={agent_id}&ts={ts_from}&te={ts_to}"
         try:
             data = await self._request("GET", path, token=token, node_id=node_id)
@@ -419,6 +465,13 @@ class PilotService:
         self, token: str, node_id: int,
         imei: str, agent_id: int, ts_from: int, ts_to: int,
     ) -> list[dict]:
+        """
+        Стоянки за период.
+
+        Response: может быть в двух форматах:
+          1. data.data.stops[] — стандартный
+          2. data.data.parkings[] — альтернативный
+        """
         path = f"/api/v3/vehicles/track/stops?imei={imei}&agent_id={agent_id}&ts={ts_from}&te={ts_to}"
         try:
             data = await self._request("GET", path, token=token, node_id=node_id)
@@ -446,6 +499,12 @@ class PilotService:
         self, token: str, node_id: int,
         imei: str, agent_id: int, ts_from: int, ts_to: int,
     ) -> list[dict]:
+        """
+        Трековые сегменты (альтернатива events/raw).
+
+        Response: data[] — массив сегментов или data.tracks[]
+        Этот эндпоинт возвращает уже готовые сегменты (линии между точками), а не сырые точки.
+        """
         path = f"/api/v3/vehicles/track?imei={imei}&agent_id={agent_id}&ts={ts_from}&te={ts_to}"
         try:
             data = await self._request("GET", path, token=token, node_id=node_id)

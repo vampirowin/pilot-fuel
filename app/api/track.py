@@ -26,6 +26,7 @@ async def track_modal(
     user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    """Возвращает HTML модалки карты (без данных — данные подгружаются через /points)."""
     vehicle = await db.get(Vehicle, vehicle_id)
     if not vehicle:
         raise HTTPException(404, "Vehicle not found")
@@ -63,6 +64,13 @@ async def vehicle_points(
     user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    """
+    Основной API для карты трека.
+
+    Возвращает: {points, refuels, stops, trip, sensors_info, plate, truncated}
+
+    Token fallback: user.pilot_token → session → company_admin той же компании.
+    """
     vehicle = await db.get(Vehicle, vehicle_id)
     if not vehicle:
         raise HTTPException(404, "Vehicle not found")
@@ -72,6 +80,7 @@ async def vehicle_points(
         if user.site_id and vehicle.site_id != user.site_id:
             raise HTTPException(404, "Vehicle not found")
 
+    # Token fallback (auth/pilot_service.py → get_vehicles использует свой token)
     token = user.pilot_token or request.session.get("token")
     node_id = user.pilot_node_id or request.session.get("node_id", 0)
     if not token:
@@ -100,6 +109,7 @@ async def vehicle_points(
     ts_from = int(df.replace(tzinfo=timezone.utc).timestamp())
     ts_to = int(dt.replace(tzinfo=timezone.utc).timestamp())
 
+    # Pilot API не отдаёт больше ~90 дней за раз
     truncated = False
     ninety_days = 90 * 24 * 3600
     if ts_to - ts_from > ninety_days:
@@ -115,6 +125,7 @@ async def vehicle_points(
         except Exception:
             points = []
 
+    # Заправки — из локальной БД (синхронизируются scheduler-ом из Pilot)
     refuels = []
     try:
         from app.models.pilot_refuel import PilotRefuel
@@ -139,6 +150,7 @@ async def vehicle_points(
     except Exception:
         refuels = []
 
+    # Параллельные запросы к Pilot API (сенсоры, пробег, стоянки)
     sensors_info = []
     trip = None
     stops = []
@@ -148,6 +160,8 @@ async def vehicle_points(
         sensor_data = []
         discrete_data = []
         try:
+            # asyncio.gather + return_exceptions — чтобы один отказавший запрос не убил остальные
+            # asyncio.wait_for — чтобы не ждать вечно при недоступности Pilot API
             results = await asyncio.gather(
                 asyncio.wait_for(pilot.get_sensor_dip_history(token, node_id, vehicle.imei, vehicle.pilot_agent_id, ts_from, ts_to), timeout=10),
                 asyncio.wait_for(pilot.get_discrete_sensor_data(token, node_id, vehicle.imei, vehicle.pilot_agent_id, ts_from, ts_to), timeout=10),
@@ -162,6 +176,7 @@ async def vehicle_points(
         except Exception:
             pass
         try:
+            # Сливаем dip + discrete в один sensor_map (один сенсор может быть и там, и там)
             sensor_map = {}
             for s in sensor_data:
                 sid = s.get("id")
@@ -191,6 +206,7 @@ async def vehicle_points(
                         sensor_map[sid]["values"].sort(key=lambda x: x["ts"])
                     else:
                         sensor_map[sid] = {"name": name, "values": vals}
+            # Для каждой GPS-точки — привязываем ближайшие по времени значения сенсоров (bisect)
             for pt in points:
                 pt_ts = pt.get("ts")
                 if pt_ts is None:
@@ -227,6 +243,7 @@ async def track_data(
     user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    """Альтернативный эндпоинт — возвращает готовые сегменты трека (через /api/v3/vehicles/track)."""
     vehicle = await db.get(Vehicle, vehicle_id)
     if not vehicle:
         raise HTTPException(404, "Vehicle not found")
