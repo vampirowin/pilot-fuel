@@ -12,10 +12,15 @@
 .sensor-filter-panel input[type=checkbox] { accent-color:var(--accent); }
 .sensor-filter-clear { display:block; width:100%; padding:7px 14px; font-size:12px; color:var(--text-muted); background:none; border:none; border-top:1px solid var(--border); text-align:center; cursor:pointer; }
 .sensor-filter-clear:hover { color:var(--text-primary); background:var(--bg-card-hover); }
-.status-dot { display:inline-block; width:10px; height:10px; border-radius:50%; vertical-align:middle; }
+.status-dot { display:inline-flex; align-items:center; gap:6px; width:10px; height:10px; border-radius:50%; vertical-align:middle; }
 .status-dot-on { background:#22c55e; box-shadow:0 0 6px rgba(34,197,94,0.6); }
 .status-dot-warn { background:#f59e0b; box-shadow:0 0 6px rgba(245,158,11,0.6); }
 .status-dot-off { background:#ef4444; box-shadow:0 0 4px rgba(239,68,68,0.4); }
+.status-dot-label { display:none; }
+@media (max-width:768px){
+  .status-dot { width:8px; height:8px; }
+  .status-dot-label { display:inline; font-size:13px; color:var(--text-primary); }
+}
 strong[onclick] { cursor:pointer; transition:color .15s; }
 strong[onclick]:hover { color:var(--accent); }
 .loc-map { height:400px; width:100%; border-radius:8px; }
@@ -371,6 +376,7 @@ function openLocationMap(el) {
                       <tr>
                         {% if is_superadmin or is_company_admin %}<th style="width: 32px;"><input type="checkbox" onchange="var e=this;document.querySelectorAll('input[name=vehicle_ids]').forEach(function(c){c.checked=e.checked})"></th>{% endif %}
                         <th>#</th>
+                        <th>Статус</th>
                         <th>Госномер</th>
                         <th>Датчик</th>
                         <th>Заправки</th>
@@ -386,7 +392,7 @@ function openLocationMap(el) {
                         {% if is_superadmin or is_company_admin %}<td data-label=""><input type="checkbox" form="bulk-vehicle-form" name="vehicle_ids" value="{{ v.id }}"></td>{% endif %}
                         <td data-label="#" style="color: var(--text-dim);">{{ loop.index }}</td>
                         <td data-label="Статус">{{ v.status_dot|safe }}</td>
-                <td data-label="Госномер"><strong style="cursor:pointer" data-lat="{{ v.status_info.lat or '' }}" data-lon="{{ v.status_info.lon or '' }}" data-ts="{{ v.status_info.ts or '' }}" data-status="{{ v.status_info.status or '' }}" onclick="openLocationMap(this)">{{ v.plate_number or '—' }}</strong></td>
+                    <td data-label="Госномер"><strong style="cursor:pointer" data-lat="{{ v.status_info.lat or '' }}" data-lon="{{ v.status_info.lon or '' }}" data-ts="{{ v.status_info.ts or '' }}" data-status="{{ v.status_info.status or '' }}" onclick="openLocationMap(this)">{{ v.plate_number or '—' }}</strong></td>
                         <td data-label="Датчик" class="sensor-cell">
                       {% if is_superadmin or is_company_admin %}
                        <select name="status" class="sensor-status-select status-{{ v.sensor_status }}" data-vehicle-id="{{ v.id }}" hx-post="/api/vehicles/{{ v.id }}/sensor-status" hx-trigger="change" hx-swap="innerHTML" hx-target="closest td">
@@ -441,4 +447,33 @@ function openLocationMap(el) {
   {% endif %}
 </div>
 <div id="modal-container"></div>
+<script>
+var STATUS_LABELS = {online:'Онлайн',warning:'>20 мин',offline:'Офлайн'};
+var STATUS_CLASSES = {online:'status-dot-on',warning:'status-dot-warn',offline:'status-dot-off'};
+function refreshStatuses() {
+  fetch('/api/vehicles/status-batch').then(function(r){return r.json()}).then(function(data){
+    data.forEach(function(v){
+      var row = document.getElementById('v-'+v.vehicle_id);
+      if (!row) return;
+      var dot = row.querySelector('.status-dot');
+      if (dot) {
+        var cls = STATUS_CLASSES[v.status] || 'status-dot-off';
+        dot.className = 'status-dot ' + cls;
+        dot.title = STATUS_LABELS[v.status] || 'Нет данных';
+        var label = dot.querySelector('.status-dot-label');
+        if (label) label.textContent = dot.title;
+      }
+      var plate = row.querySelector('strong[onclick]');
+      if (plate) {
+        plate.setAttribute('data-lat', v.lat || '');
+        plate.setAttribute('data-lon', v.lon || '');
+        plate.setAttribute('data-ts', v.ts || '');
+        plate.setAttribute('data-status', v.status || '');
+      }
+    });
+  }).catch(function(){});
+}
+document.addEventListener('DOMContentLoaded', function(){refreshStatuses();setInterval(refreshStatuses,60000)});
+document.addEventListener('htmx:afterSwap',function(e){if(e.detail&&e.detail.target&&e.detail.target.id=='vehicles-table')refreshStatuses()});
+</script>
 {% endblock %}

@@ -2,7 +2,7 @@ import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Request, Depends, HTTPException, Form, Query
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -128,11 +128,11 @@ STATUS_DOT_CLASSES = {"online": "status-dot-on", "warning": "status-dot-warn", "
 
 def _status_dot_html(status: str | None) -> str:
     if not status:
-        return '<span class="status-dot status-dot-off" title="Нет данных"></span>'
+        return '<span class="status-dot status-dot-off" title="Нет данных"><span class="status-dot-label">Нет данных</span></span>'
     cls = STATUS_DOT_CLASSES.get(status, "status-dot-off")
     labels = {"online": "Онлайн", "warning": ">20 мин", "offline": "Офлайн"}
     label = labels.get(status, "Нет данных")
-    return f'<span class="status-dot {cls}" title="{label}"></span>'
+    return f'<span class="status-dot {cls}" title="{label}"><span class="status-dot-label">{label}</span></span>'
 
 def _sensor_cell(v: dict, editable: bool) -> str:
     if editable:
@@ -184,7 +184,7 @@ def render_nested_partial(nested_groups: list, can_act: bool) -> str:
                         html += '<div class="table-container" style="margin-top:12px"><table><thead><tr>'
                         if can_act:
                             html += '<th style="width:32px;"><input type="checkbox" onchange="var e=this;document.querySelectorAll(\'#bulk-vehicle-form input[name=vehicle_ids]\').forEach(function(c){c.checked=e.checked})"></th>'
-                        html += '<th>#</th><th>Статус</th><th>Госномер</th><th>Датчик</th><th>Заправки</th><th>Компания</th><th>График</th><th>Действия</th></tr></thead><tbody>'
+                        html += '<th>#</th><th>Статус</th><th>Госномер</th><th>Датчик</th><th>Заправки</th><th>Компания</th><th>График</th><th>Трек</th><th>Действия</th></tr></thead><tbody>'
                         for idx, v in enumerate(vehicles, 1):
                             html += _vehicle_row(v, idx, can_act)
                         html += '</tbody></table></div>'
@@ -194,7 +194,7 @@ def render_nested_partial(nested_groups: list, can_act: bool) -> str:
                         html += f'<div class="level-folder" style="margin:4px 0;border:1px solid var(--border);border-radius:6px"><div class="collapsible-header" onclick="toggleGroup(\'{fid}\')"><span class="arrow">&#9660;</span><span class="level-badge level-badge-folder">{fname}</span><span class="level-count">{len(vehicles)}</span></div><div class="collapsible-body" id="{fid}"><div class="table-container"><table><thead><tr>'
                         if can_act:
                             html += '<th style="width:32px;"><input type="checkbox" onchange="var e=this;document.querySelectorAll(\'#bulk-vehicle-form input[name=vehicle_ids]\').forEach(function(c){c.checked=e.checked})"></th>'
-                        html += '<th>#</th><th>Статус</th><th>Госномер</th><th>Датчик</th><th>Заправки</th><th>Компания</th><th>График</th><th>Действия</th></tr></thead><tbody>'
+                        html += '<th>#</th><th>Статус</th><th>Госномер</th><th>Датчик</th><th>Заправки</th><th>Компания</th><th>График</th><th>Трек</th><th>Действия</th></tr></thead><tbody>'
                         for idx, v in enumerate(vehicles, 1):
                             html += _vehicle_row(v, idx, can_act)
                         html += '</tbody></table></div></div></div>'
@@ -207,7 +207,7 @@ def render_nested_partial(nested_groups: list, can_act: bool) -> str:
                         html += '<div class="table-container"><table><thead><tr>'
                         if can_act:
                             html += '<th style="width:32px;"><input type="checkbox" onchange="var e=this;document.querySelectorAll(\'#bulk-vehicle-form input[name=vehicle_ids]\').forEach(function(c){c.checked=e.checked})"></th>'
-                        html += '<th>#</th><th>Статус</th><th>Госномер</th><th>Датчик</th><th>Заправки</th><th>Компания</th><th>График</th><th>Действия</th></tr></thead><tbody>'
+                        html += '<th>#</th><th>Статус</th><th>Госномер</th><th>Датчик</th><th>Заправки</th><th>Компания</th><th>График</th><th>Трек</th><th>Действия</th></tr></thead><tbody>'
                         for idx, v in enumerate(vehicles, 1):
                             html += _vehicle_row(v, idx, can_act)
                         html += '</tbody></table></div>'
@@ -217,7 +217,7 @@ def render_nested_partial(nested_groups: list, can_act: bool) -> str:
                         html += f'<div class="level-folder" style="margin:4px 0;border:1px solid var(--border);border-radius:6px"><div class="collapsible-header" onclick="toggleGroup(\'{fid}\')"><span class="arrow">&#9660;</span><span class="level-badge level-badge-folder">{fname}</span><span class="level-count">{len(vehicles)}</span></div><div class="collapsible-body" id="{fid}"><div class="table-container"><table><thead><tr>'
                         if can_act:
                             html += '<th style="width:32px;"><input type="checkbox" onchange="var e=this;document.querySelectorAll(\'#bulk-vehicle-form input[name=vehicle_ids]\').forEach(function(c){c.checked=e.checked})"></th>'
-                        html += '<th>#</th><th>Статус</th><th>Госномер</th><th>Датчик</th><th>Заправки</th><th>Компания</th><th>График</th><th>Действия</th></tr></thead><tbody>'
+                        html += '<th>#</th><th>Статус</th><th>Госномер</th><th>Датчик</th><th>Заправки</th><th>Компания</th><th>График</th><th>Трек</th><th>Действия</th></tr></thead><tbody>'
                         for idx, v in enumerate(vehicles, 1):
                             html += _vehicle_row(v, idx, can_act)
                         html += '</tbody></table></div></div></div>'
@@ -266,34 +266,7 @@ async def vehicles_page(
     is_hx = request.headers.get("hx-request") == "true"
     is_boosted = request.headers.get("hx-boosted") == "true"
 
-    status_info = None
-    if not is_hx or is_boosted:
-        try:
-            token, node_id = await _resolve_pilot_credentials(user, db)
-            if token and node_id:
-                ps = PilotService()
-                imeis = [v.imei for v in db_vehicles if v.imei]
-                raw = await ps.get_all_vehicle_statuses(token, node_id, imeis)
-                now_ts = datetime.now(timezone.utc).timestamp()
-                status_info = {}
-                for imei, s in raw.items():
-                    ts = s.get("ts")
-                    if ts and now_ts - ts < 1200:
-                        st = "online"
-                    elif ts and now_ts - ts < 3600:
-                        st = "warning"
-                    else:
-                        st = "offline"
-                    status_info[imei] = {
-                        "lat": s.get("lat"),
-                        "lon": s.get("lon"),
-                        "ts": ts,
-                        "status": st,
-                    }
-        except Exception:
-            logger.warning("Failed to fetch vehicle statuses", exc_info=True)
-
-    out = [build_vehicle_dict(v, companies.get(v.client_account_id, ""), sites.get(v.site_id, ""), status_info) for v in db_vehicles]
+    out = [build_vehicle_dict(v, companies.get(v.client_account_id, ""), sites.get(v.site_id, ""), None) for v in db_vehicles]
     is_su = user.role == "superadmin"
     is_ca = user.role == "company_admin"
 
@@ -313,6 +286,51 @@ async def vehicles_page(
         "search_url": "/vehicles",
         "search_target": "#vehicles-table",
     })
+
+
+@router.get("/api/vehicles/status-batch", response_class=JSONResponse)
+async def vehicle_status_batch(
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    query = select(Vehicle).where(Vehicle.is_active == True, Vehicle.has_fuel_sensor == True)
+    query = apply_vehicle_filter(query, user, Vehicle)
+    result = await db.execute(query)
+    db_vehicles = result.scalars().all()
+
+    token, node_id = await _resolve_pilot_credentials(user, db)
+    if not token or not node_id:
+        return JSONResponse([])
+
+    try:
+        ps = PilotService()
+        imeis = [v.imei for v in db_vehicles if v.imei]
+        raw = await ps.get_all_vehicle_statuses(token, node_id, imeis)
+        now_ts = datetime.now(timezone.utc).timestamp()
+        vehicle_map = {v.imei: v.id for v in db_vehicles if v.imei}
+        result_data = []
+        for imei, s in raw.items():
+            vid = vehicle_map.get(imei)
+            if not vid:
+                continue
+            ts = s.get("ts")
+            if ts and now_ts - ts < 1200:
+                st = "online"
+            elif ts and now_ts - ts < 3600:
+                st = "warning"
+            else:
+                st = "offline"
+            result_data.append({
+                "vehicle_id": vid,
+                "lat": s.get("lat"),
+                "lon": s.get("lon"),
+                "ts": ts,
+                "status": st,
+            })
+        return JSONResponse(result_data)
+    except Exception:
+        logger.warning("Failed to fetch vehicle statuses", exc_info=True)
+        return JSONResponse([])
 
 
 @router.get("/api/vehicles/{vehicle_id}/thresholds", response_class=HTMLResponse)
