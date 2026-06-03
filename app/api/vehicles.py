@@ -1,3 +1,4 @@
+import time
 import logging
 from datetime import datetime, timezone
 
@@ -22,6 +23,9 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
+
+STATUS_CACHE_TTL = 30
+_status_cache: dict[str, tuple[float, list[dict]]] = {}
 
 
 def group_by_folder(vehicles: list) -> list:
@@ -293,6 +297,12 @@ async def vehicle_status_batch(
     user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    cache_key = str(user.client_account_id or 0)
+    now = time.time()
+    cached = _status_cache.get(cache_key)
+    if cached and now - cached[0] < STATUS_CACHE_TTL:
+        return JSONResponse(cached[1])
+
     query = select(Vehicle).where(Vehicle.is_active == True, Vehicle.has_fuel_sensor == True)
     query = apply_vehicle_filter(query, user, Vehicle)
     result = await db.execute(query)
@@ -327,9 +337,11 @@ async def vehicle_status_batch(
                 "ts": ts,
                 "status": st,
             })
+        _status_cache[cache_key] = (time.time(), result_data)
         return JSONResponse(result_data)
     except Exception:
         logger.warning("Failed to fetch vehicle statuses", exc_info=True)
+        _status_cache[cache_key] = (time.time(), [])
         return JSONResponse([])
 
 

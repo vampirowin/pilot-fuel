@@ -32,10 +32,33 @@ strong[onclick]:hover { color:var(--accent); }
 .loc-info .loc-time { color:var(--text-muted); margin-left:auto; }
 </style>
 <script>
+var _mapRetries = {};
 function openLocationMap(el) {
+  var vid = el.closest('[id^=v-]'); var id = vid ? vid.id.replace('v-','') : null;
   var lat = el.getAttribute('data-lat'), lon = el.getAttribute('data-lon'), ts = el.getAttribute('data-ts');
   var status = el.getAttribute('data-status');
-  if (!lat || !lon) return;
+  if (!lat || !lon) {
+    if (id && !_mapRetries[id]) { _mapRetries[id] = true;
+      var overlay = document.createElement('div');
+      overlay.id = 'map-loading-'+id; overlay.className = 'modal-overlay';
+      overlay.innerHTML = '<div class="modal" style="width:300px;text-align:center"><div class="modal-body"><p style="color:var(--text-muted);padding:24px 0">Загрузка координат...</p></div></div>';
+      overlay.onclick = function(e){if(e.target===this)this.remove()};
+      document.getElementById('modal-container').appendChild(overlay);
+      setTimeout(function(){
+        var updated = document.getElementById('v-'+id);
+        var pl = updated ? updated.querySelector('strong[onclick]') : null;
+        if (pl && pl.getAttribute('data-lat') && pl.getAttribute('data-lon')) {
+          var o = document.getElementById('map-loading-'+id); if (o) o.remove();
+          openLocationMap(pl);
+        } else {
+          var o = document.getElementById('map-loading-'+id);
+          if (o) o.querySelector('.modal-body').innerHTML = '<p style="color:var(--text-muted);padding:24px 0">Координаты недоступны</p>';
+        }
+        delete _mapRetries[id];
+      }, 3000);
+    }
+    return;
+  }
   var plate = el.textContent.trim();
   var overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
@@ -473,7 +496,7 @@ function refreshStatuses() {
     });
   }).catch(function(){});
 }
-document.addEventListener('DOMContentLoaded', function(){refreshStatuses();setInterval(refreshStatuses,60000)});
-document.addEventListener('htmx:afterSwap',function(e){if(e.detail&&e.detail.target&&e.detail.target.id=='vehicles-table')refreshStatuses()});
+document.addEventListener('DOMContentLoaded', function(){setTimeout(refreshStatuses,2000);setInterval(refreshStatuses,60000)});
+document.addEventListener('htmx:afterSwap',function(e){if(e.detail&&e.detail.target&&e.detail.target.id=='vehicles-table')setTimeout(refreshStatuses,2000)});
 </script>
 {% endblock %}
