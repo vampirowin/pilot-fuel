@@ -1,4 +1,5 @@
 import time
+import asyncio
 import logging
 from datetime import datetime, timezone
 
@@ -24,8 +25,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
 
-STATUS_CACHE_TTL = 30
+STATUS_CACHE_TTL = 60
 _status_cache: dict[str, tuple[float, list[dict]]] = {}
+_status_pending: dict[str, asyncio.Event] = {}
 
 
 def group_by_folder(vehicles: list) -> list:
@@ -303,16 +305,26 @@ async def vehicle_status_batch(
     if cached and now - cached[0] < STATUS_CACHE_TTL:
         return JSONResponse(cached[1])
 
-    query = select(Vehicle).where(Vehicle.is_active == True, Vehicle.has_fuel_sensor == True)
-    query = apply_vehicle_filter(query, user, Vehicle)
-    result = await db.execute(query)
-    db_vehicles = result.scalars().all()
+    event = _status_pending.get(cache_key)
+    if event:
+        await event.wait()
+        cached = _status_cache.get(cache_key)
+        return JSONResponse(cached[1] if cached else [])
 
-    token, node_id = await _resolve_pilot_credentials(user, db)
-    if not token or not node_id:
-        return JSONResponse([])
+    event = asyncio.Event()
+    _status_pending[cache_key] = event
 
     try:
+        query = select(Vehicle).where(Vehicle.is_active == True, Vehicle.has_fuel_sensor == True)
+        query = apply_vehicle_filter(query, user, Vehicle)
+        result = await db.execute(query)
+        db_vehicles = result.scalars().all()
+
+        token, node_id = await _resolve_pilot_credentials(user, db)
+        if not token or not node_id:
+            _status_cache[cache_key] = (time.time(), [])
+            return JSONResponse([])
+
         ps = PilotService()
         imeis = [v.imei for v in db_vehicles if v.imei]
         raw = await ps.get_all_vehicle_statuses(token, node_id, imeis)
@@ -343,6 +355,9 @@ async def vehicle_status_batch(
         logger.warning("Failed to fetch vehicle statuses", exc_info=True)
         _status_cache[cache_key] = (time.time(), [])
         return JSONResponse([])
+    finally:
+        _status_pending.pop(cache_key, None)
+        event.set()
 
 
 @router.get("/api/vehicles/{vehicle_id}/thresholds", response_class=HTMLResponse)

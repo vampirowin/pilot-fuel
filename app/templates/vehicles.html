@@ -94,23 +94,30 @@ function openLocationMap(el) {
     document.head.appendChild(ls);
   }
 }
+var _mapModals = {};
 function showMapWaiting(el) {
   var vid = el.closest('[id^=v-]'); var id = vid ? vid.id.replace('v-','') : null;
+  if (!id || _mapModals[id]) return;
   var overlay = document.createElement('div');
-  overlay.className = 'modal-overlay'; overlay.id = 'map-waiting-' + (id || 'x');
-  overlay.onclick = function(e){if(e.target===this){this.remove();clearTimeout(this._timer)}};
+  overlay.className = 'modal-overlay'; overlay.id = 'map-waiting-'+id;
+  overlay.onclick = function(e){if(e.target===this){this.remove();clearInterval(this._timer);delete _mapModals[id]}};
   overlay.innerHTML = '<div class="modal" style="width:300px;text-align:center"><div class="modal-body" style="padding:32px 20px"><div class="loc-spinner"></div><p style="color:var(--text-muted);margin-top:12px">Получаем координаты...</p></div></div>';
   document.getElementById('modal-container').appendChild(overlay);
-  overlay._timer = setTimeout(function(){
+  _mapModals[id] = true;
+  var waited = 0;
+  overlay._timer = setInterval(function(){
+    waited += 1000;
     var updated = document.getElementById('v-'+id);
     var pl = updated ? updated.querySelector('strong[onclick]') : null;
     if (pl && pl.getAttribute('data-lat') && pl.getAttribute('data-lon')) {
-      overlay.remove(); openLocationMap(pl);
-    } else {
+      overlay.remove(); delete _mapModals[id]; clearInterval(overlay._timer);
+      openLocationMap(pl);
+    } else if (waited >= 15000) {
+      clearInterval(overlay._timer); delete _mapModals[id];
       var b = overlay.querySelector('.modal-body');
       if (b) b.innerHTML = '<p style="color:var(--text-muted);padding:8px 0">Координаты недоступны</p>';
     }
-  }, 10000);
+  }, 1000);
 }
 </script>
 {% endblock %}
@@ -500,7 +507,7 @@ function refreshStatuses() {
     });
   }).catch(function(){});
 }
-document.addEventListener('DOMContentLoaded', function(){setTimeout(refreshStatuses,2000);setInterval(refreshStatuses,60000)});
+document.addEventListener('DOMContentLoaded', function(){setTimeout(refreshStatuses,2000);setInterval(refreshStatuses,120000)});
 document.addEventListener('htmx:afterSwap',function(e){if(e.detail&&e.detail.target&&e.detail.target.id=='vehicles-table')setTimeout(refreshStatuses,2000)});
 </script>
 {% endblock %}
