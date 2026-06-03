@@ -18,9 +18,11 @@
 .status-dot-off { background:#ef4444; box-shadow:0 0 4px rgba(239,68,68,0.4); }
 .status-dot-label { display:none; }
 @media (max-width:768px){
-  .status-dot { width:8px; height:8px; }
-  .status-dot-label { display:inline; font-size:13px; color:var(--text-primary); }
+  .status-dot { width:10px; height:10px; }
+  .status-dot-label { display:none; }
 }
+@keyframes spin { to { transform:rotate(360deg); } }
+.loc-spinner { width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto; }
 strong[onclick] { cursor:pointer; transition:color .15s; }
 strong[onclick]:hover { color:var(--accent); }
 .loc-map { height:400px; width:100%; border-radius:8px; }
@@ -32,31 +34,11 @@ strong[onclick]:hover { color:var(--accent); }
 .loc-info .loc-time { color:var(--text-muted); margin-left:auto; }
 </style>
 <script>
-var _mapRetries = {};
 function openLocationMap(el) {
-  var vid = el.closest('[id^=v-]'); var id = vid ? vid.id.replace('v-','') : null;
   var lat = el.getAttribute('data-lat'), lon = el.getAttribute('data-lon'), ts = el.getAttribute('data-ts');
   var status = el.getAttribute('data-status');
   if (!lat || !lon) {
-    if (id && !_mapRetries[id]) { _mapRetries[id] = true;
-      var overlay = document.createElement('div');
-      overlay.id = 'map-loading-'+id; overlay.className = 'modal-overlay';
-      overlay.innerHTML = '<div class="modal" style="width:300px;text-align:center"><div class="modal-body"><p style="color:var(--text-muted);padding:24px 0">Загрузка координат...</p></div></div>';
-      overlay.onclick = function(e){if(e.target===this)this.remove()};
-      document.getElementById('modal-container').appendChild(overlay);
-      setTimeout(function(){
-        var updated = document.getElementById('v-'+id);
-        var pl = updated ? updated.querySelector('strong[onclick]') : null;
-        if (pl && pl.getAttribute('data-lat') && pl.getAttribute('data-lon')) {
-          var o = document.getElementById('map-loading-'+id); if (o) o.remove();
-          openLocationMap(pl);
-        } else {
-          var o = document.getElementById('map-loading-'+id);
-          if (o) o.querySelector('.modal-body').innerHTML = '<p style="color:var(--text-muted);padding:24px 0">Координаты недоступны</p>';
-        }
-        delete _mapRetries[id];
-      }, 3000);
-    }
+    showMapWaiting(el);
     return;
   }
   var plate = el.textContent.trim();
@@ -111,6 +93,24 @@ function openLocationMap(el) {
     ls.onload = showMap;
     document.head.appendChild(ls);
   }
+}
+function showMapWaiting(el) {
+  var vid = el.closest('[id^=v-]'); var id = vid ? vid.id.replace('v-','') : null;
+  var overlay = document.createElement('div');
+  overlay.className = 'modal-overlay'; overlay.id = 'map-waiting-' + (id || 'x');
+  overlay.onclick = function(e){if(e.target===this){this.remove();clearTimeout(this._timer)}};
+  overlay.innerHTML = '<div class="modal" style="width:300px;text-align:center"><div class="modal-body" style="padding:32px 20px"><div class="loc-spinner"></div><p style="color:var(--text-muted);margin-top:12px">Получаем координаты...</p></div></div>';
+  document.getElementById('modal-container').appendChild(overlay);
+  overlay._timer = setTimeout(function(){
+    var updated = document.getElementById('v-'+id);
+    var pl = updated ? updated.querySelector('strong[onclick]') : null;
+    if (pl && pl.getAttribute('data-lat') && pl.getAttribute('data-lon')) {
+      overlay.remove(); openLocationMap(pl);
+    } else {
+      var b = overlay.querySelector('.modal-body');
+      if (b) b.innerHTML = '<p style="color:var(--text-muted);padding:8px 0">Координаты недоступны</p>';
+    }
+  }, 10000);
 }
 </script>
 {% endblock %}
@@ -231,10 +231,10 @@ function openLocationMap(el) {
                     {%- else %}—{% endif %}</span>
                   {% endif %}
                 </td>
-                <td data-label="Заправки"><a href="/refuels?vehicle_id={{ v.id }}" class="btn btn-sm btn-secondary">Заправки</a></td>
+                <td data-label="Заправки"><a href="/refuels?vehicle_id={{ v.id }}" class="btn btn-sm btn-refuel">Заправки</a></td>
                 <td data-label="Компания">{{ v.company_name or '—' }}</td>
-                <td data-label="График"><button class="btn btn-sm btn-secondary" hx-get="/api/fuel-graph/modal?vehicle_id={{ v.id }}&imei={{ v.imei or '' }}" hx-target="#modal-container" hx-swap="innerHTML">График</button></td>
-                <td data-label="Трек"><button class="btn btn-sm btn-secondary" hx-get="/api/vehicles/{{ v.id }}/track-modal?imei={{ v.imei or '' }}&date_from={{ today_str }}&date_to={{ today_str }}" hx-target="#modal-container" hx-swap="innerHTML">Трек</button></td>
+                <td data-label="График"><button class="btn btn-sm btn-graph" hx-get="/api/fuel-graph/modal?vehicle_id={{ v.id }}&imei={{ v.imei or '' }}" hx-target="#modal-container" hx-swap="innerHTML">График</button></td>
+                <td data-label="Трек"><button class="btn btn-sm btn-track" hx-get="/api/vehicles/{{ v.id }}/track-modal?imei={{ v.imei or '' }}&date_from={{ today_str }}&date_to={{ today_str }}" hx-target="#modal-container" hx-swap="innerHTML">Трек</button></td>
                 {% if is_superadmin or is_company_admin %}
                 <td data-label="Действия" ><button class="btn btn-sm btn-secondary" hx-get="/api/vehicles/{{ v.id }}/thresholds" hx-target="#modal-container" hx-swap="innerHTML">Пороги</button><button class="btn btn-sm btn-danger" hx-post="/api/vehicles/{{ v.id }}/delete" hx-target="#vehicles-table" hx-swap="innerHTML" hx-confirm="Удалить ТС {{ v.plate_number or '—' }} и все его заправки?">Удалить</button></td>
                 {% else %}
@@ -296,10 +296,10 @@ function openLocationMap(el) {
                         {%- else %}—{% endif %}</span>
                       {% endif %}
                     </td>
-                    <td data-label="Заправки"><a href="/refuels?vehicle_id={{ v.id }}" class="btn btn-sm btn-secondary">Заправки</a></td>
+                    <td data-label="Заправки"><a href="/refuels?vehicle_id={{ v.id }}" class="btn btn-sm btn-refuel">Заправки</a></td>
                     <td data-label="Компания">{{ v.company_name or '—' }}</td>
-                    <td data-label="График"><button class="btn btn-sm btn-secondary" hx-get="/api/fuel-graph/modal?vehicle_id={{ v.id }}&imei={{ v.imei or '' }}" hx-target="#modal-container" hx-swap="innerHTML">График</button></td>
-                    <td data-label="Трек"><button class="btn btn-sm btn-secondary" hx-get="/api/vehicles/{{ v.id }}/track-modal?imei={{ v.imei or '' }}&date_from={{ today_str }}&date_to={{ today_str }}" hx-target="#modal-container" hx-swap="innerHTML">Трек</button></td>
+                    <td data-label="График"><button class="btn btn-sm btn-graph" hx-get="/api/fuel-graph/modal?vehicle_id={{ v.id }}&imei={{ v.imei or '' }}" hx-target="#modal-container" hx-swap="innerHTML">График</button></td>
+                    <td data-label="Трек"><button class="btn btn-sm btn-track" hx-get="/api/vehicles/{{ v.id }}/track-modal?imei={{ v.imei or '' }}&date_from={{ today_str }}&date_to={{ today_str }}" hx-target="#modal-container" hx-swap="innerHTML">Трек</button></td>
                     {% if is_superadmin or is_company_admin %}
                     <td data-label="Действия" ><button class="btn btn-sm btn-secondary" hx-get="/api/vehicles/{{ v.id }}/thresholds" hx-target="#modal-container" hx-swap="innerHTML">Пороги</button><button class="btn btn-sm btn-danger" hx-post="/api/vehicles/{{ v.id }}/delete" hx-target="#vehicles-table" hx-swap="innerHTML" hx-confirm="Удалить ТС {{ v.plate_number or '—' }} и все его заправки?">Удалить</button></td>
                     {% else %}
@@ -369,10 +369,10 @@ function openLocationMap(el) {
                         {%- else %}—{% endif %}</span>
                       {% endif %}
                     </td>
-                    <td data-label="Заправки"><a href="/refuels?vehicle_id={{ v.id }}" class="btn btn-sm btn-secondary">Заправки</a></td>
+                    <td data-label="Заправки"><a href="/refuels?vehicle_id={{ v.id }}" class="btn btn-sm btn-refuel">Заправки</a></td>
                     <td data-label="Компания">{{ v.company_name or '—' }}</td>
-                    <td data-label="График"><button class="btn btn-sm btn-secondary" hx-get="/api/fuel-graph/modal?vehicle_id={{ v.id }}&imei={{ v.imei or '' }}" hx-target="#modal-container" hx-swap="innerHTML">График</button></td>
-                    <td data-label="Трек"><button class="btn btn-sm btn-secondary" hx-get="/api/vehicles/{{ v.id }}/track-modal?imei={{ v.imei or '' }}&date_from={{ today_str }}&date_to={{ today_str }}" hx-target="#modal-container" hx-swap="innerHTML">Трек</button></td>
+                    <td data-label="График"><button class="btn btn-sm btn-graph" hx-get="/api/fuel-graph/modal?vehicle_id={{ v.id }}&imei={{ v.imei or '' }}" hx-target="#modal-container" hx-swap="innerHTML">График</button></td>
+                    <td data-label="Трек"><button class="btn btn-sm btn-track" hx-get="/api/vehicles/{{ v.id }}/track-modal?imei={{ v.imei or '' }}&date_from={{ today_str }}&date_to={{ today_str }}" hx-target="#modal-container" hx-swap="innerHTML">Трек</button></td>
                     {% if is_superadmin or is_company_admin %}
                     <td data-label="Действия" ><button class="btn btn-sm btn-secondary" hx-get="/api/vehicles/{{ v.id }}/thresholds" hx-target="#modal-container" hx-swap="innerHTML">Пороги</button><button class="btn btn-sm btn-danger" hx-post="/api/vehicles/{{ v.id }}/delete" hx-target="#vehicles-table" hx-swap="innerHTML" hx-confirm="Удалить ТС {{ v.plate_number or '—' }} и все его заправки?">Удалить</button></td>
                     {% else %}
@@ -434,10 +434,10 @@ function openLocationMap(el) {
                         {%- else %}—{% endif %}</span>
                       {% endif %}
                     </td>
-                        <td data-label="Заправки"><a href="/refuels?vehicle_id={{ v.id }}" class="btn btn-sm btn-secondary">Заправки</a></td>
+                        <td data-label="Заправки"><a href="/refuels?vehicle_id={{ v.id }}" class="btn btn-sm btn-refuel">Заправки</a></td>
                         <td data-label="Компания">{{ v.company_name or '—' }}</td>
-                         <td data-label="График"><button class="btn btn-sm btn-secondary" hx-get="/api/fuel-graph/modal?vehicle_id={{ v.id }}&imei={{ v.imei or '' }}" hx-target="#modal-container" hx-swap="innerHTML">График</button></td>
-                         <td data-label="Трек"><button class="btn btn-sm btn-secondary" hx-get="/api/vehicles/{{ v.id }}/track-modal?imei={{ v.imei or '' }}&date_from={{ today_str }}&date_to={{ today_str }}" hx-target="#modal-container" hx-swap="innerHTML">Трек</button></td>
+                         <td data-label="График"><button class="btn btn-sm btn-graph" hx-get="/api/fuel-graph/modal?vehicle_id={{ v.id }}&imei={{ v.imei or '' }}" hx-target="#modal-container" hx-swap="innerHTML">График</button></td>
+                         <td data-label="Трек"><button class="btn btn-sm btn-track" hx-get="/api/vehicles/{{ v.id }}/track-modal?imei={{ v.imei or '' }}&date_from={{ today_str }}&date_to={{ today_str }}" hx-target="#modal-container" hx-swap="innerHTML">Трек</button></td>
                     {% if is_superadmin or is_company_admin %}
                     <td data-label="Действия" ><button class="btn btn-sm btn-secondary" hx-get="/api/vehicles/{{ v.id }}/thresholds" hx-target="#modal-container" hx-swap="innerHTML">Пороги</button><button class="btn btn-sm btn-danger" hx-post="/api/vehicles/{{ v.id }}/delete" hx-target="#vehicles-table" hx-swap="innerHTML" hx-confirm="Удалить ТС {{ v.plate_number or '—' }} и все его заправки?">Удалить</button></td>
                     {% else %}
@@ -492,6 +492,10 @@ function refreshStatuses() {
         plate.setAttribute('data-lon', v.lon || '');
         plate.setAttribute('data-ts', v.ts || '');
         plate.setAttribute('data-status', v.status || '');
+        var waiting = document.getElementById('map-waiting-'+v.vehicle_id);
+        if (waiting && v.lat && v.lon) {
+          waiting.remove(); openLocationMap(plate);
+        }
       }
     });
   }).catch(function(){});

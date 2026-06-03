@@ -307,6 +307,26 @@ body {
   border-color: #d97706;
 }
 
+.btn-refuel {
+  background: var(--info);
+  color: white;
+  border-color: var(--info);
+}
+.btn-refuel:hover {
+  background: #2563eb;
+  border-color: #2563eb;
+}
+
+.btn-graph {
+  background: var(--success);
+  color: white;
+  border-color: var(--success);
+}
+.btn-graph:hover {
+  background: #16a34a;
+  border-color: #16a34a;
+}
+
 .btn-full { width: 100%; }
 
 .btn:disabled {
@@ -944,10 +964,10 @@ tr:hover td {
   .table-container thead { display: none; }
 
   .table-container tr {
-    margin-bottom: 10px;
+    margin-bottom: 6px;
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 10px 12px;
+    padding: 6px 10px;
     background: var(--bg-card);
   }
   .table-container tr:hover td { background: transparent; }
@@ -955,10 +975,10 @@ tr:hover td {
 
   .table-container td {
     display: block;
-    padding: 5px 0;
+    padding: 3px 0;
     border: none;
     white-space: normal;
-    font-size: 13px;
+    font-size: 12px;
     text-align: right;
   }
 
@@ -966,18 +986,69 @@ tr:hover td {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 8px;
+    gap: 4px;
     text-align: left;
   }
 
   .table-container td[data-label]:not([data-label=""])::before {
     content: attr(data-label);
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 600;
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.3px;
     flex-shrink: 0;
+  }
+
+  /* Hide secondary columns */
+  .table-container td[data-label="#"],
+  .table-container td[data-label="Компания"],
+  .table-container td[data-label="Действия"] {
+    display: none;
+  }
+
+  /* Госномер — крупнее */
+  .table-container td[data-label="Госномер"] strong {
+    font-size: 14px;
+    color: var(--accent);
+  }
+
+  /* Action buttons row — display inline */
+  .table-container td[data-label="Заправки"],
+  .table-container td[data-label="График"],
+  .table-container td[data-label="Трек"] {
+    display: inline-flex;
+    width: auto;
+    padding: 0;
+    margin: 0;
+    border: none;
+    gap: 0;
+  }
+  .table-container td[data-label="Заправки"]::before,
+  .table-container td[data-label="График"]::before,
+  .table-container td[data-label="Трек"]::before {
+    display: none;
+  }
+  .table-container td[data-label="Заправки"] {
+    padding-top: 4px;
+    margin-top: 3px;
+    border-top: 1px solid var(--border-light);
+  }
+  .table-container td[data-label="Заправки"] ~ td[data-label="Трек"] {
+    border-top: none;
+    margin-top: 0;
+    padding-top: 4px;
+  }
+  .table-container td[data-label="График"] {
+    border-top: none;
+    margin-top: 0;
+    padding-top: 4px;
+  }
+  .table-container td[data-label="Заправки"] .btn,
+  .table-container td[data-label="График"] .btn,
+  .table-container td[data-label="Трек"] .btn {
+    padding: 3px 8px;
+    font-size: 11px;
   }
 
   .table-container td:not([data-label])::before,
@@ -986,13 +1057,24 @@ tr:hover td {
   }
 
   .table-container td:last-child {
-    padding-top: 8px;
-    margin-top: 5px;
+    padding-top: 4px;
+    margin-top: 2px;
     border-top: 1px solid var(--border-light);
   }
 
   .table-container td:last-child:empty {
     display: none;
+  }
+
+  /* Filter panel full-width on mobile */
+  .sensor-filter-panel {
+    position: fixed;
+    top: auto;
+    left: 8px;
+    right: 8px;
+    width: auto;
+    margin-top: 4px;
+    z-index: 200;
   }
 
   .table-container tfoot {
