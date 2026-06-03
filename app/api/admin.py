@@ -467,6 +467,12 @@ async def vehicles_no_sensor(
     db_vehicles = result.scalars().all()
 
     out = [{"id": v.id, "plate_number": v.plate_number, "imei": v.imei, "folder": v.folder} for v in db_vehicles]
+    from app.timezone_utils import get_user_timezone
+
+    user_tz = get_user_timezone(user)
+    local_now = datetime.now(timezone.utc).astimezone(user_tz)
+    today_str = local_now.strftime("%Y-%m-%d")
+
     return templates.TemplateResponse(request, "admin/vehicles_no_sensor.html", {
         "plate": plate,
         "imei": imei,
@@ -474,6 +480,7 @@ async def vehicles_no_sensor(
         "groups": group_by_folder(out) if out else [],
         "search_url": "/api/admin/vehicles-no-sensor/search",
         "search_target": "#vehicles-list",
+        "today_str": today_str,
     })
 
 

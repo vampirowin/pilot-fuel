@@ -1,126 +1,6 @@
 {% extends "base.html" %}
 {% block title %}UI fuel — Транспорт{% endblock %}
-{% block head %}
-<style>
-.sensor-filter-dropdown { position:relative; display:inline-block; }
-.sensor-filter-btn { display:flex; align-items:center; gap:6px; padding:6px 12px; border:1px solid var(--border); border-radius:6px; background:var(--bg-card); color:var(--text-primary); cursor:pointer; font-size:13px; white-space:nowrap; }
-.sensor-filter-btn:hover { border-color:var(--accent); }
-.sensor-filter-panel { display:none; position:absolute; top:100%; left:0; margin-top:4px; background:var(--bg-card); border:1px solid var(--border); border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,0.5); z-index:100; min-width:200px; padding:6px 0; }
-.sensor-filter-panel.open { display:block; }
-.sensor-filter-panel label { display:flex; align-items:center; gap:8px; padding:7px 14px; cursor:pointer; font-size:13px; color:var(--text-primary); }
-.sensor-filter-panel label:hover { background:var(--bg-card-hover); }
-.sensor-filter-panel input[type=checkbox] { accent-color:var(--accent); }
-.sensor-filter-clear { display:block; width:100%; padding:7px 14px; font-size:12px; color:var(--text-muted); background:none; border:none; border-top:1px solid var(--border); text-align:center; cursor:pointer; }
-.sensor-filter-clear:hover { color:var(--text-primary); background:var(--bg-card-hover); }
-.status-dot { display:inline-flex; align-items:center; gap:6px; width:10px; height:10px; border-radius:50%; vertical-align:middle; }
-.status-dot-on { background:#22c55e; box-shadow:0 0 6px rgba(34,197,94,0.6); }
-.status-dot-warn { background:#f59e0b; box-shadow:0 0 6px rgba(245,158,11,0.6); }
-.status-dot-off { background:#ef4444; box-shadow:0 0 4px rgba(239,68,68,0.4); }
-.status-dot-label { display:none; }
-@media (max-width:768px){
-  .status-dot { width:10px; height:10px; }
-  .status-dot-label { display:none; }
-}
-@keyframes spin { to { transform:rotate(360deg); } }
-.loc-spinner { width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto; }
-strong[onclick] { cursor:pointer; transition:color .15s; }
-strong[onclick]:hover { color:var(--accent); }
-.loc-map { height:400px; width:100%; border-radius:8px; }
-.loc-info { display:flex; align-items:center; gap:12px; padding:12px 16px; margin-bottom:12px; background:var(--bg-card); border:1px solid var(--border); border-radius:8px; font-size:14px; }
-.loc-info .loc-status { font-weight:600; }
-.loc-info .loc-status.online { color:#22c55e; }
-.loc-info .loc-status.warning { color:#f59e0b; }
-.loc-info .loc-status.offline { color:#ef4444; }
-.loc-info .loc-time { color:var(--text-muted); margin-left:auto; }
-</style>
-<script>
-function openLocationMap(el) {
-  var lat = el.getAttribute('data-lat'), lon = el.getAttribute('data-lon'), ts = el.getAttribute('data-ts');
-  var status = el.getAttribute('data-status');
-  if (!lat || !lon) {
-    showMapWaiting(el);
-    return;
-  }
-  var plate = el.textContent.trim();
-  var overlay = document.createElement('div');
-  overlay.className = 'modal-overlay';
-  overlay.onclick = function(e) { if(e.target===this)this.remove(); };
-  var now = Math.floor(Date.now() / 1000);
-  var ago = ts ? now - parseInt(ts) : null;
-  var agoText = '';
-  if (ago !== null) {
-    if (ago < 60) agoText = 'только что';
-    else if (ago < 3600) agoText = Math.floor(ago/60) + ' мин назад';
-    else agoText = Math.floor(ago/3600) + ' ч назад';
-  }
-  var statusLabels = {online:'Онлайн',warning:'>20 мин',offline:'Офлайн'};
-  var statusText = statusLabels[status] || 'Нет данных';
-  var statusClass = status || 'offline';
-  var mapId = 'loc-map-' + lat.replace('.','_').replace('-','_');
-  overlay.innerHTML =
-    '<div class="modal" style="width:600px;max-width:95vw">' +
-      '<div class="modal-header">' +
-        '<h2>' + plate + ' — текущее местоположение</h2>' +
-        '<button type="button" class="modal-close" onclick="this.closest(\'.modal-overlay\').remove()">&times;</button>' +
-      '</div>' +
-      '<div class="modal-body">' +
-        '<div class="loc-info">' +
-          '<span class="loc-status ' + statusClass + '">' + statusText + '</span>' +
-          '<span class="loc-time">' + (agoText ? 'Получено: ' + agoText : '') + '</span>' +
-        '</div>' +
-        '<div class="loc-map" id="' + mapId + '"></div>' +
-      '</div>' +
-      '<div class="modal-footer">' +
-        '<button type="button" class="btn btn-secondary" onclick="this.closest(\'.modal-overlay\').remove()">Закрыть</button>' +
-      '</div>' +
-    '</div>';
-  document.getElementById('modal-container').appendChild(overlay);
-  var latNum = parseFloat(lat), lonNum = parseFloat(lon);
-  function showMap() {
-    var map = L.map(mapId).setView([latNum, lonNum], 15);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
-    L.marker([latNum, lonNum]).addTo(map).bindPopup(
-      '<b>' + plate + '</b><br>' + statusText + '<br>' + (agoText ? agoText : '') + '<br>' + lat + ', ' + lon
-    ).openPopup();
-  }
-  if (typeof L !== 'undefined') { showMap(); }
-  else {
-    var lcss = document.createElement('link');
-    lcss.rel = 'stylesheet'; lcss.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-    document.head.appendChild(lcss);
-    var ls = document.createElement('script');
-    ls.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-    ls.onload = showMap;
-    document.head.appendChild(ls);
-  }
-}
-var _mapModals = {};
-function showMapWaiting(el) {
-  var vid = el.closest('[id^=v-]'); var id = vid ? vid.id.replace('v-','') : null;
-  if (!id || _mapModals[id]) return;
-  var overlay = document.createElement('div');
-  overlay.className = 'modal-overlay'; overlay.id = 'map-waiting-'+id;
-  overlay.onclick = function(e){if(e.target===this){this.remove();clearInterval(this._timer);delete _mapModals[id]}};
-  overlay.innerHTML = '<div class="modal" style="width:300px;text-align:center"><div class="modal-body" style="padding:32px 20px"><div class="loc-spinner"></div><p style="color:var(--text-muted);margin-top:12px">Получаем координаты...</p></div></div>';
-  document.getElementById('modal-container').appendChild(overlay);
-  _mapModals[id] = true;
-  var waited = 0;
-  overlay._timer = setInterval(function(){
-    waited += 1000;
-    var updated = document.getElementById('v-'+id);
-    var pl = updated ? updated.querySelector('strong[onclick]') : null;
-    if (pl && pl.getAttribute('data-lat') && pl.getAttribute('data-lon')) {
-      overlay.remove(); delete _mapModals[id]; clearInterval(overlay._timer);
-      openLocationMap(pl);
-    } else if (waited >= 15000) {
-      clearInterval(overlay._timer); delete _mapModals[id];
-      var b = overlay.querySelector('.modal-body');
-      if (b) b.innerHTML = '<p style="color:var(--text-muted);padding:8px 0">Координаты недоступны</p>';
-    }
-  }, 1000);
-}
-</script>
-{% endblock %}
+{% block head %}{% endblock %}
 {% block content %}
 <div class="page-header">
   <h1>Транспортные средства</h1>
@@ -493,21 +373,138 @@ function refreshStatuses() {
         var label = dot.querySelector('.status-dot-label');
         if (label) label.textContent = dot.title;
       }
-      var plate = row.querySelector('strong[onclick]');
-      if (plate) {
-        plate.setAttribute('data-lat', v.lat || '');
-        plate.setAttribute('data-lon', v.lon || '');
-        plate.setAttribute('data-ts', v.ts || '');
-        plate.setAttribute('data-status', v.status || '');
-        var waiting = document.getElementById('map-waiting-'+v.vehicle_id);
-        if (waiting && v.lat && v.lon) {
-          waiting.remove(); openLocationMap(plate);
-        }
-      }
     });
   }).catch(function(){});
 }
 document.addEventListener('DOMContentLoaded', function(){setTimeout(refreshStatuses,2000);setInterval(refreshStatuses,120000)});
 document.addEventListener('htmx:afterSwap',function(e){if(e.detail&&e.detail.target&&e.detail.target.id=='vehicles-table')setTimeout(refreshStatuses,2000)});
+</script>
+<style>
+.sensor-filter-dropdown { position:relative; display:inline-block; }
+.sensor-filter-btn { display:flex; align-items:center; gap:6px; padding:6px 12px; border:1px solid var(--border); border-radius:6px; background:var(--bg-card); color:var(--text-primary); cursor:pointer; font-size:13px; white-space:nowrap; }
+.sensor-filter-btn:hover { border-color:var(--accent); }
+.sensor-filter-panel { display:none; position:absolute; top:100%; left:0; margin-top:4px; background:var(--bg-card); border:1px solid var(--border); border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,0.5); z-index:100; min-width:200px; padding:6px 0; }
+.sensor-filter-panel.open { display:block; }
+.sensor-filter-panel label { display:flex; align-items:center; gap:8px; padding:7px 14px; cursor:pointer; font-size:13px; color:var(--text-primary); }
+.sensor-filter-panel label:hover { background:var(--bg-card-hover); }
+.sensor-filter-panel input[type=checkbox] { accent-color:var(--accent); }
+.sensor-filter-clear { display:block; width:100%; padding:7px 14px; font-size:12px; color:var(--text-muted); background:none; border:none; border-top:1px solid var(--border); text-align:center; cursor:pointer; }
+.sensor-filter-clear:hover { color:var(--text-primary); background:var(--bg-card-hover); }
+.status-dot { display:inline-flex; align-items:center; gap:6px; width:10px; height:10px; border-radius:50%; vertical-align:middle; }
+.status-dot-on { background:#22c55e; box-shadow:0 0 6px rgba(34,197,94,0.6); }
+.status-dot-warn { background:#f59e0b; box-shadow:0 0 6px rgba(245,158,11,0.6); }
+.status-dot-off { background:#ef4444; box-shadow:0 0 4px rgba(239,68,68,0.4); }
+.status-dot-label { display:none; }
+@media (max-width:768px){
+  .status-dot { width:10px; height:10px; }
+  .status-dot-label { display:none; }
+}
+@keyframes spin { to { transform:rotate(360deg); } }
+.loc-spinner { width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto; }
+strong[onclick] { cursor:pointer; transition:color .15s; }
+strong[onclick]:hover { color:var(--accent); }
+.loc-map { height:400px; width:100%; border-radius:8px; }
+.loc-info { display:flex; align-items:center; gap:12px; padding:12px 16px; margin-bottom:12px; background:var(--bg-card); border:1px solid var(--border); border-radius:8px; font-size:14px; }
+.loc-info .loc-status { font-weight:600; }
+.loc-info .loc-status.online { color:#22c55e; }
+.loc-info .loc-status.warning { color:#f59e0b; }
+.loc-info .loc-status.offline { color:#ef4444; }
+.loc-info .loc-time { color:var(--text-muted); margin-left:auto; }
+</style>
+<script>
+function openLocationMap(el) {
+  var vid = el.closest('[id^=v-]');
+  if (!vid) return;
+  var id = vid.id.replace('v-', '');
+  var plate = el.textContent.trim();
+  var overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.onclick = function(e) { if (e.target === this) this.remove(); };
+  overlay.innerHTML =
+    '<div class="modal" style="width:600px;max-width:95vw;text-align:center">' +
+      '<div class="modal-header">' +
+        '<h2>' + plate + ' — текущее местоположение</h2>' +
+        '<button type="button" class="modal-close" onclick="this.closest(\'.modal-overlay\').remove()">&times;</button>' +
+      '</div>' +
+      '<div class="modal-body" id="loc-body-' + id + '">' +
+        '<div class="loc-spinner" style="margin:32px auto"></div>' +
+        '<p style="color:var(--text-muted);margin-top:12px">Получаем координаты...</p>' +
+      '</div>' +
+    '</div>';
+  document.getElementById('modal-container').appendChild(overlay);
+  fetch('/api/vehicles/' + id + '/location').then(function(r){return r.json()}).then(function(data){
+    var body = document.getElementById('loc-body-' + id);
+    if (!body) return;
+    var now = Math.floor(Date.now() / 1000);
+    var ago = data.ts ? now - data.ts : null; var agoText = '';
+    if (ago !== null) {
+      if (ago < 60) agoText = 'только что';
+      else if (ago < 3600) agoText = Math.floor(ago/60) + ' мин назад';
+      else agoText = Math.floor(ago/3600) + ' ч назад';
+    }
+    var statusLabels = {online:'Онлайн',warning:'>20 мин',offline:'Офлайн'};
+    var statusText = statusLabels[data.status] || 'Нет данных';
+    var statusClass = data.status || 'offline';
+    if (!data.lat || !data.lon) {
+      body.innerHTML = '<p style="color:var(--text-muted);padding:32px 0">Координаты недоступны</p>';
+      return;
+    }
+    var mapId = 'loc-map-' + id;
+    var badges = '';
+    if (data.speed !== null && data.speed !== undefined) badges += '<span style="padding:2px 8px;border-radius:4px;background:rgba(59,130,246,0.15);font-size:11px;font-weight:600;color:#3b82f6">🚀 '+data.speed+' км/ч</span>';
+    if (data.sat !== null && data.sat !== undefined) badges += '<span style="padding:2px 8px;border-radius:4px;background:rgba(139,92,246,0.15);font-size:11px;font-weight:600;color:#8b5cf6">🛰️ '+data.sat+'</span>';
+    if (data.alt !== null && data.alt !== undefined) badges += '<span style="padding:2px 8px;border-radius:4px;background:rgba(245,158,11,0.15);font-size:11px;font-weight:600;color:#f59e0b">⛰️ '+parseFloat(data.alt).toFixed(0)+'м</span>';
+    var sensorRows = '';
+    function sensorMeta(n) {
+      var l = n.toLowerCase();
+      if (l.includes('топлив')||l.includes('fuel')||l.includes('уровень')) return {icon:'⛽',color:'#22c55e',unit:'л'};
+      if (l.includes('зажиг')||l.includes('ignit')||l.includes('двиг')||l.includes('engine')) return {icon:'🔌',color:'#ef4444',unit:''};
+      if (l.includes('температур')||l.includes('temp')) return {icon:'🌡️',color:'#f59e0b',unit:'°C'};
+      if (l.includes('напряж')||l.includes('volt')||l.includes('bat')) return {icon:'⚡',color:'#a855f7',unit:'В'};
+      if (l.includes('пробег')||l.includes('odom')||l.includes('километр')||l.includes('mile')) return {icon:'📏',color:'#a855f7',unit:'км'};
+      if (l.includes('скорост')||l.includes('speed')) return {icon:'🚀',color:'#3b82f6',unit:'км/ч'};
+      if (l.includes('оборот')||l.includes('rpm')) return {icon:'⚙️',color:'#f97316',unit:'об/мин'};
+      if (l.includes('двер')||l.includes('door')) return {icon:'🚪',color:'#f59e0b',unit:''};
+      if (l.includes('давлен')||l.includes('pressur')||l.includes('pneu')) return {icon:'💨',color:'#06b6d4',unit:'атм'};
+      return null;
+    }
+    if (data.sensors) {
+      data.sensors.forEach(function(s){
+        var m = sensorMeta(s.name);
+        if (!m) return;
+        var val = s.dig_value !== null && s.dig_value !== undefined ? (s.dig_value === 1 ? 'Вкл' : s.dig_value === 0 ? 'Выкл' : s.dig_value) : s.hum_value;
+        sensorRows += '<div style="display:flex;align-items:center;gap:6px;padding:2px 0"><span style="font-size:14px">'+m.icon+'</span><span style="flex:1;font-size:12px;color:var(--text-secondary)">'+s.name+'</span><span style="font-weight:600;font-size:13px;color:'+m.color+'">'+(val !== null && val !== undefined ? val + (m.unit ? ' '+m.unit : '') : '—')+'</span></div>';
+      });
+    }
+    body.innerHTML =
+      '<div class="loc-info" style="justify-content:space-between">' +
+        '<span class="loc-status ' + statusClass + '">' + statusText + '</span>' +
+        '<div style="display:flex;gap:4px;flex-wrap:wrap">' + badges + '</div>' +
+        '<span class="loc-time">' + (agoText ? agoText : '') + '</span>' +
+      '</div>' +
+      (sensorRows ? '<div class="loc-sensors" style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:8px 16px;margin-bottom:12px">' + sensorRows + '</div>' : '') +
+      '<div class="loc-map" id="' + mapId + '"></div>';
+    var latNum = parseFloat(data.lat), lonNum = parseFloat(data.lon);
+    function showMap() {
+      var map = L.map(mapId).setView([latNum, lonNum], 15);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+      var popupHtml = '<b>' + plate + '</b><br>' + statusText + '<br>' + (agoText ? agoText : '') + '<br>' + data.lat + ', ' + data.lon;
+      L.marker([latNum, lonNum]).addTo(map).bindPopup(popupHtml).openPopup();
+    }
+    if (typeof L !== 'undefined') { showMap(); }
+    else {
+      var lcss = document.createElement('link');
+      lcss.rel = 'stylesheet'; lcss.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+      document.head.appendChild(lcss);
+      var ls = document.createElement('script');
+      ls.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+      ls.onload = showMap;
+      document.head.appendChild(ls);
+    }
+  }).catch(function(){
+    var body = document.getElementById('loc-body-' + id);
+    if (body) body.innerHTML = '<p style="color:var(--text-muted);padding:32px 0">Ошибка получения координат</p>';
+  });
+}
 </script>
 {% endblock %}

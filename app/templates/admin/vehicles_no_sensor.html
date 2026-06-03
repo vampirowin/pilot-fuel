@@ -29,15 +29,16 @@
         <div class="table-container"><table>
           <thead><tr>
             <th style="width:32px;"><input type="checkbox" onchange="var e=this;document.querySelectorAll('#no-sensor-form input[name=vehicle_ids]').forEach(function(c){c.checked=e.checked})"></th>
-            <th>#</th><th>Госномер</th><th>IMEI</th><th>Действия</th>
+            <th>#</th><th>Госномер</th><th>IMEI</th><th>Трек</th><th>Действия</th>
           </tr></thead>
           <tbody>
             {% for v in vehicles %}
             <tr id="v-{{ v.id }}">
               <td data-label=""><input type="checkbox" name="vehicle_ids" value="{{ v.id }}"></td>
               <td data-label="#" style="color:var(--text-dim)">{{ loop.index }}</td>
-              <td data-label="Госномер"><strong>{{ v.plate_number or '—' }}</strong></td>
+              <td data-label="Госномер"><strong style="cursor:pointer" onclick="openLocationMap(this)">{{ v.plate_number or '—' }}</strong></td>
               <td data-label="IMEI" style="font-family:monospace;font-size:12px">{{ v.imei or '—' }}</td>
+              <td data-label="Трек"><button class="btn btn-sm btn-track" hx-get="/api/vehicles/{{ v.id }}/track-modal?imei={{ v.imei or '' }}&date_from={{ today_str }}&date_to={{ today_str }}" hx-target="#modal-container" hx-swap="innerHTML">Трек</button></td>
               <td><button class="btn btn-sm btn-primary" hx-post="/api/vehicles/{{ v.id }}/toggle-sensor" hx-target="#v-{{ v.id }}" hx-swap="outerHTML" hx-confirm="Вернуть «{{ v.plate_number or v.id }}» в список?">Вернуть</button></td>
             </tr>
             {% endfor %}
@@ -51,4 +52,114 @@
   {% endif %}
 </div>
 </form>
+<div id="modal-container"></div>
+<style>
+.loc-spinner { width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto; }
+@keyframes spin { to { transform:rotate(360deg); } }
+strong[onclick] { cursor:pointer; transition:color .15s; }
+strong[onclick]:hover { color:var(--accent); }
+.loc-map { height:400px; width:100%; border-radius:8px; }
+.loc-info { display:flex; align-items:center; gap:12px; padding:12px 16px; margin-bottom:12px; background:var(--bg-card); border:1px solid var(--border); border-radius:8px; font-size:14px; }
+.loc-info .loc-status { font-weight:600; }
+.loc-info .loc-status.online { color:#22c55e; }
+.loc-info .loc-status.warning { color:#f59e0b; }
+.loc-info .loc-status.offline { color:#ef4444; }
+.loc-info .loc-time { color:var(--text-muted); margin-left:auto; }
+</style>
+<script>
+function openLocationMap(el) {
+  var vid = el.closest('[id^=v-]');
+  if (!vid) return;
+  var id = vid.id.replace('v-', '');
+  var plate = el.textContent.trim();
+  var overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.onclick = function(e) { if (e.target === this) this.remove(); };
+  overlay.innerHTML =
+    '<div class="modal" style="width:600px;max-width:95vw;text-align:center">' +
+      '<div class="modal-header">' +
+        '<h2>' + plate + ' — текущее местоположение</h2>' +
+        '<button type="button" class="modal-close" onclick="this.closest(\'.modal-overlay\').remove()">&times;</button>' +
+      '</div>' +
+      '<div class="modal-body" id="loc-body-' + id + '">' +
+        '<div class="loc-spinner" style="margin:32px auto"></div>' +
+        '<p style="color:var(--text-muted);margin-top:12px">Получаем координаты...</p>' +
+      '</div>' +
+    '</div>';
+  document.getElementById('modal-container').appendChild(overlay);
+  fetch('/api/vehicles/' + id + '/location').then(function(r){return r.json()}).then(function(data){
+    var body = document.getElementById('loc-body-' + id);
+    if (!body) return;
+    var now = Math.floor(Date.now() / 1000);
+    var ago = data.ts ? now - data.ts : null; var agoText = '';
+    if (ago !== null) {
+      if (ago < 60) agoText = 'только что';
+      else if (ago < 3600) agoText = Math.floor(ago/60) + ' мин назад';
+      else agoText = Math.floor(ago/3600) + ' ч назад';
+    }
+    var statusLabels = {online:'Онлайн',warning:'>20 мин',offline:'Офлайн'};
+    var statusText = statusLabels[data.status] || 'Нет данных';
+    var statusClass = data.status || 'offline';
+    if (!data.lat || !data.lon) {
+      body.innerHTML = '<p style="color:var(--text-muted);padding:32px 0">Координаты недоступны</p>';
+      return;
+    }
+    var badges = '';
+    if (data.speed !== null && data.speed !== undefined) badges += '<span style="padding:2px 8px;border-radius:4px;background:rgba(59,130,246,0.15);font-size:11px;font-weight:600;color:#3b82f6">🚀 '+data.speed+' км/ч</span>';
+    if (data.sat !== null && data.sat !== undefined) badges += '<span style="padding:2px 8px;border-radius:4px;background:rgba(139,92,246,0.15);font-size:11px;font-weight:600;color:#8b5cf6">🛰️ '+data.sat+'</span>';
+    if (data.alt !== null && data.alt !== undefined) badges += '<span style="padding:2px 8px;border-radius:4px;background:rgba(245,158,11,0.15);font-size:11px;font-weight:600;color:#f59e0b">⛰️ '+parseFloat(data.alt).toFixed(0)+'м</span>';
+    var sensorRows = '';
+    function sensorMeta(n) {
+      var l = n.toLowerCase();
+      if (l.includes('топлив')||l.includes('fuel')||l.includes('уровень')) return {icon:'⛽',color:'#22c55e',unit:'л'};
+      if (l.includes('зажиг')||l.includes('ignit')||l.includes('двиг')||l.includes('engine')) return {icon:'🔌',color:'#ef4444',unit:''};
+      if (l.includes('температур')||l.includes('temp')) return {icon:'🌡️',color:'#f59e0b',unit:'°C'};
+      if (l.includes('напряж')||l.includes('volt')||l.includes('bat')) return {icon:'⚡',color:'#a855f7',unit:'В'};
+      if (l.includes('пробег')||l.includes('odom')||l.includes('километр')||l.includes('mile')) return {icon:'📏',color:'#a855f7',unit:'км'};
+      if (l.includes('скорост')||l.includes('speed')) return {icon:'🚀',color:'#3b82f6',unit:'км/ч'};
+      if (l.includes('оборот')||l.includes('rpm')) return {icon:'⚙️',color:'#f97316',unit:'об/мин'};
+      if (l.includes('двер')||l.includes('door')) return {icon:'🚪',color:'#f59e0b',unit:''};
+      if (l.includes('давлен')||l.includes('pressur')||l.includes('pneu')) return {icon:'💨',color:'#06b6d4',unit:'атм'};
+      return null;
+    }
+    if (data.sensors) {
+      data.sensors.forEach(function(s){
+        var m = sensorMeta(s.name);
+        if (!m) return;
+        var val = s.dig_value !== null && s.dig_value !== undefined ? (s.dig_value === 1 ? 'Вкл' : s.dig_value === 0 ? 'Выкл' : s.dig_value) : s.hum_value;
+        sensorRows += '<div style="display:flex;align-items:center;gap:6px;padding:2px 0"><span style="font-size:14px">'+m.icon+'</span><span style="flex:1;font-size:12px;color:var(--text-secondary)">'+s.name+'</span><span style="font-weight:600;font-size:13px;color:'+m.color+'">'+(val !== null && val !== undefined ? val + (m.unit ? ' '+m.unit : '') : '—')+'</span></div>';
+      });
+    }
+    var mapId = 'loc-map-' + id;
+    body.innerHTML =
+      '<div class="loc-info" style="justify-content:space-between">' +
+        '<span class="loc-status ' + statusClass + '">' + statusText + '</span>' +
+        '<div style="display:flex;gap:4px;flex-wrap:wrap">' + badges + '</div>' +
+        '<span class="loc-time">' + (agoText ? agoText : '') + '</span>' +
+      '</div>' +
+      (sensorRows ? '<div class="loc-sensors" style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:8px 16px;margin-bottom:12px">' + sensorRows + '</div>' : '') +
+      '<div class="loc-map" id="' + mapId + '"></div>';
+    var latNum = parseFloat(data.lat), lonNum = parseFloat(data.lon);
+    function showMap() {
+      var map = L.map(mapId).setView([latNum, lonNum], 15);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+      var popupHtml = '<b>' + plate + '</b><br>' + statusText + '<br>' + (agoText ? agoText : '') + '<br>' + data.lat + ', ' + data.lon;
+      L.marker([latNum, lonNum]).addTo(map).bindPopup(popupHtml).openPopup();
+    }
+    if (typeof L !== 'undefined') { showMap(); }
+    else {
+      var lcss = document.createElement('link');
+      lcss.rel = 'stylesheet'; lcss.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+      document.head.appendChild(lcss);
+      var ls = document.createElement('script');
+      ls.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+      ls.onload = showMap;
+      document.head.appendChild(ls);
+    }
+  }).catch(function(){
+    var body = document.getElementById('loc-body-' + id);
+    if (body) body.innerHTML = '<p style="color:var(--text-muted);padding:32px 0">Ошибка получения координат</p>';
+  });
+}
+</script>
 {% endblock %}

@@ -148,7 +148,7 @@ def _render_vehicle_group(vehicle_id: int, entries: list, vmap: dict, page: int 
     imei_val = vmap.get(vehicle_id, {}).get("imei", "")
     add_btn = f'<button class="btn btn-sm btn-secondary" hx-get="/api/refuels/add-form?vehicle_id={vehicle_id}&page={page}&date_from={date_from}&date_to={date_to}" hx-target="#modal-container" hx-swap="innerHTML">+ Добавить</button>'
     gid = f"vg-{vehicle_id}"
-    h = f'<div class="card vehicle-group"><div class="vehicle-group-title collapsible-header" onclick="toggleGroup(\'{gid}\')"><input type="checkbox" class="vehicle-select" data-vehicle-id="{vehicle_id}" onclick="event.stopPropagation()" title="Выбрать для экспорта" style="margin-right:6px;cursor:pointer"><span class="arrow">&#9660;</span><span>{plate} <span class="vehicle-group-count">{len(entries)}</span></span>{add_btn}</div><div class="collapsible-body" id="{gid}"><div class="table-container"><table><thead><tr><th>Дата</th><th>Pilot (л)</th><th>Чек (л)</th><th>Разница</th><th>Погрешность</th><th>Статус</th><th>Прим.</th><th>Действия</th></tr></thead><tbody>'
+    h = f'<div class="card vehicle-group"><div class="vehicle-group-title collapsible-header" onclick="toggleGroup(\'{gid}\')"><span class="vg-left"><input type="checkbox" class="vehicle-select" data-vehicle-id="{vehicle_id}" onclick="event.stopPropagation()" title="Выбрать для экспорта" style="cursor:pointer"><span class="arrow">&#9660;</span></span><span class="vg-center">{plate} <span class="vehicle-group-count">{len(entries)}</span></span><span class="vg-right">{add_btn}</span></div><div class="collapsible-body" id="{gid}"><div class="table-container"><table><thead><tr><th>Дата</th><th>Pilot (л)</th><th>Чек (л)</th><th>Разница</th><th>Погрешность</th><th>Статус</th><th>Прим.</th><th>Действия</th></tr></thead><tbody>'
     for e in entries:
         rc = ' class="row-false"' if e.is_false else ""
         if e.is_false:
@@ -157,9 +157,9 @@ def _render_vehicle_group(vehicle_id: int, entries: list, vmap: dict, page: int 
         else:
             sc = STATUS_MAP.get(e.comparison_status, "")
             sl = STATUS_LABELS.get(e.comparison_status, e.comparison_status or "—")
-        pa = f"{e.pilot_amount:.1f}" if e.pilot_amount is not None else "—"
-        aa = f"{e.actual_amount:.1f}" if e.actual_amount is not None else "—"
-        df = f"{e.difference:.1f}" if e.difference is not None else "—"
+        pa = f"{e.pilot_amount:.2f}" if e.pilot_amount is not None else "—"
+        aa = f"{e.actual_amount:.2f}" if e.actual_amount is not None else "—"
+        df = f"{e.difference:.2f}" if e.difference is not None else "—"
         er = f"{e.error_percent:.1f}%" if e.error_percent is not None else "—"
         diff_style = ""
         if e.difference is not None:
@@ -234,7 +234,7 @@ def _render_vehicle_group(vehicle_id: int, entries: list, vmap: dict, page: int 
         parts.append(f"{excluded_count} искл.")
     if parts:
         footer_label += " (" + ", ".join(parts) + " не учтены)"
-    h += f'<tfoot class="vehicle-group-tfoot"><tr><td data-label=""><strong>{footer_label}</strong></td><td data-label="Pilot"><strong>{total_pilot:.1f}</strong></td><td data-label="Чек"><strong>{total_actual:.1f}</strong></td><td data-label="Разница"><strong>{df_total:.1f}</strong></td><td data-label="Погрешность"><strong>{f"{err_pct:.1f}%" if err_pct is not None else "—"}</strong></td><td data-label="Статус"><span class="status-badge {overall_sc}">{overall_sl}</span></td><td></td><td></td></tr></tfoot>'
+    h += f'<tfoot class="vehicle-group-tfoot"><tr><td data-label=""><strong>{footer_label}</strong></td><td data-label="Pilot"><strong>{total_pilot:.2f}</strong></td><td data-label="Чек"><strong>{total_actual:.2f}</strong></td><td data-label="Разница"><strong>{df_total:.2f}</strong></td><td data-label="Погрешность"><strong>{f"{err_pct:.1f}%" if err_pct is not None else "—"}</strong></td><td data-label="Статус"><span class="status-badge {overall_sc}">{overall_sl}</span></td><td></td><td></td></tr></tfoot>'
     h += "</tbody></table></div></div></div>"
     return h
 

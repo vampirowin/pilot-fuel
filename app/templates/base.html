@@ -13,7 +13,8 @@
 {% block head %}{% endblock %}
 {% block head_extra %}{% endblock %}
 </head>
-<body>
+<body class="{% block body_class %}{% endblock %}">
+{% block body_wrapper %}
 <div class="app-layout">
   <aside class="sidebar">
     <div class="sidebar-header">
@@ -138,6 +139,8 @@
     {% block content %}{% endblock %}
   </main>
 </div>
+{% endblock %}
+{% block body_scripts_end %}
 <script>
 function toggleGroup(id) {
   const body = document.getElementById(id);
@@ -175,5 +178,6 @@ if ('serviceWorker' in navigator) {
   });
 }
 </script>
+{% endblock %}
 </body>
 </html>

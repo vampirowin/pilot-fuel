@@ -25,9 +25,77 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
 
-STATUS_CACHE_TTL = 60
+STATUS_CACHE_TTL = 300  # 5 min background refresh
 _status_cache: dict[str, tuple[float, list[dict]]] = {}
 _status_pending: dict[str, asyncio.Event] = {}
+
+
+async def refresh_company_statuses(ca_id: int, ca_name: str = "") -> int:
+    """Фоновое обновление кэша статусов для одной компании. Возвращает число ТС."""
+    from app.database import async_session
+    from app.models.user import User
+    from sqlalchemy import select
+
+    cache_key = str(ca_id)
+    async with async_session() as db:
+        admin = (
+            await db.execute(
+                select(User).where(
+                    User.client_account_id == ca_id,
+                    User.role == "company_admin",
+                    User.is_active == True,
+                    User.pilot_token.isnot(None),
+                ).limit(1)
+            )
+        ).scalar_one_or_none()
+        if not admin:
+            return 0
+
+        vehicles = (
+            await db.execute(
+                select(Vehicle).where(
+                    Vehicle.is_active == True,
+                    Vehicle.has_fuel_sensor == True,
+                    Vehicle.client_account_id == ca_id,
+                )
+            )
+        ).scalars().all()
+        if not vehicles:
+            return 0
+
+    try:
+        ps = PilotService()
+        imeis = [v.imei for v in vehicles if v.imei]
+        if not imeis:
+            return 0
+        raw = await ps.get_all_vehicle_statuses(admin.pilot_token, admin.pilot_node_id or 0, imeis)
+        now_ts = datetime.now(timezone.utc).timestamp()
+        vehicle_map = {v.imei: v.id for v in vehicles if v.imei}
+        result_data = []
+        for imei, s in raw.items():
+            vid = vehicle_map.get(imei)
+            if not vid:
+                continue
+            ts = s.get("ts")
+            if ts and now_ts - ts < 1200:
+                st = "online"
+            elif ts and now_ts - ts < 3600:
+                st = "warning"
+            else:
+                st = "offline"
+            result_data.append({
+                "vehicle_id": vid,
+                "lat": s.get("lat"),
+                "lon": s.get("lon"),
+                "ts": ts,
+                "status": st,
+            })
+        _status_cache[cache_key] = (time.time(), result_data)
+        logger.info("Status cache refreshed for company %s (%s): %d vehicles", ca_name, cache_key, len(result_data))
+        return len(result_data)
+    except Exception as exc:
+        logger.warning("Status refresh failed for company %s (%s): %s", ca_name, cache_key, exc)
+        return 0
 
 
 def group_by_folder(vehicles: list) -> list:
@@ -305,6 +373,7 @@ async def vehicle_status_batch(
     if cached and now - cached[0] < STATUS_CACHE_TTL:
         return JSONResponse(cached[1])
 
+    # Cold start — делаем прямой запрос (фон еще не прогрел кэш)
     event = _status_pending.get(cache_key)
     if event:
         await event.wait()
@@ -313,51 +382,77 @@ async def vehicle_status_batch(
 
     event = asyncio.Event()
     _status_pending[cache_key] = event
-
     try:
-        query = select(Vehicle).where(Vehicle.is_active == True, Vehicle.has_fuel_sensor == True)
-        query = apply_vehicle_filter(query, user, Vehicle)
-        result = await db.execute(query)
-        db_vehicles = result.scalars().all()
-
-        token, node_id = await _resolve_pilot_credentials(user, db)
-        if not token or not node_id:
-            _status_cache[cache_key] = (time.time(), [])
-            return JSONResponse([])
-
-        ps = PilotService()
-        imeis = [v.imei for v in db_vehicles if v.imei]
-        raw = await ps.get_all_vehicle_statuses(token, node_id, imeis)
-        now_ts = datetime.now(timezone.utc).timestamp()
-        vehicle_map = {v.imei: v.id for v in db_vehicles if v.imei}
-        result_data = []
-        for imei, s in raw.items():
-            vid = vehicle_map.get(imei)
-            if not vid:
-                continue
-            ts = s.get("ts")
-            if ts and now_ts - ts < 1200:
-                st = "online"
-            elif ts and now_ts - ts < 3600:
-                st = "warning"
-            else:
-                st = "offline"
-            result_data.append({
-                "vehicle_id": vid,
-                "lat": s.get("lat"),
-                "lon": s.get("lon"),
-                "ts": ts,
-                "status": st,
-            })
-        _status_cache[cache_key] = (time.time(), result_data)
-        return JSONResponse(result_data)
-    except Exception:
-        logger.warning("Failed to fetch vehicle statuses", exc_info=True)
-        _status_cache[cache_key] = (time.time(), [])
-        return JSONResponse([])
+        count = await refresh_company_statuses(user.client_account_id or 0)
+        if count:
+            cached = _status_cache.get(cache_key, (0, []))
+        else:
+            cached = (now, [])
+        return JSONResponse(cached[1])
     finally:
         _status_pending.pop(cache_key, None)
         event.set()
+
+
+@router.get("/api/vehicles/{vehicle_id}/location", response_class=JSONResponse)
+async def vehicle_location(
+    vehicle_id: int,
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Прямой запрос к Pilot за текущим местоположением одного ТС."""
+    vehicle = await db.get(Vehicle, vehicle_id)
+    if not vehicle:
+        raise HTTPException(404, "Vehicle not found")
+    if user.role != "superadmin":
+        if not user.client_account_id or vehicle.client_account_id != user.client_account_id:
+            raise HTTPException(404, "Vehicle not found")
+        if user.site_id and vehicle.site_id != user.site_id:
+            raise HTTPException(404, "Vehicle not found")
+
+    token, node_id = await _resolve_pilot_credentials(user, db)
+    if not token or not node_id:
+        return JSONResponse({"lat": None, "lon": None, "ts": None, "status": "offline"})
+
+    try:
+        ps = PilotService()
+        raw = await ps.get_vehicle_status(token, node_id, vehicle.imei)
+        if not raw:
+            return JSONResponse({"lat": None, "lon": None, "ts": None, "status": "offline", "sensors": []})
+        now_ts = datetime.now(timezone.utc).timestamp()
+        ts = raw.get("unixtimestamp")
+        ts_int = int(ts) if ts else None
+        if ts_int and now_ts - ts_int < 1200:
+            st = "online"
+        elif ts_int and now_ts - ts_int < 3600:
+            st = "warning"
+        else:
+            st = "offline"
+        sensors = raw.get("sensors", [])
+        sensor_list = []
+        if isinstance(sensors, list):
+            for s in sensors:
+                name = str(s.get("name", "")).strip()
+                if not name:
+                    continue
+                sensor_list.append({
+                    "name": name,
+                    "dig_value": s.get("dig_value"),
+                    "hum_value": s.get("hum_value"),
+                })
+        return JSONResponse({
+            "lat": raw.get("lat"),
+            "lon": raw.get("lon"),
+            "ts": ts_int,
+            "status": st,
+            "speed": raw.get("speed"),
+            "alt": raw.get("alt"),
+            "sat": raw.get("sat"),
+            "sensors": sensor_list,
+        })
+    except Exception:
+        logger.warning("Failed to fetch location for vehicle %d", vehicle_id, exc_info=True)
+        return JSONResponse({"lat": None, "lon": None, "ts": None, "status": "offline"})
 
 
 @router.get("/api/vehicles/{vehicle_id}/thresholds", response_class=HTMLResponse)

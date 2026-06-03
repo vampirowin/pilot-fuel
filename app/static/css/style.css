@@ -1054,12 +1054,11 @@ tr:hover td {
 
   /* Filter panel full-width on mobile */
   .sensor-filter-panel {
-    position: fixed;
-    top: auto;
-    left: 8px;
-    right: 8px;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
     width: auto;
-    margin-top: 4px;
     z-index: 200;
   }
 
@@ -1234,14 +1233,15 @@ tr:hover td {
 .vehicle-group-title {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
   padding: 14px 20px;
   font-size: 15px;
   font-weight: 600;
   color: var(--accent-light);
   border-bottom: 1px solid var(--border);
 }
+.vehicle-group-title .vg-left { display:flex; align-items:center; gap:8px; flex-shrink:0; }
+.vehicle-group-title .vg-center { flex:1; text-align:center; }
+.vehicle-group-title .vg-right { flex-shrink:0; }
 
 .vehicle-group-count {
   font-size: 12px;

@@ -29,8 +29,12 @@ def start_scheduler():
         sync_all_companies, "cron", hour=3, minute=0,
         id="daily_sync", replace_existing=True, misfire_grace_time=3600,
     )
+    _scheduler.add_job(
+        refresh_all_company_statuses, "interval", minutes=5,
+        id="status_refresh", replace_existing=True,
+    )
     _scheduler.start()
-    logger.info("Scheduler started: daily sync at 03:00 MSK")
+    logger.info("Scheduler started: daily sync at 03:00 MSK, status refresh every 5 min")
 
 
 async def stop_scheduler():
@@ -269,6 +273,25 @@ async def _sync_company(admin: User) -> dict:
             "total_events": total_events,
             "vehicle_updates": vehicle_updates,
         }
+
+
+async def refresh_all_company_statuses():
+    """Фоновый пуллинг — обновляет кэш статусов для всех компаний."""
+    from app.api.vehicles import refresh_company_statuses
+
+    async with async_session() as db:
+        result = await db.execute(
+            select(Vehicle.client_account_id)
+            .where(Vehicle.is_active == True, Vehicle.has_fuel_sensor == True)
+            .distinct()
+        )
+        company_ids = [r[0] for r in result if r[0] is not None]
+
+    total = 0
+    for ca_id in company_ids:
+        count = await refresh_company_statuses(ca_id)
+        total += count
+    logger.info("Background status refresh: %d companies, %d vehicles", len(company_ids), total)
 
 
 async def trigger_sync_all(admin_user_ids: list[int] | None = None) -> list[dict]:
