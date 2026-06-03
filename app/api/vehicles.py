@@ -1,6 +1,7 @@
 import logging
+from datetime import datetime, timezone
 
-from fastapi import APIRouter, Request, Depends, HTTPException, Form
+from fastapi import APIRouter, Request, Depends, HTTPException, Form, Query
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
@@ -15,6 +16,7 @@ from app.dependencies import get_current_user, apply_vehicle_filter
 from app.models.vehicle import SENSOR_STATUSES
 from app.api.refuels import _get_effective_thresholds, _calc_comparison, _resolve_pilot_credentials
 from app.models.setting import Setting
+from app.timezone_utils import get_user_timezone
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +33,8 @@ def group_by_folder(vehicles: list) -> list:
     return [(f, groups[f]) for f in sorted_folders]
 
 
-def build_vehicle_dict(v: Vehicle, company_name: str = "", site_name: str = "") -> dict:
+def build_vehicle_dict(v: Vehicle, company_name: str = "", site_name: str = "", status_info: dict | None = None) -> dict:
+    si = (status_info or {}).get(v.imei) if status_info else None
     return {
         "id": v.id,
         "pilot_agent_id": v.pilot_agent_id,
@@ -42,6 +45,8 @@ def build_vehicle_dict(v: Vehicle, company_name: str = "", site_name: str = "") 
         "sensor_count": v.sensor_count,
         "has_fuel_sensor": v.has_fuel_sensor,
         "sensor_status": v.sensor_status,
+        "status_info": si,
+        "status_dot": _status_dot_html(si.get("status") if si else None),
         "company_name": company_name,
         "site_name": site_name,
     }
@@ -119,6 +124,16 @@ def _sensor_status_select(v: dict) -> str:
     return f'<select name="status" class="sensor-status-select status-{current}" data-vehicle-id="{v["id"]}" hx-post="/api/vehicles/{v["id"]}/sensor-status" hx-trigger="change" hx-swap="innerHTML" hx-target="closest td">{opts}</select>'
 
 
+STATUS_DOT_CLASSES = {"online": "status-dot-on", "warning": "status-dot-warn", "offline": "status-dot-off"}
+
+def _status_dot_html(status: str | None) -> str:
+    if not status:
+        return '<span class="status-dot status-dot-off" title="Нет данных"></span>'
+    cls = STATUS_DOT_CLASSES.get(status, "status-dot-off")
+    labels = {"online": "Онлайн", "warning": ">20 мин", "offline": "Офлайн"}
+    label = labels.get(status, "Нет данных")
+    return f'<span class="status-dot {cls}" title="{label}"></span>'
+
 def _sensor_cell(v: dict, editable: bool) -> str:
     if editable:
         return _sensor_status_select(v)
@@ -127,17 +142,24 @@ def _sensor_cell(v: dict, editable: bool) -> str:
 
 def _vehicle_row(v: dict, idx: int, can_act: bool) -> str:
     sensor = _sensor_cell(v, can_act)
+    si = v.get("status_info") or {}
+    dot = v.get("status_dot") or _status_dot_html(None)
+    lat = si.get("lat") or ""
+    lon = si.get("lon") or ""
+    ts = si.get("ts") or ""
+    status_val = si.get("status") or ""
     cells = ""
     if can_act:
         cells += f'<td data-label=""><input type="checkbox" form="bulk-vehicle-form" name="vehicle_ids" value="{v["id"]}"></td>'
     cells += f'<td data-label="#" style="color:var(--text-dim)">{idx}</td>'
-    cells += f'<td data-label="Госномер"><strong>{v.get("plate_number") or "—"}</strong></td>'
+    cells += f'<td data-label="Статус">{dot}</td>'
+    cells += f'<td data-label="Госномер"><strong style="cursor:pointer" data-lat="{lat}" data-lon="{lon}" data-ts="{ts}" data-status="{status_val}" onclick="openLocationMap(this)">{v.get("plate_number") or "—"}</strong></td>'
     cells += f'<td data-label="Датчик" class="sensor-cell">{sensor}</td>'
     cells += f'<td data-label="Заправки"><a href="/refuels?vehicle_id={v["id"]}" class="btn btn-sm btn-secondary">Заправки</a></td>'
     cells += f'<td data-label="Компания">{v.get("company_name") or "—"}</td>'
     cells += f'<td data-label="График"><button class="btn btn-sm btn-secondary" hx-get="/api/fuel-graph/modal?vehicle_id={v["id"]}&imei={v.get("imei") or ""}" hx-target="#modal-container" hx-swap="innerHTML">График</button></td>'
     if can_act:
-        cells += f'<td data-label="Действия"><button class="btn btn-sm btn-secondary" hx-get="/api/vehicles/{v["id"]}/thresholds" hx-target="#modal-container" hx-swap="innerHTML">Пороги</button> <button class="btn btn-sm btn-danger" hx-post="/api/vehicles/{v["id"]}/delete" hx-target="#vehicles-table" hx-swap="innerHTML" hx-confirm="Удалить ТС {v.get("plate_number") or "—"} и все его заправки?">Удалить</button></td>'
+        cells += f'<td data-label="Действия"><button class="btn btn-sm btn-secondary" hx-get="/api/vehicles/{v["id"]}/thresholds" hx-target="#modal-container" hx-swap="innerHTML">Пороги</button> <button class="btn btn-sm btn-danger" hx-post="/api/vehicles/{v["id"]}/delete" hx-target="#vehicles-table" hx-swap="innerHTML" hx-confirm="Удалить ТС {v.get("plate_number") or "—"} и все его запросы?">Удалить</button></td>'
     else:
         cells += '<td data-label="Действия"></td>'
     return f'<tr id="v-{v["id"]}">{cells}</tr>'
@@ -162,7 +184,7 @@ def render_nested_partial(nested_groups: list, can_act: bool) -> str:
                         html += '<div class="table-container" style="margin-top:12px"><table><thead><tr>'
                         if can_act:
                             html += '<th style="width:32px;"><input type="checkbox" onchange="var e=this;document.querySelectorAll(\'#bulk-vehicle-form input[name=vehicle_ids]\').forEach(function(c){c.checked=e.checked})"></th>'
-                        html += '<th>#</th><th>Госномер</th><th>Датчик</th><th>Заправки</th><th>Компания</th><th>График</th><th>Действия</th></tr></thead><tbody>'
+                        html += '<th>#</th><th>Статус</th><th>Госномер</th><th>Датчик</th><th>Заправки</th><th>Компания</th><th>График</th><th>Действия</th></tr></thead><tbody>'
                         for idx, v in enumerate(vehicles, 1):
                             html += _vehicle_row(v, idx, can_act)
                         html += '</tbody></table></div>'
@@ -172,7 +194,7 @@ def render_nested_partial(nested_groups: list, can_act: bool) -> str:
                         html += f'<div class="level-folder" style="margin:4px 0;border:1px solid var(--border);border-radius:6px"><div class="collapsible-header" onclick="toggleGroup(\'{fid}\')"><span class="arrow">&#9660;</span><span class="level-badge level-badge-folder">{fname}</span><span class="level-count">{len(vehicles)}</span></div><div class="collapsible-body" id="{fid}"><div class="table-container"><table><thead><tr>'
                         if can_act:
                             html += '<th style="width:32px;"><input type="checkbox" onchange="var e=this;document.querySelectorAll(\'#bulk-vehicle-form input[name=vehicle_ids]\').forEach(function(c){c.checked=e.checked})"></th>'
-                        html += '<th>#</th><th>Госномер</th><th>Датчик</th><th>Заправки</th><th>Компания</th><th>График</th><th>Действия</th></tr></thead><tbody>'
+                        html += '<th>#</th><th>Статус</th><th>Госномер</th><th>Датчик</th><th>Заправки</th><th>Компания</th><th>График</th><th>Действия</th></tr></thead><tbody>'
                         for idx, v in enumerate(vehicles, 1):
                             html += _vehicle_row(v, idx, can_act)
                         html += '</tbody></table></div></div></div>'
@@ -185,7 +207,7 @@ def render_nested_partial(nested_groups: list, can_act: bool) -> str:
                         html += '<div class="table-container"><table><thead><tr>'
                         if can_act:
                             html += '<th style="width:32px;"><input type="checkbox" onchange="var e=this;document.querySelectorAll(\'#bulk-vehicle-form input[name=vehicle_ids]\').forEach(function(c){c.checked=e.checked})"></th>'
-                        html += '<th>#</th><th>Госномер</th><th>Датчик</th><th>Заправки</th><th>Компания</th><th>График</th><th>Действия</th></tr></thead><tbody>'
+                        html += '<th>#</th><th>Статус</th><th>Госномер</th><th>Датчик</th><th>Заправки</th><th>Компания</th><th>График</th><th>Действия</th></tr></thead><tbody>'
                         for idx, v in enumerate(vehicles, 1):
                             html += _vehicle_row(v, idx, can_act)
                         html += '</tbody></table></div>'
@@ -195,7 +217,7 @@ def render_nested_partial(nested_groups: list, can_act: bool) -> str:
                         html += f'<div class="level-folder" style="margin:4px 0;border:1px solid var(--border);border-radius:6px"><div class="collapsible-header" onclick="toggleGroup(\'{fid}\')"><span class="arrow">&#9660;</span><span class="level-badge level-badge-folder">{fname}</span><span class="level-count">{len(vehicles)}</span></div><div class="collapsible-body" id="{fid}"><div class="table-container"><table><thead><tr>'
                         if can_act:
                             html += '<th style="width:32px;"><input type="checkbox" onchange="var e=this;document.querySelectorAll(\'#bulk-vehicle-form input[name=vehicle_ids]\').forEach(function(c){c.checked=e.checked})"></th>'
-                        html += '<th>#</th><th>Госномер</th><th>Датчик</th><th>Заправки</th><th>Компания</th><th>График</th><th>Действия</th></tr></thead><tbody>'
+                        html += '<th>#</th><th>Статус</th><th>Госномер</th><th>Датчик</th><th>Заправки</th><th>Компания</th><th>График</th><th>Действия</th></tr></thead><tbody>'
                         for idx, v in enumerate(vehicles, 1):
                             html += _vehicle_row(v, idx, can_act)
                         html += '</tbody></table></div></div></div>'
@@ -215,6 +237,7 @@ def render_table_partial(vehicles: list, is_superadmin: bool = False, is_company
 async def vehicles_page(
     request: Request,
     plate: str = "",
+    sensor_status: list[str] = Query(default=[]),
     user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -222,6 +245,8 @@ async def vehicles_page(
     query = apply_vehicle_filter(query, user, Vehicle)
     if plate:
         query = query.where(Vehicle.plate_number.ilike(f"%{plate}%"))
+    if sensor_status:
+        query = query.where(Vehicle.sensor_status.in_(sensor_status))
     query = query.order_by(Vehicle.folder, Vehicle.plate_number)
     result = await db.execute(query)
     db_vehicles = result.scalars().all()
@@ -238,12 +263,43 @@ async def vehicles_page(
         for s in (await db.execute(select(Site).where(Site.id.in_(site_ids)))).scalars().all():
             sites[s.id] = s.name
 
-    out = [build_vehicle_dict(v, companies.get(v.client_account_id, ""), sites.get(v.site_id, "")) for v in db_vehicles]
+    is_hx = request.headers.get("hx-request") == "true"
+    is_boosted = request.headers.get("hx-boosted") == "true"
+
+    status_info = None
+    if not is_hx or is_boosted:
+        try:
+            token, node_id = await _resolve_pilot_credentials(user, db)
+            if token and node_id:
+                ps = PilotService()
+                imeis = [v.imei for v in db_vehicles if v.imei]
+                raw = await ps.get_all_vehicle_statuses(token, node_id, imeis)
+                now_ts = datetime.now(timezone.utc).timestamp()
+                status_info = {}
+                for imei, s in raw.items():
+                    ts = s.get("ts")
+                    if ts and now_ts - ts < 1200:
+                        st = "online"
+                    elif ts and now_ts - ts < 3600:
+                        st = "warning"
+                    else:
+                        st = "offline"
+                    status_info[imei] = {
+                        "lat": s.get("lat"),
+                        "lon": s.get("lon"),
+                        "ts": ts,
+                        "status": st,
+                    }
+        except Exception:
+            logger.warning("Failed to fetch vehicle statuses", exc_info=True)
+
+    out = [build_vehicle_dict(v, companies.get(v.client_account_id, ""), sites.get(v.site_id, ""), status_info) for v in db_vehicles]
     is_su = user.role == "superadmin"
     is_ca = user.role == "company_admin"
 
-    is_hx = request.headers.get("hx-request") == "true"
-    is_boosted = request.headers.get("hx-boosted") == "true"
+    user_tz = get_user_timezone(user)
+    today_str = datetime.now(timezone.utc).astimezone(user_tz).strftime("%Y-%m-%d")
+
     if is_hx and not is_boosted:
         return HTMLResponse(render_table_partial(out, is_su, is_ca))
 
@@ -252,6 +308,8 @@ async def vehicles_page(
         "is_superadmin": is_su,
         "is_company_admin": is_ca,
         "plate": plate,
+        "sensor_status": sensor_status,
+        "today_str": today_str,
         "search_url": "/vehicles",
         "search_target": "#vehicles-table",
     })

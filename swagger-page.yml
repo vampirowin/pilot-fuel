@@ -1,0 +1,2036 @@
+- generic [ref=e3]:
+  - generic [ref=e6]:
+    - img [ref=e8]
+    - generic [ref=e44]:
+      - generic [ref=e45]: Select a definition
+      - combobox "Select a definition" [ref=e46]:
+        - option "API v3 English" [selected]
+        - option "API v3 Russian"
+        - option "API v3 English Develop version"
+        - option "API v3 Russian Develop version"
+        - option "Localrent - RB API"
+        - option "AI Agent - RB API"
+        - option "BI API v1 Russian"
+        - option "BI API v1 English"
+  - generic [ref=e47]:
+    - generic:
+      - img
+    - generic [ref=e49]:
+      - generic [ref=e53]:
+        - generic [ref=e54]:
+          - heading "Pilot GPS API v3 7.9.1 OAS 3.0" [level=1] [ref=e55]:
+            - text: Pilot GPS API v3
+            - generic [ref=e56]:
+              - generic [ref=e58]: 7.9.1
+              - generic [ref=e60]: OAS 3.0
+          - link "https://pilot-gps.com/doc/api/v3.en.yaml" [ref=e61] [cursor=pointer]:
+            - /url: https://pilot-gps.com/doc/api/v3.en.yaml
+            - generic [ref=e62]: https://pilot-gps.com/doc/api/v3.en.yaml
+        - generic [ref=e64]:
+          - paragraph [ref=e65]: REST API (v3)
+          - paragraph [ref=e66]:
+            - text: "Get a token:"
+            - code [ref=e67]: POST /api/v3/auth/token
+            - text: (using login and password).
+          - paragraph [ref=e68]:
+            - text: Use the token via the
+            - code [ref=e69]: "Authorization: Bearer {token}"
+            - text: header.
+          - paragraph [ref=e70]:
+            - text: If the authentication response returns a non-zero
+            - code [ref=e71]: node_id
+            - text: parameter
+          - paragraph [ref=e72]:
+            - text: the client must send the
+            - code [ref=e73]: "X-Node: {node_id}"
+            - text: header to route requests to the correct cluster node.
+          - paragraph [ref=e74]:
+            - text: When using the API in the context of
+            - code [ref=e75]: PILOT Extension
+            - text: ", it can be used without a token and node_id (a cookie-based session is used)."
+      - generic [ref=e77]:
+        - generic [ref=e79]:
+          - text: Servers
+          - combobox [ref=e82]:
+            - option "https://boooch.pilot-gps.com - Sandbox" [selected]
+            - option "https://pilot-gps.com - Production"
+            - option "https://pilot-gps.africa - Africa"
+            - option "https://blade.pilot-gps.com - Blade"
+            - option "https://ksa.pilot-gps.com - Saudi Arabia"
+        - button "Authorize" [ref=e84] [cursor=pointer]:
+          - generic [ref=e85]: Authorize
+          - img [ref=e86]
+      - generic [ref=e90]:
+        - generic [ref=e92]:
+          - heading "Auth Authentication and token issuance Collapse operation" [level=3] [ref=e93] [cursor=pointer]:
+            - link "Auth" [ref=e94]:
+              - /url: "#/Auth"
+            - paragraph [ref=e97]: Authentication and token issuance
+            - button "Collapse operation" [expanded] [ref=e98]:
+              - img [ref=e99]
+          - generic [ref=e102]:
+            - generic [ref=e105] [cursor=pointer]:
+              - button "POST /api/v3/auth/token Get access token" [ref=e106]:
+                - generic [ref=e107]: POST
+                - generic [ref=e108]:
+                  - link "/api/v3/auth/token" [ref=e110]:
+                    - /url: "#/Auth/getToken"
+                    - generic [ref=e111]:
+                      - text: /api
+                      - text: /v3
+                      - text: /auth
+                      - text: /token
+                  - generic [ref=e112]: Get access token
+              - generic "Copy to clipboard"
+              - button "post /api/v3/auth/token" [ref=e115]:
+                - img [ref=e116]
+            - generic [ref=e120] [cursor=pointer]:
+              - button "DELETE /api/v3/auth/token Logout (revoke token)" [ref=e121]:
+                - generic [ref=e122]: DELETE
+                - generic [ref=e123]:
+                  - link "/api/v3/auth/token" [ref=e125]:
+                    - /url: "#/Auth/revokeToken"
+                    - generic [ref=e126]:
+                      - text: /api
+                      - text: /v3
+                      - text: /auth
+                      - text: /token
+                  - generic [ref=e127]: Logout (revoke token)
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e130]:
+                - img [ref=e131]
+              - button "delete /api/v3/auth/token" [ref=e133]:
+                - img [ref=e134]
+            - generic [ref=e138] [cursor=pointer]:
+              - button "GET /api/v3/auth/me Get current authenticated user" [ref=e139]:
+                - generic [ref=e140]: GET
+                - generic [ref=e141]:
+                  - link "/api/v3/auth/me" [ref=e143]:
+                    - /url: "#/Auth/get_api_v3_auth_me"
+                    - generic [ref=e144]:
+                      - text: /api
+                      - text: /v3
+                      - text: /auth
+                      - text: /me
+                  - generic [ref=e145]: Get current authenticated user
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e148]:
+                - img [ref=e149]
+              - button "get /api/v3/auth/me" [ref=e151]:
+                - img [ref=e152]
+            - generic [ref=e156] [cursor=pointer]:
+              - button "GET /api/v3/ping Health check" [ref=e157]:
+                - generic [ref=e158]: GET
+                - generic [ref=e159]:
+                  - link "/api/v3/ping" [ref=e161]:
+                    - /url: "#/Auth/ping"
+                    - generic [ref=e162]:
+                      - text: /api
+                      - text: /v3
+                      - text: /ping
+                  - generic [ref=e163]: Health check
+              - generic "Copy to clipboard"
+              - button "get /api/v3/ping" [ref=e166]:
+                - img [ref=e167]
+        - generic [ref=e170]:
+          - heading "Vehicles Vehicles, statuses, and tracks Collapse operation" [level=3] [ref=e171] [cursor=pointer]:
+            - link "Vehicles" [ref=e172]:
+              - /url: "#/Vehicles"
+            - paragraph [ref=e175]: Vehicles, statuses, and tracks
+            - button "Collapse operation" [expanded] [ref=e176]:
+              - img [ref=e177]
+          - generic [ref=e180]:
+            - generic [ref=e183] [cursor=pointer]:
+              - button "GET /api/v3/vehicles Vehicles list" [ref=e184]:
+                - generic [ref=e185]: GET
+                - generic [ref=e186]:
+                  - link "/api/v3/vehicles" [ref=e188]:
+                    - /url: "#/Vehicles/listVehicles"
+                    - generic [ref=e189]:
+                      - text: /api
+                      - text: /v3
+                      - text: /vehicles
+                  - generic [ref=e190]: Vehicles list
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e193]:
+                - img [ref=e194]
+              - button "get /api/v3/vehicles" [ref=e196]:
+                - img [ref=e197]
+            - generic [ref=e201] [cursor=pointer]:
+              - button "GET /api/v3/vehicles/by-plate Get IMEI by license plate" [ref=e202]:
+                - generic [ref=e203]: GET
+                - generic [ref=e204]:
+                  - link "/api/v3/vehicles/by-plate" [ref=e206]:
+                    - /url: "#/Vehicles/getImeiByPlate"
+                    - generic [ref=e207]:
+                      - text: /api
+                      - text: /v3
+                      - text: /vehicles
+                      - text: /by-plate
+                  - generic [ref=e208]: Get IMEI by license plate
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e211]:
+                - img [ref=e212]
+              - button "get /api/v3/vehicles/by-plate" [ref=e214]:
+                - img [ref=e215]
+            - generic [ref=e219] [cursor=pointer]:
+              - button "GET /api/v3/vehicles/status Current vehicle status" [ref=e220]:
+                - generic [ref=e221]: GET
+                - generic [ref=e222]:
+                  - link "/api/v3/vehicles/status" [ref=e224]:
+                    - /url: "#/Vehicles/getVehicleStatus"
+                    - generic [ref=e225]:
+                      - text: /api
+                      - text: /v3
+                      - text: /vehicles
+                      - text: /status
+                  - generic [ref=e226]: Current vehicle status
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e229]:
+                - img [ref=e230]
+              - button "get /api/v3/vehicles/status" [ref=e232]:
+                - img [ref=e233]
+            - generic [ref=e237] [cursor=pointer]:
+              - button "GET /api/v3/vehicles/last24h Vehicle status for the last 24 hours" [ref=e238]:
+                - generic [ref=e239]: GET
+                - generic [ref=e240]:
+                  - link "/api/v3/vehicles/last24h" [ref=e242]:
+                    - /url: "#/Vehicles/VehicleStatus24"
+                    - generic [ref=e243]:
+                      - text: /api
+                      - text: /v3
+                      - text: /vehicles
+                      - text: /last24h
+                  - generic [ref=e244]: Vehicle status for the last 24 hours
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e247]:
+                - img [ref=e248]
+              - button "get /api/v3/vehicles/last24h" [ref=e250]:
+                - img [ref=e251]
+            - generic [ref=e255] [cursor=pointer]:
+              - button "GET /api/v3/vehicles/instant-status Mileage and fuel at a point in time" [ref=e256]:
+                - generic [ref=e257]: GET
+                - generic [ref=e258]:
+                  - link "/api/v3/vehicles/instant-status" [ref=e260]:
+                    - /url: "#/Vehicles/getInstantStatus"
+                    - generic [ref=e261]:
+                      - text: /api
+                      - text: /v3
+                      - text: /vehicles
+                      - text: /instant-status
+                  - generic [ref=e262]: Mileage and fuel at a point in time
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e265]:
+                - img [ref=e266]
+              - button "get /api/v3/vehicles/instant-status" [ref=e268]:
+                - img [ref=e269]
+            - generic [ref=e273] [cursor=pointer]:
+              - button "GET /api/v3/vehicles/share-link Create temporary tracking link" [ref=e274]:
+                - generic [ref=e275]: GET
+                - generic [ref=e276]:
+                  - link "/api/v3/vehicles/share-link" [ref=e278]:
+                    - /url: "#/Vehicles/createTempLink"
+                    - generic [ref=e279]:
+                      - text: /api
+                      - text: /v3
+                      - text: /vehicles
+                      - text: /share-link
+                  - generic [ref=e280]: Create temporary tracking link
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e283]:
+                - img [ref=e284]
+              - button "get /api/v3/vehicles/share-link" [ref=e286]:
+                - img [ref=e287]
+            - generic [ref=e291] [cursor=pointer]:
+              - button "POST /api/v3/vehicles/commands Send command to vehicle" [ref=e292]:
+                - generic [ref=e293]: POST
+                - generic [ref=e294]:
+                  - link "/api/v3/vehicles/commands" [ref=e296]:
+                    - /url: "#/Vehicles/sendVehicleCommand"
+                    - generic [ref=e297]:
+                      - text: /api
+                      - text: /v3
+                      - text: /vehicles
+                      - text: /commands
+                  - generic [ref=e298]: Send command to vehicle
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e301]:
+                - img [ref=e302]
+              - button "post /api/v3/vehicles/commands" [ref=e304]:
+                - img [ref=e305]
+            - generic [ref=e309] [cursor=pointer]:
+              - button "GET /api/v3/vehicles/commands/status Get command status" [ref=e310]:
+                - generic [ref=e311]: GET
+                - generic [ref=e312]:
+                  - link "/api/v3/vehicles/commands/status" [ref=e314]:
+                    - /url: "#/Vehicles/getVehicleCommandStatus"
+                    - generic [ref=e315]:
+                      - text: /api
+                      - text: /v3
+                      - text: /vehicles
+                      - text: /commands
+                      - text: /status
+                  - generic [ref=e316]: Get command status
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e319]:
+                - img [ref=e320]
+              - button "get /api/v3/vehicles/commands/status" [ref=e322]:
+                - img [ref=e323]
+            - generic [ref=e327] [cursor=pointer]:
+              - button "POST /api/v3/vehicles/block-by-admin Block vehicle (admin level)" [ref=e328]:
+                - generic [ref=e329]: POST
+                - generic [ref=e330]:
+                  - link "/api/v3/vehicles/block-by-admin" [ref=e332]:
+                    - /url: "#/Vehicles/blockVehicleByAdmin"
+                    - generic [ref=e333]:
+                      - text: /api
+                      - text: /v3
+                      - text: /vehicles
+                      - text: /block-by-admin
+                  - generic [ref=e334]: Block vehicle (admin level)
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e337]:
+                - img [ref=e338]
+              - button "post /api/v3/vehicles/block-by-admin" [ref=e340]:
+                - img [ref=e341]
+            - generic [ref=e345] [cursor=pointer]:
+              - button "POST /api/v3/vehicles/unblock-by-admin Unblock vehicle (admin level)" [ref=e346]:
+                - generic [ref=e347]: POST
+                - generic [ref=e348]:
+                  - link "/api/v3/vehicles/unblock-by-admin" [ref=e350]:
+                    - /url: "#/Vehicles/unblockVehicleByAdmin"
+                    - generic [ref=e351]:
+                      - text: /api
+                      - text: /v3
+                      - text: /vehicles
+                      - text: /unblock-by-admin
+                  - generic [ref=e352]: Unblock vehicle (admin level)
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e355]:
+                - img [ref=e356]
+              - button "post /api/v3/vehicles/unblock-by-admin" [ref=e358]:
+                - img [ref=e359]
+            - generic [ref=e363] [cursor=pointer]:
+              - button "POST /api/v3/vehicles/block-by-self Block vehicle (owner level)" [ref=e364]:
+                - generic [ref=e365]: POST
+                - generic [ref=e366]:
+                  - link "/api/v3/vehicles/block-by-self" [ref=e368]:
+                    - /url: "#/Vehicles/blockVehicleBySelf"
+                    - generic [ref=e369]:
+                      - text: /api
+                      - text: /v3
+                      - text: /vehicles
+                      - text: /block-by-self
+                  - generic [ref=e370]: Block vehicle (owner level)
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e373]:
+                - img [ref=e374]
+              - button "post /api/v3/vehicles/block-by-self" [ref=e376]:
+                - img [ref=e377]
+            - generic [ref=e381] [cursor=pointer]:
+              - button "POST /api/v3/vehicles/unblock-by-self Unblock vehicle (owner level)" [ref=e382]:
+                - generic [ref=e383]: POST
+                - generic [ref=e384]:
+                  - link "/api/v3/vehicles/unblock-by-self" [ref=e386]:
+                    - /url: "#/Vehicles/unblockVehicleBySelf"
+                    - generic [ref=e387]:
+                      - text: /api
+                      - text: /v3
+                      - text: /vehicles
+                      - text: /unblock-by-self
+                  - generic [ref=e388]: Unblock vehicle (owner level)
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e391]:
+                - img [ref=e392]
+              - button "post /api/v3/vehicles/unblock-by-self" [ref=e394]:
+                - img [ref=e395]
+            - generic [ref=e399] [cursor=pointer]:
+              - button "GET /api/v3/vehicles/services Vehicle service records" [ref=e400]:
+                - generic [ref=e401]: GET
+                - generic [ref=e402]:
+                  - link "/api/v3/vehicles/services" [ref=e404]:
+                    - /url: "#/Vehicles/getVehicleServices"
+                    - generic [ref=e405]:
+                      - text: /api
+                      - text: /v3
+                      - text: /vehicles
+                      - text: /services
+                  - generic [ref=e406]: Vehicle service records
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e409]:
+                - img [ref=e410]
+              - button "get /api/v3/vehicles/services" [ref=e412]:
+                - img [ref=e413]
+            - generic [ref=e417] [cursor=pointer]:
+              - button "POST /api/v3/vehicles/services Add vehicle service record" [ref=e418]:
+                - generic [ref=e419]: POST
+                - generic [ref=e420]:
+                  - link "/api/v3/vehicles/services" [ref=e422]:
+                    - /url: "#/Vehicles/addVehicleService"
+                    - generic [ref=e423]:
+                      - text: /api
+                      - text: /v3
+                      - text: /vehicles
+                      - text: /services
+                  - generic [ref=e424]: Add vehicle service record
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e427]:
+                - img [ref=e428]
+              - button "post /api/v3/vehicles/services" [ref=e430]:
+                - img [ref=e431]
+            - generic [ref=e435] [cursor=pointer]:
+              - button "GET /api/v3/vehicles/status-by-time Vehicle status at a historical timestamp" [ref=e436]:
+                - generic [ref=e437]: GET
+                - generic [ref=e438]:
+                  - link "/api/v3/vehicles/status-by-time" [ref=e440]:
+                    - /url: "#/Vehicles/vehicleStatusByTime"
+                    - generic [ref=e441]:
+                      - text: /api
+                      - text: /v3
+                      - text: /vehicles
+                      - text: /status-by-time
+                  - generic [ref=e442]: Vehicle status at a historical timestamp
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e445]:
+                - img [ref=e446]
+              - button "get /api/v3/vehicles/status-by-time" [ref=e448]:
+                - img [ref=e449]
+            - generic [ref=e453] [cursor=pointer]:
+              - button "GET /api/v3/vehicles/idle Idle time report" [ref=e454]:
+                - generic [ref=e455]: GET
+                - generic [ref=e456]:
+                  - link "/api/v3/vehicles/idle" [ref=e458]:
+                    - /url: "#/Vehicles/vehicleIdle"
+                    - generic [ref=e459]:
+                      - text: /api
+                      - text: /v3
+                      - text: /vehicles
+                      - text: /idle
+                  - generic [ref=e460]: Idle time report
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e463]:
+                - img [ref=e464]
+              - button "get /api/v3/vehicles/idle" [ref=e466]:
+                - img [ref=e467]
+            - generic [ref=e471] [cursor=pointer]:
+              - button "GET /api/v3/vehicles/motor-hours CAN motor hours" [ref=e472]:
+                - generic [ref=e473]: GET
+                - generic [ref=e474]:
+                  - link "/api/v3/vehicles/motor-hours" [ref=e476]:
+                    - /url: "#/Vehicles/vehicleMotorHours"
+                    - generic [ref=e477]:
+                      - text: /api
+                      - text: /v3
+                      - text: /vehicles
+                      - text: /motor-hours
+                  - generic [ref=e478]: CAN motor hours
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e481]:
+                - img [ref=e482]
+              - button "get /api/v3/vehicles/motor-hours" [ref=e484]:
+                - img [ref=e485]
+            - generic [ref=e489] [cursor=pointer]:
+              - button "GET /api/v3/vehicles/distance Vehicle odometer distance" [ref=e490]:
+                - generic [ref=e491]: GET
+                - generic [ref=e492]:
+                  - link "/api/v3/vehicles/distance" [ref=e494]:
+                    - /url: "#/Vehicles/vehicleDistance"
+                    - generic [ref=e495]:
+                      - text: /api
+                      - text: /v3
+                      - text: /vehicles
+                      - text: /distance
+                  - generic [ref=e496]: Vehicle odometer distance
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e499]:
+                - img [ref=e500]
+              - button "get /api/v3/vehicles/distance" [ref=e502]:
+                - img [ref=e503]
+            - generic [ref=e507] [cursor=pointer]:
+              - button "GET /api/v3/vehicles/nearest Nearest vehicles" [ref=e508]:
+                - generic [ref=e509]: GET
+                - generic [ref=e510]:
+                  - link "/api/v3/vehicles/nearest" [ref=e512]:
+                    - /url: "#/Vehicles/nearestVehicles"
+                    - generic [ref=e513]:
+                      - text: /api
+                      - text: /v3
+                      - text: /vehicles
+                      - text: /nearest
+                  - generic [ref=e514]: Nearest vehicles
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e517]:
+                - img [ref=e518]
+              - button "get /api/v3/vehicles/nearest" [ref=e520]:
+                - img [ref=e521]
+            - generic [ref=e525] [cursor=pointer]:
+              - button "GET /api/v3/vehicles/points Raw GPS points" [ref=e526]:
+                - generic [ref=e527]: GET
+                - generic [ref=e528]:
+                  - link "/api/v3/vehicles/points" [ref=e530]:
+                    - /url: "#/Vehicles/vehiclePoints"
+                    - generic [ref=e531]:
+                      - text: /api
+                      - text: /v3
+                      - text: /vehicles
+                      - text: /points
+                  - generic [ref=e532]: Raw GPS points
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e535]:
+                - img [ref=e536]
+              - button "get /api/v3/vehicles/points" [ref=e538]:
+                - img [ref=e539]
+            - generic [ref=e543] [cursor=pointer]:
+              - button "GET /api/v3/vehicles/events/ag Raw vehicle events (ag_event)" [ref=e544]:
+                - generic [ref=e545]: GET
+                - generic [ref=e546]:
+                  - link "/api/v3/vehicles/events/ag" [ref=e548]:
+                    - /url: "#/Vehicles/vehicleAgEvents"
+                    - generic [ref=e549]:
+                      - text: /api
+                      - text: /v3
+                      - text: /vehicles
+                      - text: /events
+                      - text: /ag
+                  - generic [ref=e550]: Raw vehicle events (ag_event)
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e553]:
+                - img [ref=e554]
+              - button "get /api/v3/vehicles/events/ag" [ref=e556]:
+                - img [ref=e557]
+            - generic [ref=e561] [cursor=pointer]:
+              - button "GET /api/v3/vehicles/events/latest Latest cached events for a vehicle" [ref=e562]:
+                - generic [ref=e563]: GET
+                - generic [ref=e564]:
+                  - link "/api/v3/vehicles/events/latest" [ref=e566]:
+                    - /url: "#/Vehicles/vehicleEventLatest"
+                    - generic [ref=e567]:
+                      - text: /api
+                      - text: /v3
+                      - text: /vehicles
+                      - text: /events
+                      - text: /latest
+                  - generic [ref=e568]: Latest cached events for a vehicle
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e571]:
+                - img [ref=e572]
+              - button "get /api/v3/vehicles/events/latest" [ref=e574]:
+                - img [ref=e575]
+            - generic [ref=e579] [cursor=pointer]:
+              - button "DELETE /api/v3/vehicles/events Clear vehicle events cache" [ref=e580]:
+                - generic [ref=e581]: DELETE
+                - generic [ref=e582]:
+                  - link "/api/v3/vehicles/events" [ref=e584]:
+                    - /url: "#/Vehicles/cleanVehicleEvents"
+                    - generic [ref=e585]:
+                      - text: /api
+                      - text: /v3
+                      - text: /vehicles
+                      - text: /events
+                  - generic [ref=e586]: Clear vehicle events cache
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e589]:
+                - img [ref=e590]
+              - button "delete /api/v3/vehicles/events" [ref=e592]:
+                - img [ref=e593]
+            - generic [ref=e597] [cursor=pointer]:
+              - button "GET /api/v3/vehicles/approved-tracks Get approved/non-approved track periods" [ref=e598]:
+                - generic [ref=e599]: GET
+                - generic [ref=e600]:
+                  - link "/api/v3/vehicles/approved-tracks" [ref=e602]:
+                    - /url: "#/Vehicles/approvedTracksGet"
+                    - generic [ref=e603]:
+                      - text: /api
+                      - text: /v3
+                      - text: /vehicles
+                      - text: /approved-tracks
+                  - generic [ref=e604]: Get approved/non-approved track periods
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e607]:
+                - img [ref=e608]
+              - button "get /api/v3/vehicles/approved-tracks" [ref=e610]:
+                - img [ref=e611]
+            - generic [ref=e615] [cursor=pointer]:
+              - button "POST /api/v3/vehicles/approved-tracks Approve a track period" [ref=e616]:
+                - generic [ref=e617]: POST
+                - generic [ref=e618]:
+                  - link "/api/v3/vehicles/approved-tracks" [ref=e620]:
+                    - /url: "#/Vehicles/approvedTracksSet"
+                    - generic [ref=e621]:
+                      - text: /api
+                      - text: /v3
+                      - text: /vehicles
+                      - text: /approved-tracks
+                  - generic [ref=e622]: Approve a track period
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e625]:
+                - img [ref=e626]
+              - button "post /api/v3/vehicles/approved-tracks" [ref=e628]:
+                - img [ref=e629]
+            - generic [ref=e633] [cursor=pointer]:
+              - button "PUT /api/v3/vehicles/custom-fields Update vehicle custom fields" [ref=e634]:
+                - generic [ref=e635]: PUT
+                - generic [ref=e636]:
+                  - link "/api/v3/vehicles/custom-fields" [ref=e638]:
+                    - /url: "#/Vehicles/vehicleCustomFields"
+                    - generic [ref=e639]:
+                      - text: /api
+                      - text: /v3
+                      - text: /vehicles
+                      - text: /custom-fields
+                  - generic [ref=e640]: Update vehicle custom fields
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e643]:
+                - img [ref=e644]
+              - button "put /api/v3/vehicles/custom-fields" [ref=e646]:
+                - img [ref=e647]
+            - generic [ref=e651] [cursor=pointer]:
+              - button "GET /api/v3/vehicles/media Vehicle camera media" [ref=e652]:
+                - generic [ref=e653]: GET
+                - generic [ref=e654]:
+                  - link "/api/v3/vehicles/media" [ref=e656]:
+                    - /url: "#/Vehicles/vehicleMedia"
+                    - generic [ref=e657]:
+                      - text: /api
+                      - text: /v3
+                      - text: /vehicles
+                      - text: /media
+                  - generic [ref=e658]: Vehicle camera media
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e661]:
+                - img [ref=e662]
+              - button "get /api/v3/vehicles/media" [ref=e664]:
+                - img [ref=e665]
+            - generic [ref=e669] [cursor=pointer]:
+              - button "GET /api/v3/vehicles/fines Vehicle traffic fines" [ref=e670]:
+                - generic [ref=e671]: GET
+                - generic [ref=e672]:
+                  - link "/api/v3/vehicles/fines" [ref=e674]:
+                    - /url: "#/Vehicles/vehicleFines"
+                    - generic [ref=e675]:
+                      - text: /api
+                      - text: /v3
+                      - text: /vehicles
+                      - text: /fines
+                  - generic [ref=e676]: Vehicle traffic fines
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e679]:
+                - img [ref=e680]
+              - button "get /api/v3/vehicles/fines" [ref=e682]:
+                - img [ref=e683]
+            - generic [ref=e687] [cursor=pointer]:
+              - button "GET /api/v3/rentcar/contracts Rental contracts" [ref=e688]:
+                - generic [ref=e689]: GET
+                - generic [ref=e690]:
+                  - link "/api/v3/rentcar/contracts" [ref=e692]:
+                    - /url: "#/Vehicles/rentcarContracts"
+                    - generic [ref=e693]:
+                      - text: /api
+                      - text: /v3
+                      - text: /rentcar
+                      - text: /contracts
+                  - generic [ref=e694]: Rental contracts
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e697]:
+                - img [ref=e698]
+              - button "get /api/v3/rentcar/contracts" [ref=e700]:
+                - img [ref=e701]
+            - generic [ref=e705] [cursor=pointer]:
+              - button "POST /api/v3/rentcar/contracts/link Link vehicle to rental contract" [ref=e706]:
+                - generic [ref=e707]: POST
+                - generic [ref=e708]:
+                  - link "/api/v3/rentcar/contracts/link" [ref=e710]:
+                    - /url: "#/Vehicles/contractLink"
+                    - generic [ref=e711]:
+                      - text: /api
+                      - text: /v3
+                      - text: /rentcar
+                      - text: /contracts
+                      - text: /link
+                  - generic [ref=e712]: Link vehicle to rental contract
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e715]:
+                - img [ref=e716]
+              - button "post /api/v3/rentcar/contracts/link" [ref=e718]:
+                - img [ref=e719]
+            - generic [ref=e723] [cursor=pointer]:
+              - button "POST /api/v3/rentcar/contracts/unlink Unlink vehicle from rental contract" [ref=e724]:
+                - generic [ref=e725]: POST
+                - generic [ref=e726]:
+                  - link "/api/v3/rentcar/contracts/unlink" [ref=e728]:
+                    - /url: "#/Vehicles/contractUnlink"
+                    - generic [ref=e729]:
+                      - text: /api
+                      - text: /v3
+                      - text: /rentcar
+                      - text: /contracts
+                      - text: /unlink
+                  - generic [ref=e730]: Unlink vehicle from rental contract
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e733]:
+                - img [ref=e734]
+              - button "post /api/v3/rentcar/contracts/unlink" [ref=e736]:
+                - img [ref=e737]
+        - generic [ref=e740]:
+          - heading "Tracks Movement, tracks, and mileage Collapse operation" [level=3] [ref=e741] [cursor=pointer]:
+            - link "Tracks" [ref=e742]:
+              - /url: "#/Tracks"
+            - paragraph [ref=e745]: Movement, tracks, and mileage
+            - button "Collapse operation" [expanded] [ref=e746]:
+              - img [ref=e747]
+          - generic [ref=e750]:
+            - generic [ref=e753] [cursor=pointer]:
+              - button "GET /api/v3/vehicles/track Movement track for a period" [ref=e754]:
+                - generic [ref=e755]: GET
+                - generic [ref=e756]:
+                  - link "/api/v3/vehicles/track" [ref=e758]:
+                    - /url: "#/Tracks/getTrack"
+                    - generic [ref=e759]:
+                      - text: /api
+                      - text: /v3
+                      - text: /vehicles
+                      - text: /track
+                  - generic [ref=e760]: Movement track for a period
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e763]:
+                - img [ref=e764]
+              - button "get /api/v3/vehicles/track" [ref=e766]:
+                - img [ref=e767]
+            - generic [ref=e771] [cursor=pointer]:
+              - button "GET /api/v3/vehicles/track/geo Trips and parking report" [ref=e772]:
+                - generic [ref=e773]: GET
+                - generic [ref=e774]:
+                  - link "/api/v3/vehicles/track/geo" [ref=e776]:
+                    - /url: "#/Tracks/getTrackGeo"
+                    - generic [ref=e777]:
+                      - text: /api
+                      - text: /v3
+                      - text: /vehicles
+                      - text: /track
+                      - text: /geo
+                  - generic [ref=e778]: Trips and parking report
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e781]:
+                - img [ref=e782]
+              - button "get /api/v3/vehicles/track/geo" [ref=e784]:
+                - img [ref=e785]
+            - generic [ref=e789] [cursor=pointer]:
+              - button "GET /api/v3/vehicles/track/stops Stops report" [ref=e790]:
+                - generic [ref=e791]: GET
+                - generic [ref=e792]:
+                  - link "/api/v3/vehicles/track/stops" [ref=e794]:
+                    - /url: "#/Tracks/getTrackStops"
+                    - generic [ref=e795]:
+                      - text: /api
+                      - text: /v3
+                      - text: /vehicles
+                      - text: /track
+                      - text: /stops
+                  - generic [ref=e796]: Stops report
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e799]:
+                - img [ref=e800]
+              - button "get /api/v3/vehicles/track/stops" [ref=e802]:
+                - img [ref=e803]
+            - generic [ref=e807] [cursor=pointer]:
+              - button "GET /api/v3/vehicles/forecast_here Route arrival forecast using the HERE service" [ref=e808]:
+                - generic [ref=e809]: GET
+                - generic [ref=e810]:
+                  - link "/api/v3/vehicles/forecast_here" [ref=e812]:
+                    - /url: "#/Tracks/getRoute"
+                    - generic [ref=e813]:
+                      - text: /api
+                      - text: /v3
+                      - text: /vehicles
+                      - text: /forecast_here
+                  - generic [ref=e814]: Route arrival forecast using the HERE service
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e817]:
+                - img [ref=e818]
+              - button "get /api/v3/vehicles/forecast_here" [ref=e820]:
+                - img [ref=e821]
+            - generic [ref=e825] [cursor=pointer]:
+              - button "GET /api/v3/vehicles/trips Summary of trips, parking, speed, and parking intervals" [ref=e826]:
+                - generic [ref=e827]: GET
+                - generic [ref=e828]:
+                  - link "/api/v3/vehicles/trips" [ref=e830]:
+                    - /url: "#/Tracks/getDistanceSummary"
+                    - generic [ref=e831]:
+                      - text: /api
+                      - text: /v3
+                      - text: /vehicles
+                      - text: /trips
+                  - generic [ref=e832]: Summary of trips, parking, speed, and parking intervals
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e835]:
+                - img [ref=e836]
+              - button "get /api/v3/vehicles/trips" [ref=e838]:
+                - img [ref=e839]
+            - generic [ref=e843] [cursor=pointer]:
+              - button "GET /api/v3/vehicles/events/raw Raw points by vehicle" [ref=e844]:
+                - generic [ref=e845]: GET
+                - generic [ref=e846]:
+                  - link "/api/v3/vehicles/events/raw" [ref=e848]:
+                    - /url: "#/Tracks/getRawEvents"
+                    - generic [ref=e849]:
+                      - text: /api
+                      - text: /v3
+                      - text: /vehicles
+                      - text: /events
+                      - text: /raw
+                  - generic [ref=e850]: Raw points by vehicle
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e853]:
+                - img [ref=e854]
+              - button "get /api/v3/vehicles/events/raw" [ref=e856]:
+                - img [ref=e857]
+            - generic [ref=e861] [cursor=pointer]:
+              - button "GET /api/v3/vehicles/data-quality Vehicle data quality" [ref=e862]:
+                - generic [ref=e863]: GET
+                - generic [ref=e864]:
+                  - link "/api/v3/vehicles/data-quality" [ref=e866]:
+                    - /url: "#/Tracks/getDataQuality"
+                    - generic [ref=e867]:
+                      - text: /api
+                      - text: /v3
+                      - text: /vehicles
+                      - text: /data-quality
+                  - generic [ref=e868]: Vehicle data quality
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e871]:
+                - img [ref=e872]
+              - button "get /api/v3/vehicles/data-quality" [ref=e874]:
+                - img [ref=e875]
+            - generic [ref=e879] [cursor=pointer]:
+              - button "GET /api/v3/vehicles/passengers Passenger flow data" [ref=e880]:
+                - generic [ref=e881]: GET
+                - generic [ref=e882]:
+                  - link "/api/v3/vehicles/passengers" [ref=e884]:
+                    - /url: "#/Tracks/getPassengerCounter"
+                    - generic [ref=e885]:
+                      - text: /api
+                      - text: /v3
+                      - text: /vehicles
+                      - text: /passengers
+                  - generic [ref=e886]: Passenger flow data
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e889]:
+                - img [ref=e890]
+              - button "get /api/v3/vehicles/passengers" [ref=e892]:
+                - img [ref=e893]
+        - generic [ref=e896]:
+          - heading "Sensors Sensor data Collapse operation" [level=3] [ref=e897] [cursor=pointer]:
+            - link "Sensors" [ref=e898]:
+              - /url: "#/Sensors"
+            - paragraph [ref=e901]: Sensor data
+            - button "Collapse operation" [expanded] [ref=e902]:
+              - img [ref=e903]
+          - generic [ref=e906]:
+            - generic [ref=e909] [cursor=pointer]:
+              - button "GET /api/v3/vehicles/sensors/dip History of dip sensor readings" [ref=e910]:
+                - generic [ref=e911]: GET
+                - generic [ref=e912]:
+                  - link "/api/v3/vehicles/sensors/dip" [ref=e914]:
+                    - /url: "#/Sensors/getSensorsHistory"
+                    - generic [ref=e915]:
+                      - text: /api
+                      - text: /v3
+                      - text: /vehicles
+                      - text: /sensors
+                      - text: /dip
+                  - generic [ref=e916]: History of dip sensor readings
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e919]:
+                - img [ref=e920]
+              - button "get /api/v3/vehicles/sensors/dip" [ref=e922]:
+                - img [ref=e923]
+            - generic [ref=e927] [cursor=pointer]:
+              - button "GET /api/v3/vehicles/sensors/discrete Discrete sensor history" [ref=e928]:
+                - generic [ref=e929]: GET
+                - generic [ref=e930]:
+                  - link "/api/v3/vehicles/sensors/discrete" [ref=e932]:
+                    - /url: "#/Sensors/getDiscreteSensorData"
+                    - generic [ref=e933]:
+                      - text: /api
+                      - text: /v3
+                      - text: /vehicles
+                      - text: /sensors
+                      - text: /discrete
+                  - generic [ref=e934]: Discrete sensor history
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e937]:
+                - img [ref=e938]
+              - button "get /api/v3/vehicles/sensors/discrete" [ref=e940]:
+                - img [ref=e941]
+            - generic [ref=e945] [cursor=pointer]:
+              - button "GET /api/v3/vehicles/sensors/eco Eco-driving and equipment operation" [ref=e946]:
+                - generic [ref=e947]: GET
+                - generic [ref=e948]:
+                  - link "/api/v3/vehicles/sensors/eco" [ref=e950]:
+                    - /url: "#/Sensors/getEcoDrive"
+                    - generic [ref=e951]:
+                      - text: /api
+                      - text: /v3
+                      - text: /vehicles
+                      - text: /sensors
+                      - text: /eco
+                  - generic [ref=e952]: Eco-driving and equipment operation
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e955]:
+                - img [ref=e956]
+              - button "get /api/v3/vehicles/sensors/eco" [ref=e958]:
+                - img [ref=e959]
+        - generic [ref=e962]:
+          - heading "Geo Geofences, visits, and mileage by zone Collapse operation" [level=3] [ref=e963] [cursor=pointer]:
+            - link "Geo" [ref=e964]:
+              - /url: "#/Geo"
+            - paragraph [ref=e967]: Geofences, visits, and mileage by zone
+            - button "Collapse operation" [expanded] [ref=e968]:
+              - img [ref=e969]
+          - generic [ref=e972]:
+            - generic [ref=e975] [cursor=pointer]:
+              - button "GET /api/v3/geofences Geofence list" [ref=e976]:
+                - generic [ref=e977]: GET
+                - generic [ref=e978]:
+                  - link "/api/v3/geofences" [ref=e980]:
+                    - /url: "#/Geo/listGeofences"
+                    - generic [ref=e981]:
+                      - text: /api
+                      - text: /v3
+                      - text: /geofences
+                  - generic [ref=e982]: Geofence list
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e985]:
+                - img [ref=e986]
+              - button "get /api/v3/geofences" [ref=e988]:
+                - img [ref=e989]
+            - generic [ref=e993] [cursor=pointer]:
+              - button "POST /api/v3/geofences Create geofence" [ref=e994]:
+                - generic [ref=e995]: POST
+                - generic [ref=e996]:
+                  - link "/api/v3/geofences" [ref=e998]:
+                    - /url: "#/Geo/createGeofence"
+                    - generic [ref=e999]:
+                      - text: /api
+                      - text: /v3
+                      - text: /geofences
+                  - generic [ref=e1000]: Create geofence
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e1003]:
+                - img [ref=e1004]
+              - button "post /api/v3/geofences" [ref=e1006]:
+                - img [ref=e1007]
+            - generic [ref=e1011] [cursor=pointer]:
+              - button "DELETE /api/v3/geofences Delete geofence" [ref=e1012]:
+                - generic [ref=e1013]: DELETE
+                - generic [ref=e1014]:
+                  - link "/api/v3/geofences" [ref=e1016]:
+                    - /url: "#/Geo/deleteGeofence"
+                    - generic [ref=e1017]:
+                      - text: /api
+                      - text: /v3
+                      - text: /geofences
+                  - generic [ref=e1018]: Delete geofence
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e1021]:
+                - img [ref=e1022]
+              - button "delete /api/v3/geofences" [ref=e1024]:
+                - img [ref=e1025]
+            - generic [ref=e1029] [cursor=pointer]:
+              - button "PUT /api/v3/geofences Update geofence" [ref=e1030]:
+                - generic [ref=e1031]: PUT
+                - generic [ref=e1032]:
+                  - link "/api/v3/geofences" [ref=e1034]:
+                    - /url: "#/Geo/geofenceUpdate"
+                    - generic [ref=e1035]:
+                      - text: /api
+                      - text: /v3
+                      - text: /geofences
+                  - generic [ref=e1036]: Update geofence
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e1039]:
+                - img [ref=e1040]
+              - button "put /api/v3/geofences" [ref=e1042]:
+                - img [ref=e1043]
+            - generic [ref=e1047] [cursor=pointer]:
+              - button "GET /api/v3/geofences/visits Geofence visit history" [ref=e1048]:
+                - generic [ref=e1049]: GET
+                - generic [ref=e1050]:
+                  - link "/api/v3/geofences/visits" [ref=e1052]:
+                    - /url: "#/Geo/getGeofenceVisits"
+                    - generic [ref=e1053]:
+                      - text: /api
+                      - text: /v3
+                      - text: /geofences
+                      - text: /visits
+                  - generic [ref=e1054]: Geofence visit history
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e1057]:
+                - img [ref=e1058]
+              - button "get /api/v3/geofences/visits" [ref=e1060]:
+                - img [ref=e1061]
+            - generic [ref=e1065] [cursor=pointer]:
+              - button "GET /api/v3/geofences/mileage Mileage in geofences" [ref=e1066]:
+                - generic [ref=e1067]: GET
+                - generic [ref=e1068]:
+                  - link "/api/v3/geofences/mileage" [ref=e1070]:
+                    - /url: "#/Geo/getZonesMileage"
+                    - generic [ref=e1071]:
+                      - text: /api
+                      - text: /v3
+                      - text: /geofences
+                      - text: /mileage
+                  - generic [ref=e1072]: Mileage in geofences
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e1075]:
+                - img [ref=e1076]
+              - button "get /api/v3/geofences/mileage" [ref=e1078]:
+                - img [ref=e1079]
+        - generic [ref=e1082]:
+          - heading "Fuel Fuel, filling stations, and transactions Collapse operation" [level=3] [ref=e1083] [cursor=pointer]:
+            - link "Fuel" [ref=e1084]:
+              - /url: "#/Fuel"
+            - paragraph [ref=e1087]: Fuel, filling stations, and transactions
+            - button "Collapse operation" [expanded] [ref=e1088]:
+              - img [ref=e1089]
+          - generic [ref=e1092]:
+            - generic [ref=e1095] [cursor=pointer]:
+              - button "GET /api/v3/fuel/stations Fuel stations list" [ref=e1096]:
+                - generic [ref=e1097]: GET
+                - generic [ref=e1098]:
+                  - link "/api/v3/fuel/stations" [ref=e1100]:
+                    - /url: "#/Fuel/listFuelStations"
+                    - generic [ref=e1101]:
+                      - text: /api
+                      - text: /v3
+                      - text: /fuel
+                      - text: /stations
+                  - generic [ref=e1102]: Fuel stations list
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e1105]:
+                - img [ref=e1106]
+              - button "get /api/v3/fuel/stations" [ref=e1108]:
+                - img [ref=e1109]
+            - generic [ref=e1113] [cursor=pointer]:
+              - button "POST /api/v3/fuel/transactions Add fuel card transaction" [ref=e1114]:
+                - generic [ref=e1115]: POST
+                - generic [ref=e1116]:
+                  - link "/api/v3/fuel/transactions" [ref=e1118]:
+                    - /url: "#/Fuel/addFuelTransaction"
+                    - generic [ref=e1119]:
+                      - text: /api
+                      - text: /v3
+                      - text: /fuel
+                      - text: /transactions
+                  - generic [ref=e1120]: Add fuel card transaction
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e1123]:
+                - img [ref=e1124]
+              - button "post /api/v3/fuel/transactions" [ref=e1126]:
+                - img [ref=e1127]
+            - generic [ref=e1131] [cursor=pointer]:
+              - button "GET /api/v3/vehicles/fuel Detailed fuel data" [ref=e1132]:
+                - generic [ref=e1133]: GET
+                - generic [ref=e1134]:
+                  - link "/api/v3/vehicles/fuel" [ref=e1136]:
+                    - /url: "#/Fuel/getFuelDetails"
+                    - generic [ref=e1137]:
+                      - text: /api
+                      - text: /v3
+                      - text: /vehicles
+                      - text: /fuel
+                  - generic [ref=e1138]: Detailed fuel data
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e1141]:
+                - img [ref=e1142]
+              - button "get /api/v3/vehicles/fuel" [ref=e1144]:
+                - img [ref=e1145]
+            - generic [ref=e1149] [cursor=pointer]:
+              - button "GET /api/v3/vehicles/fuel/consumption Fuel consumption and idle time" [ref=e1150]:
+                - generic [ref=e1151]: GET
+                - generic [ref=e1152]:
+                  - link "/api/v3/vehicles/fuel/consumption" [ref=e1154]:
+                    - /url: "#/Fuel/getFuelConsumption"
+                    - generic [ref=e1155]:
+                      - text: /api
+                      - text: /v3
+                      - text: /vehicles
+                      - text: /fuel
+                      - text: /consumption
+                  - generic [ref=e1156]: Fuel consumption and idle time
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e1159]:
+                - img [ref=e1160]
+              - button "get /api/v3/vehicles/fuel/consumption" [ref=e1162]:
+                - img [ref=e1163]
+            - generic [ref=e1167] [cursor=pointer]:
+              - button "GET /api/v3/vehicles/odo-fuel Odometer and fuel for a period" [ref=e1168]:
+                - generic [ref=e1169]: GET
+                - generic [ref=e1170]:
+                  - link "/api/v3/vehicles/odo-fuel" [ref=e1172]:
+                    - /url: "#/Fuel/getOdoAndFuel"
+                    - generic [ref=e1173]:
+                      - text: /api
+                      - text: /v3
+                      - text: /vehicles
+                      - text: /odo-fuel
+                  - generic [ref=e1174]: Odometer and fuel for a period
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e1177]:
+                - img [ref=e1178]
+              - button "get /api/v3/vehicles/odo-fuel" [ref=e1180]:
+                - img [ref=e1181]
+        - generic [ref=e1184]:
+          - heading "Drivers Drivers, iButton, and waybills Collapse operation" [level=3] [ref=e1185] [cursor=pointer]:
+            - link "Drivers" [ref=e1186]:
+              - /url: "#/Drivers"
+            - paragraph [ref=e1189]: Drivers, iButton, and waybills
+            - button "Collapse operation" [expanded] [ref=e1190]:
+              - img [ref=e1191]
+          - generic [ref=e1194]:
+            - generic [ref=e1197] [cursor=pointer]:
+              - button "GET /api/v3/ibuttons Global iButton list" [ref=e1198]:
+                - generic [ref=e1199]: GET
+                - generic [ref=e1200]:
+                  - link "/api/v3/ibuttons" [ref=e1202]:
+                    - /url: "#/Drivers/listIButtons"
+                    - generic [ref=e1203]:
+                      - text: /api
+                      - text: /v3
+                      - text: /ibuttons
+                  - generic [ref=e1204]: Global iButton list
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e1207]:
+                - img [ref=e1208]
+              - button "get /api/v3/ibuttons" [ref=e1210]:
+                - img [ref=e1211]
+            - generic [ref=e1215] [cursor=pointer]:
+              - button "GET /api/v3/vehicles/ibuttons iButton history for a vehicle" [ref=e1216]:
+                - generic [ref=e1217]: GET
+                - generic [ref=e1218]:
+                  - link "/api/v3/vehicles/ibuttons" [ref=e1220]:
+                    - /url: "#/Drivers/getIButtonsForVehicle"
+                    - generic [ref=e1221]:
+                      - text: /api
+                      - text: /v3
+                      - text: /vehicles
+                      - text: /ibuttons
+                  - generic [ref=e1222]: iButton history for a vehicle
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e1225]:
+                - img [ref=e1226]
+              - button "get /api/v3/vehicles/ibuttons" [ref=e1228]:
+                - img [ref=e1229]
+            - generic [ref=e1233] [cursor=pointer]:
+              - button "GET /api/v3/drivers Drivers list" [ref=e1234]:
+                - generic [ref=e1235]: GET
+                - generic [ref=e1236]:
+                  - link "/api/v3/drivers" [ref=e1238]:
+                    - /url: "#/Drivers/listDrivers"
+                    - generic [ref=e1239]:
+                      - text: /api
+                      - text: /v3
+                      - text: /drivers
+                  - generic [ref=e1240]: Drivers list
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e1243]:
+                - img [ref=e1244]
+              - button "get /api/v3/drivers" [ref=e1246]:
+                - img [ref=e1247]
+            - generic [ref=e1251] [cursor=pointer]:
+              - button "POST /api/v3/drivers Create or update driver" [ref=e1252]:
+                - generic [ref=e1253]: POST
+                - generic [ref=e1254]:
+                  - link "/api/v3/drivers" [ref=e1256]:
+                    - /url: "#/Drivers/createOrUpdateDriver"
+                    - generic [ref=e1257]:
+                      - text: /api
+                      - text: /v3
+                      - text: /drivers
+                  - generic [ref=e1258]: Create or update driver
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e1261]:
+                - img [ref=e1262]
+              - button "post /api/v3/drivers" [ref=e1264]:
+                - img [ref=e1265]
+            - generic [ref=e1269] [cursor=pointer]:
+              - button "GET /api/v3/drivers/activity Driver activity" [ref=e1270]:
+                - generic [ref=e1271]: GET
+                - generic [ref=e1272]:
+                  - link "/api/v3/drivers/activity" [ref=e1274]:
+                    - /url: "#/Drivers/getDriverActivity"
+                    - generic [ref=e1275]:
+                      - text: /api
+                      - text: /v3
+                      - text: /drivers
+                      - text: /activity
+                  - generic [ref=e1276]: Driver activity
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e1279]:
+                - img [ref=e1280]
+              - button "get /api/v3/drivers/activity" [ref=e1282]:
+                - img [ref=e1283]
+            - generic [ref=e1287] [cursor=pointer]:
+              - button "POST /api/v3/vehicles/driver-bind Bind driver to vehicle" [ref=e1288]:
+                - generic [ref=e1289]: POST
+                - generic [ref=e1290]:
+                  - link "/api/v3/vehicles/driver-bind" [ref=e1292]:
+                    - /url: "#/Drivers/bindDriverToVehicle"
+                    - generic [ref=e1293]:
+                      - text: /api
+                      - text: /v3
+                      - text: /vehicles
+                      - text: /driver-bind
+                  - generic [ref=e1294]: Bind driver to vehicle
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e1297]:
+                - img [ref=e1298]
+              - button "post /api/v3/vehicles/driver-bind" [ref=e1300]:
+                - img [ref=e1301]
+            - generic [ref=e1305] [cursor=pointer]:
+              - button "GET /api/v3/drivers/search Search drivers by name" [ref=e1306]:
+                - generic [ref=e1307]: GET
+                - generic [ref=e1308]:
+                  - link "/api/v3/drivers/search" [ref=e1310]:
+                    - /url: "#/Drivers/driverSearch"
+                    - generic [ref=e1311]:
+                      - text: /api
+                      - text: /v3
+                      - text: /drivers
+                      - text: /search
+                  - generic [ref=e1312]: Search drivers by name
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e1315]:
+                - img [ref=e1316]
+              - button "get /api/v3/drivers/search" [ref=e1318]:
+                - img [ref=e1319]
+        - generic [ref=e1322]:
+          - heading "Notifications Notifications and live events Collapse operation" [level=3] [ref=e1323] [cursor=pointer]:
+            - link "Notifications" [ref=e1324]:
+              - /url: "#/Notifications"
+            - paragraph [ref=e1327]: Notifications and live events
+            - button "Collapse operation" [expanded] [ref=e1328]:
+              - img [ref=e1329]
+          - generic [ref=e1332]:
+            - generic [ref=e1335] [cursor=pointer]:
+              - button "GET /api/v3/notifications Notification module events" [ref=e1336]:
+                - generic [ref=e1337]: GET
+                - generic [ref=e1338]:
+                  - link "/api/v3/notifications" [ref=e1340]:
+                    - /url: "#/Notifications/listNotifications"
+                    - generic [ref=e1341]:
+                      - text: /api
+                      - text: /v3
+                      - text: /notifications
+                  - generic [ref=e1342]: Notification module events
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e1345]:
+                - img [ref=e1346]
+              - button "get /api/v3/notifications" [ref=e1348]:
+                - img [ref=e1349]
+            - generic [ref=e1353] [cursor=pointer]:
+              - button "GET /api/v3/events/live Live events" [ref=e1354]:
+                - generic [ref=e1355]: GET
+                - generic [ref=e1356]:
+                  - link "/api/v3/events/live" [ref=e1358]:
+                    - /url: "#/Notifications/getLiveEvents"
+                    - generic [ref=e1359]:
+                      - text: /api
+                      - text: /v3
+                      - text: /events
+                      - text: /live
+                  - generic [ref=e1360]: Live events
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e1363]:
+                - img [ref=e1364]
+              - button "get /api/v3/events/live" [ref=e1366]:
+                - img [ref=e1367]
+            - generic [ref=e1371] [cursor=pointer]:
+              - button "GET /api/v3/stations/forecast Get station arrival forecast" [ref=e1372]:
+                - generic [ref=e1373]: GET
+                - generic [ref=e1374]:
+                  - link "/api/v3/stations/forecast" [ref=e1376]:
+                    - /url: "#/Notifications/getStationForecast"
+                    - generic [ref=e1377]:
+                      - text: /api
+                      - text: /v3
+                      - text: /stations
+                      - text: /forecast
+                  - generic [ref=e1378]: Get station arrival forecast
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e1381]:
+                - img [ref=e1382]
+              - button "get /api/v3/stations/forecast" [ref=e1384]:
+                - img [ref=e1385]
+        - generic [ref=e1388]:
+          - heading "Accounts Partner accounts and users Collapse operation" [level=3] [ref=e1389] [cursor=pointer]:
+            - link "Accounts" [ref=e1390]:
+              - /url: "#/Accounts"
+            - paragraph [ref=e1393]: Partner accounts and users
+            - button "Collapse operation" [expanded] [ref=e1394]:
+              - img [ref=e1395]
+          - generic [ref=e1398]:
+            - generic [ref=e1401] [cursor=pointer]:
+              - button "GET /api/v3/accounts Partner accounts list" [ref=e1402]:
+                - generic [ref=e1403]: GET
+                - generic [ref=e1404]:
+                  - link "/api/v3/accounts" [ref=e1406]:
+                    - /url: "#/Accounts/listAccounts"
+                    - generic [ref=e1407]:
+                      - text: /api
+                      - text: /v3
+                      - text: /accounts
+                  - generic [ref=e1408]: Partner accounts list
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e1411]:
+                - img [ref=e1412]
+              - button "get /api/v3/accounts" [ref=e1414]:
+                - img [ref=e1415]
+            - generic [ref=e1419] [cursor=pointer]:
+              - button "GET /api/v3/accounts/users Account users list" [ref=e1420]:
+                - generic [ref=e1421]: GET
+                - generic [ref=e1422]:
+                  - link "/api/v3/accounts/users" [ref=e1424]:
+                    - /url: "#/Accounts/listAccountUsers"
+                    - generic [ref=e1425]:
+                      - text: /api
+                      - text: /v3
+                      - text: /accounts
+                      - text: /users
+                  - generic [ref=e1426]: Account users list
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e1429]:
+                - img [ref=e1430]
+              - button "get /api/v3/accounts/users" [ref=e1432]:
+                - img [ref=e1433]
+        - generic [ref=e1436]:
+          - heading "References Reference data (vehicle types, models, prices, modules, timezones) Collapse operation" [level=3] [ref=e1437] [cursor=pointer]:
+            - link "References" [ref=e1438]:
+              - /url: "#/References"
+            - paragraph [ref=e1441]: Reference data (vehicle types, models, prices, modules, timezones)
+            - button "Collapse operation" [expanded] [ref=e1442]:
+              - img [ref=e1443]
+          - generic [ref=e1446]:
+            - generic [ref=e1449] [cursor=pointer]:
+              - button "GET /api/v3/references/prices Price list" [ref=e1450]:
+                - generic [ref=e1451]: GET
+                - generic [ref=e1452]:
+                  - link "/api/v3/references/prices" [ref=e1454]:
+                    - /url: "#/References/listPrices"
+                    - generic [ref=e1455]:
+                      - text: /api
+                      - text: /v3
+                      - text: /references
+                      - text: /prices
+                  - generic [ref=e1456]: Price list
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e1459]:
+                - img [ref=e1460]
+              - button "get /api/v3/references/prices" [ref=e1462]:
+                - img [ref=e1463]
+            - generic [ref=e1467] [cursor=pointer]:
+              - button "GET /api/v3/references/modules Modules list" [ref=e1468]:
+                - generic [ref=e1469]: GET
+                - generic [ref=e1470]:
+                  - link "/api/v3/references/modules" [ref=e1472]:
+                    - /url: "#/References/listModules"
+                    - generic [ref=e1473]:
+                      - text: /api
+                      - text: /v3
+                      - text: /references
+                      - text: /modules
+                  - generic [ref=e1474]: Modules list
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e1477]:
+                - img [ref=e1478]
+              - button "get /api/v3/references/modules" [ref=e1480]:
+                - img [ref=e1481]
+            - generic [ref=e1485] [cursor=pointer]:
+              - button "GET /api/v3/references/vehicle-types Vehicle types list" [ref=e1486]:
+                - generic [ref=e1487]: GET
+                - generic [ref=e1488]:
+                  - link "/api/v3/references/vehicle-types" [ref=e1490]:
+                    - /url: "#/References/listVehicleTypes"
+                    - generic [ref=e1491]:
+                      - text: /api
+                      - text: /v3
+                      - text: /references
+                      - text: /vehicle-types
+                  - generic [ref=e1492]: Vehicle types list
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e1495]:
+                - img [ref=e1496]
+              - button "get /api/v3/references/vehicle-types" [ref=e1498]:
+                - img [ref=e1499]
+            - generic [ref=e1503] [cursor=pointer]:
+              - button "GET /api/v3/references/vehicle-models Vehicle models list" [ref=e1504]:
+                - generic [ref=e1505]: GET
+                - generic [ref=e1506]:
+                  - link "/api/v3/references/vehicle-models" [ref=e1508]:
+                    - /url: "#/References/listVehicleModels"
+                    - generic [ref=e1509]:
+                      - text: /api
+                      - text: /v3
+                      - text: /references
+                      - text: /vehicle-models
+                  - generic [ref=e1510]: Vehicle models list
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e1513]:
+                - img [ref=e1514]
+              - button "get /api/v3/references/vehicle-models" [ref=e1516]:
+                - img [ref=e1517]
+            - generic [ref=e1521] [cursor=pointer]:
+              - button "GET /api/v3/references/timezones Get timezones list" [ref=e1522]:
+                - generic [ref=e1523]: GET
+                - generic [ref=e1524]:
+                  - link "/api/v3/references/timezones" [ref=e1526]:
+                    - /url: "#/References/referencesTimezones"
+                    - generic [ref=e1527]:
+                      - text: /api
+                      - text: /v3
+                      - text: /references
+                      - text: /timezones
+                  - generic [ref=e1528]: Get timezones list
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e1531]:
+                - img [ref=e1532]
+              - button "get /api/v3/references/timezones" [ref=e1534]:
+                - img [ref=e1535]
+            - generic [ref=e1539] [cursor=pointer]:
+              - button "GET /api/v3/route Calculate route (HERE Maps)" [ref=e1540]:
+                - generic [ref=e1541]: GET
+                - generic [ref=e1542]:
+                  - link "/api/v3/route" [ref=e1544]:
+                    - /url: "#/References/calculateRoute"
+                    - generic [ref=e1545]:
+                      - text: /api
+                      - text: /v3
+                      - text: /route
+                  - generic [ref=e1546]: Calculate route (HERE Maps)
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e1549]:
+                - img [ref=e1550]
+              - button "get /api/v3/route" [ref=e1552]:
+                - img [ref=e1553]
+        - generic [ref=e1556]:
+          - heading "Tags Vehicle tag management Collapse operation" [level=3] [ref=e1557] [cursor=pointer]:
+            - link "Tags" [ref=e1558]:
+              - /url: "#/Tags"
+            - paragraph [ref=e1561]: Vehicle tag management
+            - button "Collapse operation" [expanded] [ref=e1562]:
+              - img [ref=e1563]
+          - generic [ref=e1566]:
+            - generic [ref=e1569] [cursor=pointer]:
+              - button "GET /api/v3/tags Get tags list" [ref=e1570]:
+                - generic [ref=e1571]: GET
+                - generic [ref=e1572]:
+                  - link "/api/v3/tags" [ref=e1574]:
+                    - /url: "#/Tags/tagsList"
+                    - generic [ref=e1575]:
+                      - text: /api
+                      - text: /v3
+                      - text: /tags
+                  - generic [ref=e1576]: Get tags list
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e1579]:
+                - img [ref=e1580]
+              - button "get /api/v3/tags" [ref=e1582]:
+                - img [ref=e1583]
+            - generic [ref=e1587] [cursor=pointer]:
+              - button "POST /api/v3/tags Create tag" [ref=e1588]:
+                - generic [ref=e1589]: POST
+                - generic [ref=e1590]:
+                  - link "/api/v3/tags" [ref=e1592]:
+                    - /url: "#/Tags/tagCreate"
+                    - generic [ref=e1593]:
+                      - text: /api
+                      - text: /v3
+                      - text: /tags
+                  - generic [ref=e1594]: Create tag
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e1597]:
+                - img [ref=e1598]
+              - button "post /api/v3/tags" [ref=e1600]:
+                - img [ref=e1601]
+            - generic [ref=e1605] [cursor=pointer]:
+              - button "PUT /api/v3/tags Update tag" [ref=e1606]:
+                - generic [ref=e1607]: PUT
+                - generic [ref=e1608]:
+                  - link "/api/v3/tags" [ref=e1610]:
+                    - /url: "#/Tags/tagUpdate"
+                    - generic [ref=e1611]:
+                      - text: /api
+                      - text: /v3
+                      - text: /tags
+                  - generic [ref=e1612]: Update tag
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e1615]:
+                - img [ref=e1616]
+              - button "put /api/v3/tags" [ref=e1618]:
+                - img [ref=e1619]
+            - generic [ref=e1623] [cursor=pointer]:
+              - button "DELETE /api/v3/tags Delete tag" [ref=e1624]:
+                - generic [ref=e1625]: DELETE
+                - generic [ref=e1626]:
+                  - link "/api/v3/tags" [ref=e1628]:
+                    - /url: "#/Tags/tagDelete"
+                    - generic [ref=e1629]:
+                      - text: /api
+                      - text: /v3
+                      - text: /tags
+                  - generic [ref=e1630]: Delete tag
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e1633]:
+                - img [ref=e1634]
+              - button "delete /api/v3/tags" [ref=e1636]:
+                - img [ref=e1637]
+            - generic [ref=e1641] [cursor=pointer]:
+              - button "POST /api/v3/tags/map-vehicle Link / unlink tag to vehicles" [ref=e1642]:
+                - generic [ref=e1643]: POST
+                - generic [ref=e1644]:
+                  - link "/api/v3/tags/map-vehicle" [ref=e1646]:
+                    - /url: "#/Tags/tagMapVehicle"
+                    - generic [ref=e1647]:
+                      - text: /api
+                      - text: /v3
+                      - text: /tags
+                      - text: /map-vehicle
+                  - generic [ref=e1648]: Link / unlink tag to vehicles
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e1651]:
+                - img [ref=e1652]
+              - button "post /api/v3/tags/map-vehicle" [ref=e1654]:
+                - img [ref=e1655]
+        - generic [ref=e1658]:
+          - heading "Waybills Waybill management Collapse operation" [level=3] [ref=e1659] [cursor=pointer]:
+            - link "Waybills" [ref=e1660]:
+              - /url: "#/Waybills"
+            - paragraph [ref=e1663]: Waybill management
+            - button "Collapse operation" [expanded] [ref=e1664]:
+              - img [ref=e1665]
+          - generic [ref=e1668]:
+            - generic [ref=e1671] [cursor=pointer]:
+              - button "GET /api/v3/waybills Get waybills" [ref=e1672]:
+                - generic [ref=e1673]: GET
+                - generic [ref=e1674]:
+                  - link "/api/v3/waybills" [ref=e1676]:
+                    - /url: "#/Waybills/waybillGet"
+                    - generic [ref=e1677]:
+                      - text: /api
+                      - text: /v3
+                      - text: /waybills
+                  - generic [ref=e1678]: Get waybills
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e1681]:
+                - img [ref=e1682]
+              - button "get /api/v3/waybills" [ref=e1684]:
+                - img [ref=e1685]
+            - generic [ref=e1689] [cursor=pointer]:
+              - button "POST /api/v3/waybills Create waybill" [ref=e1690]:
+                - generic [ref=e1691]: POST
+                - generic [ref=e1692]:
+                  - link "/api/v3/waybills" [ref=e1694]:
+                    - /url: "#/Waybills/waybillCreate"
+                    - generic [ref=e1695]:
+                      - text: /api
+                      - text: /v3
+                      - text: /waybills
+                  - generic [ref=e1696]: Create waybill
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e1699]:
+                - img [ref=e1700]
+              - button "post /api/v3/waybills" [ref=e1702]:
+                - img [ref=e1703]
+            - generic [ref=e1707] [cursor=pointer]:
+              - button "DELETE /api/v3/waybills Delete waybill" [ref=e1708]:
+                - generic [ref=e1709]: DELETE
+                - generic [ref=e1710]:
+                  - link "/api/v3/waybills" [ref=e1712]:
+                    - /url: "#/Waybills/waybillDelete"
+                    - generic [ref=e1713]:
+                      - text: /api
+                      - text: /v3
+                      - text: /waybills
+                  - generic [ref=e1714]: Delete waybill
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e1717]:
+                - img [ref=e1718]
+              - button "delete /api/v3/waybills" [ref=e1720]:
+                - img [ref=e1721]
+        - generic [ref=e1724]:
+          - heading "Users User management within an account Collapse operation" [level=3] [ref=e1725] [cursor=pointer]:
+            - link "Users" [ref=e1726]:
+              - /url: "#/Users"
+            - paragraph [ref=e1729]: User management within an account
+            - button "Collapse operation" [expanded] [ref=e1730]:
+              - img [ref=e1731]
+          - generic [ref=e1734]:
+            - generic [ref=e1737] [cursor=pointer]:
+              - button "POST /api/v3/users Create user" [ref=e1738]:
+                - generic [ref=e1739]: POST
+                - generic [ref=e1740]:
+                  - link "/api/v3/users" [ref=e1742]:
+                    - /url: "#/Users/userCreate"
+                    - generic [ref=e1743]:
+                      - text: /api
+                      - text: /v3
+                      - text: /users
+                  - generic [ref=e1744]: Create user
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e1747]:
+                - img [ref=e1748]
+              - button "post /api/v3/users" [ref=e1750]:
+                - img [ref=e1751]
+            - generic [ref=e1755] [cursor=pointer]:
+              - button "GET /api/v3/users Get user" [ref=e1756]:
+                - generic [ref=e1757]: GET
+                - generic [ref=e1758]:
+                  - link "/api/v3/users" [ref=e1760]:
+                    - /url: "#/Users/userGet"
+                    - generic [ref=e1761]:
+                      - text: /api
+                      - text: /v3
+                      - text: /users
+                  - generic [ref=e1762]: Get user
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e1765]:
+                - img [ref=e1766]
+              - button "get /api/v3/users" [ref=e1768]:
+                - img [ref=e1769]
+            - generic [ref=e1773] [cursor=pointer]:
+              - button "DELETE /api/v3/users Delete user" [ref=e1774]:
+                - generic [ref=e1775]: DELETE
+                - generic [ref=e1776]:
+                  - link "/api/v3/users" [ref=e1778]:
+                    - /url: "#/Users/userDelete"
+                    - generic [ref=e1779]:
+                      - text: /api
+                      - text: /v3
+                      - text: /users
+                  - generic [ref=e1780]: Delete user
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e1783]:
+                - img [ref=e1784]
+              - button "delete /api/v3/users" [ref=e1786]:
+                - img [ref=e1787]
+            - generic [ref=e1791] [cursor=pointer]:
+              - button "PUT /api/v3/users/auth Update user login and password" [ref=e1792]:
+                - generic [ref=e1793]: PUT
+                - generic [ref=e1794]:
+                  - link "/api/v3/users/auth" [ref=e1796]:
+                    - /url: "#/Users/userUpdateAuth"
+                    - generic [ref=e1797]:
+                      - text: /api
+                      - text: /v3
+                      - text: /users
+                      - text: /auth
+                  - generic [ref=e1798]: Update user login and password
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e1801]:
+                - img [ref=e1802]
+              - button "put /api/v3/users/auth" [ref=e1804]:
+                - img [ref=e1805]
+            - generic [ref=e1809] [cursor=pointer]:
+              - button "PUT /api/v3/users/vehicles Update user vehicle access" [ref=e1810]:
+                - generic [ref=e1811]: PUT
+                - generic [ref=e1812]:
+                  - link "/api/v3/users/vehicles" [ref=e1814]:
+                    - /url: "#/Users/userUpdateVehicles"
+                    - generic [ref=e1815]:
+                      - text: /api
+                      - text: /v3
+                      - text: /users
+                      - text: /vehicles
+                  - generic [ref=e1816]: Update user vehicle access
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e1819]:
+                - img [ref=e1820]
+              - button "put /api/v3/users/vehicles" [ref=e1822]:
+                - img [ref=e1823]
+            - generic [ref=e1827] [cursor=pointer]:
+              - button "GET /api/v3/users/folders Get user folders" [ref=e1828]:
+                - generic [ref=e1829]: GET
+                - generic [ref=e1830]:
+                  - link "/api/v3/users/folders" [ref=e1832]:
+                    - /url: "#/Users/userGetFolders"
+                    - generic [ref=e1833]:
+                      - text: /api
+                      - text: /v3
+                      - text: /users
+                      - text: /folders
+                  - generic [ref=e1834]: Get user folders
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e1837]:
+                - img [ref=e1838]
+              - button "get /api/v3/users/folders" [ref=e1840]:
+                - img [ref=e1841]
+            - generic [ref=e1845] [cursor=pointer]:
+              - button "PUT /api/v3/users/folders Update user folder access" [ref=e1846]:
+                - generic [ref=e1847]: PUT
+                - generic [ref=e1848]:
+                  - link "/api/v3/users/folders" [ref=e1850]:
+                    - /url: "#/Users/userUpdateFolders"
+                    - generic [ref=e1851]:
+                      - text: /api
+                      - text: /v3
+                      - text: /users
+                      - text: /folders
+                  - generic [ref=e1852]: Update user folder access
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e1855]:
+                - img [ref=e1856]
+              - button "put /api/v3/users/folders" [ref=e1858]:
+                - img [ref=e1859]
+        - generic [ref=e1862]:
+          - heading "Geofences Geofence management and vehicle links Collapse operation" [level=3] [ref=e1863] [cursor=pointer]:
+            - link "Geofences" [ref=e1864]:
+              - /url: "#/Geofences"
+            - paragraph [ref=e1867]: Geofence management and vehicle links
+            - button "Collapse operation" [expanded] [ref=e1868]:
+              - img [ref=e1869]
+          - generic [ref=e1872]:
+            - generic [ref=e1875] [cursor=pointer]:
+              - button "POST /api/v3/geofences/link-vehicle Link geofence to vehicle" [ref=e1876]:
+                - generic [ref=e1877]: POST
+                - generic [ref=e1878]:
+                  - link "/api/v3/geofences/link-vehicle" [ref=e1880]:
+                    - /url: "#/Geofences/geofenceLinkVehicle"
+                    - generic [ref=e1881]:
+                      - text: /api
+                      - text: /v3
+                      - text: /geofences
+                      - text: /link-vehicle
+                  - generic [ref=e1882]: Link geofence to vehicle
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e1885]:
+                - img [ref=e1886]
+              - button "post /api/v3/geofences/link-vehicle" [ref=e1888]:
+                - img [ref=e1889]
+            - generic [ref=e1893] [cursor=pointer]:
+              - button "POST /api/v3/geofences/unlink-vehicle Unlink geofence from vehicle" [ref=e1894]:
+                - generic [ref=e1895]: POST
+                - generic [ref=e1896]:
+                  - link "/api/v3/geofences/unlink-vehicle" [ref=e1898]:
+                    - /url: "#/Geofences/geofenceUnlinkVehicle"
+                    - generic [ref=e1899]:
+                      - text: /api
+                      - text: /v3
+                      - text: /geofences
+                      - text: /unlink-vehicle
+                  - generic [ref=e1900]: Unlink geofence from vehicle
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e1903]:
+                - img [ref=e1904]
+              - button "post /api/v3/geofences/unlink-vehicle" [ref=e1906]:
+                - img [ref=e1907]
+            - generic [ref=e1911] [cursor=pointer]:
+              - button "GET /api/v3/geofences/process Process geofence zone events" [ref=e1912]:
+                - generic [ref=e1913]: GET
+                - generic [ref=e1914]:
+                  - link "/api/v3/geofences/process" [ref=e1916]:
+                    - /url: "#/Geofences/geofencesProcess"
+                    - generic [ref=e1917]:
+                      - text: /api
+                      - text: /v3
+                      - text: /geofences
+                      - text: /process
+                  - generic [ref=e1918]: Process geofence zone events
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e1921]:
+                - img [ref=e1922]
+              - button "get /api/v3/geofences/process" [ref=e1924]:
+                - img [ref=e1925]
+        - generic [ref=e1928]:
+          - heading "Reports Report listing and execution Collapse operation" [level=3] [ref=e1929] [cursor=pointer]:
+            - link "Reports" [ref=e1930]:
+              - /url: "#/Reports"
+            - paragraph [ref=e1933]: Report listing and execution
+            - button "Collapse operation" [expanded] [ref=e1934]:
+              - img [ref=e1935]
+          - generic [ref=e1938]:
+            - generic [ref=e1941] [cursor=pointer]:
+              - button "GET /api/v3/reports List available reports" [ref=e1942]:
+                - generic [ref=e1943]: GET
+                - generic [ref=e1944]:
+                  - link "/api/v3/reports" [ref=e1946]:
+                    - /url: "#/Reports/reportsList"
+                    - generic [ref=e1947]:
+                      - text: /api
+                      - text: /v3
+                      - text: /reports
+                  - generic [ref=e1948]: List available reports
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e1951]:
+                - img [ref=e1952]
+              - button "get /api/v3/reports" [ref=e1954]:
+                - img [ref=e1955]
+            - generic [ref=e1959] [cursor=pointer]:
+              - button "POST /api/v3/reports/run Run a report" [ref=e1960]:
+                - generic [ref=e1961]: POST
+                - generic [ref=e1962]:
+                  - link "/api/v3/reports/run" [ref=e1964]:
+                    - /url: "#/Reports/reportRun"
+                    - generic [ref=e1965]:
+                      - text: /api
+                      - text: /v3
+                      - text: /reports
+                      - text: /run
+                  - generic [ref=e1966]: Run a report
+              - generic "Copy to clipboard"
+              - button "authorization button unlocked" [ref=e1969]:
+                - img [ref=e1970]
+              - button "post /api/v3/reports/run" [ref=e1972]:
+                - img [ref=e1973]
+      - generic [ref=e1977]:
+        - heading "Schemas" [level=4] [ref=e1978] [cursor=pointer]:
+          - button "Schemas" [expanded] [ref=e1979]:
+            - generic [ref=e1980]: Schemas
+            - img [ref=e1981]
+        - generic [ref=e1983]:
+          - button "OkResponse" [ref=e1986] [cursor=pointer]:
+            - generic [ref=e1988]: OkResponse
+          - button "ErrorResponse" [ref=e1992] [cursor=pointer]:
+            - generic [ref=e1994]: ErrorResponse
+          - button "VehiclesListResponse" [ref=e1998] [cursor=pointer]:
+            - generic [ref=e2000]: VehiclesListResponse
+          - button "VehicleData" [ref=e2004] [cursor=pointer]:
+            - generic [ref=e2006]: VehicleData
+          - button "Vehicle" [ref=e2010] [cursor=pointer]:
+            - generic [ref=e2012]: Vehicle
+          - button "Sensor" [ref=e2016] [cursor=pointer]:
+            - generic [ref=e2018]: Sensor
+          - button "ImeiResponse" [ref=e2022] [cursor=pointer]:
+            - generic [ref=e2024]: ImeiResponse
+          - button "VehicleStatusResponse" [ref=e2028] [cursor=pointer]:
+            - generic [ref=e2030]: VehicleStatusResponse
+          - button "VehicleMetricsResponse" [ref=e2034] [cursor=pointer]:
+            - generic [ref=e2036]: VehicleMetricsResponse
+          - button "VehicleMetrics" [ref=e2040] [cursor=pointer]:
+            - generic [ref=e2042]: VehicleMetrics
+          - button "VehicleStatus" [ref=e2046] [cursor=pointer]:
+            - generic [ref=e2048]: VehicleStatus
+          - button "SensorStatus" [ref=e2052] [cursor=pointer]:
+            - generic [ref=e2054]: SensorStatus
+          - button "InstantStatusResponse" [ref=e2058] [cursor=pointer]:
+            - generic [ref=e2060]: InstantStatusResponse
+          - button "TrackResponse" [ref=e2064] [cursor=pointer]:
+            - generic [ref=e2066]: TrackResponse
+          - button "ZoneMessage" [ref=e2070] [cursor=pointer]:
+            - generic [ref=e2072]: ZoneMessage
+          - button "TrackPoint" [ref=e2076] [cursor=pointer]:
+            - generic [ref=e2078]: TrackPoint
+          - button "TrackGeoPoint" [ref=e2082] [cursor=pointer]:
+            - generic [ref=e2084]: TrackGeoPoint
+          - button "Address" [ref=e2088] [cursor=pointer]:
+            - generic [ref=e2090]: Address
+          - button "Equipment" [ref=e2094] [cursor=pointer]:
+            - generic [ref=e2096]: Equipment
+          - button "TrackGeoResponse" [ref=e2100] [cursor=pointer]:
+            - generic [ref=e2102]: TrackGeoResponse
+          - button "Parking" [ref=e2106] [cursor=pointer]:
+            - generic [ref=e2108]: Parking
+          - button "ParkingSimple" [ref=e2112] [cursor=pointer]:
+            - generic [ref=e2114]: ParkingSimple
+          - button "TrackStopsResponse" [ref=e2118] [cursor=pointer]:
+            - generic [ref=e2120]: TrackStopsResponse
+          - button "RouteSummaryResponse" [ref=e2124] [cursor=pointer]:
+            - generic [ref=e2126]: RouteSummaryResponse
+          - button "TripsResponse" [ref=e2130] [cursor=pointer]:
+            - generic [ref=e2132]: TripsResponse
+          - button "SensorsHistoryResponse" [ref=e2136] [cursor=pointer]:
+            - generic [ref=e2138]: SensorsHistoryResponse
+          - button "DiscreteSensorHistoryResponse" [ref=e2142] [cursor=pointer]:
+            - generic [ref=e2144]: DiscreteSensorHistoryResponse
+          - button "RawEventsResponse" [ref=e2148] [cursor=pointer]:
+            - generic [ref=e2150]: RawEventsResponse
+          - button "DataQualityResponse" [ref=e2154] [cursor=pointer]:
+            - generic [ref=e2156]: DataQualityResponse
+          - button "DataQualityVehicle" [ref=e2160] [cursor=pointer]:
+            - generic [ref=e2162]: DataQualityVehicle
+          - button "PassengerCounterResponse" [ref=e2166] [cursor=pointer]:
+            - generic [ref=e2168]: PassengerCounterResponse
+          - button "EcoDriveResponse" [ref=e2172] [cursor=pointer]:
+            - generic [ref=e2174]: EcoDriveResponse
+          - button "FuelDetailsResponse" [ref=e2178] [cursor=pointer]:
+            - generic [ref=e2180]: FuelDetailsResponse
+          - button "FuelConsumptionResponse" [ref=e2184] [cursor=pointer]:
+            - generic [ref=e2186]: FuelConsumptionResponse
+          - button "OdoAndFuelResponse" [ref=e2190] [cursor=pointer]:
+            - generic [ref=e2192]: OdoAndFuelResponse
+          - button "IButtonHistoryResponse" [ref=e2196] [cursor=pointer]:
+            - generic [ref=e2198]: IButtonHistoryResponse
+          - button "IButtonEvent" [ref=e2202] [cursor=pointer]:
+            - generic [ref=e2204]: IButtonEvent
+          - button "CreateTempLinkResponse" [ref=e2208] [cursor=pointer]:
+            - generic [ref=e2210]: CreateTempLinkResponse
+          - button "GeofencesListResponse" [ref=e2214] [cursor=pointer]:
+            - generic [ref=e2216]: GeofencesListResponse
+          - button "Geofence" [ref=e2220] [cursor=pointer]:
+            - generic [ref=e2222]: Geofence
+          - button "GeofenceAdd" [ref=e2226] [cursor=pointer]:
+            - generic [ref=e2228]: GeofenceAdd
+          - button "GeofenceCreateResponse" [ref=e2232] [cursor=pointer]:
+            - generic [ref=e2234]: GeofenceCreateResponse
+          - button "GeoVisitsResponse" [ref=e2238] [cursor=pointer]:
+            - generic [ref=e2240]: GeoVisitsResponse
+          - button "GeoFenceVisit" [ref=e2244] [cursor=pointer]:
+            - generic [ref=e2246]: GeoFenceVisit
+          - button "ZonesMileageResponse" [ref=e2250] [cursor=pointer]:
+            - generic [ref=e2252]: ZonesMileageResponse
+          - button "FuelStationsResponse" [ref=e2256] [cursor=pointer]:
+            - generic [ref=e2258]: FuelStationsResponse
+          - button "FuelStation" [ref=e2262] [cursor=pointer]:
+            - generic [ref=e2264]: FuelStation
+          - button "FuelTransactionCreateRequest" [ref=e2268] [cursor=pointer]:
+            - generic [ref=e2270]: FuelTransactionCreateRequest
+          - button "FuelTransactionCreateResponse" [ref=e2274] [cursor=pointer]:
+            - generic [ref=e2276]: FuelTransactionCreateResponse
+          - button "IButtonListResponse" [ref=e2280] [cursor=pointer]:
+            - generic [ref=e2282]: IButtonListResponse
+          - button "IButton" [ref=e2286] [cursor=pointer]:
+            - generic [ref=e2288]: IButton
+          - button "DriversListResponse" [ref=e2292] [cursor=pointer]:
+            - generic [ref=e2294]: DriversListResponse
+          - button "Driver" [ref=e2298] [cursor=pointer]:
+            - generic [ref=e2300]: Driver
+          - button "DriverCreateRequest" [ref=e2304] [cursor=pointer]:
+            - generic [ref=e2306]: DriverCreateRequest
+          - button "DriverCreateResponse" [ref=e2310] [cursor=pointer]:
+            - generic [ref=e2312]: DriverCreateResponse
+          - button "VehicleCommandRequest" [ref=e2316] [cursor=pointer]:
+            - generic [ref=e2318]: VehicleCommandRequest
+          - button "VehicleCommandResponse" [ref=e2322] [cursor=pointer]:
+            - generic [ref=e2324]: VehicleCommandResponse
+          - button "VehicleCommandStatusResponse" [ref=e2328] [cursor=pointer]:
+            - generic [ref=e2330]: VehicleCommandStatusResponse
+          - button "StationForecastResponse" [ref=e2334] [cursor=pointer]:
+            - generic [ref=e2336]: StationForecastResponse
+          - button "DriverActivityResponse" [ref=e2340] [cursor=pointer]:
+            - generic [ref=e2342]: DriverActivityResponse
+          - button "NotificationsResponse" [ref=e2346] [cursor=pointer]:
+            - generic [ref=e2348]: NotificationsResponse
+          - button "Notification" [ref=e2352] [cursor=pointer]:
+            - generic [ref=e2354]: Notification
+          - button "LiveEventsResponse" [ref=e2358] [cursor=pointer]:
+            - generic [ref=e2360]: LiveEventsResponse
+          - button "AccountsListResponse" [ref=e2364] [cursor=pointer]:
+            - generic [ref=e2366]: AccountsListResponse
+          - button "Account" [ref=e2370] [cursor=pointer]:
+            - generic [ref=e2372]: Account
+          - button "AccountUsersResponse" [ref=e2376] [cursor=pointer]:
+            - generic [ref=e2378]: AccountUsersResponse
+          - button "AccountUser" [ref=e2382] [cursor=pointer]:
+            - generic [ref=e2384]: AccountUser
+          - button "VehicleServicesResponse" [ref=e2388] [cursor=pointer]:
+            - generic [ref=e2390]: VehicleServicesResponse
+          - button "VehicleService" [ref=e2394] [cursor=pointer]:
+            - generic [ref=e2396]: VehicleService
+          - button "VehicleServiceAddRequest" [ref=e2400] [cursor=pointer]:
+            - generic [ref=e2402]: VehicleServiceAddRequest
+          - button "ReferencePricesResponse" [ref=e2406] [cursor=pointer]:
+            - generic [ref=e2408]: ReferencePricesResponse
+          - button "ReferencePrice" [ref=e2412] [cursor=pointer]:
+            - generic [ref=e2414]: ReferencePrice
+          - button "ReferenceModulesResponse" [ref=e2418] [cursor=pointer]:
+            - generic [ref=e2420]: ReferenceModulesResponse
+          - button "ReferenceModule" [ref=e2424] [cursor=pointer]:
+            - generic [ref=e2426]: ReferenceModule
+          - button "ReferenceVehicleTypesResponse" [ref=e2430] [cursor=pointer]:
+            - generic [ref=e2432]: ReferenceVehicleTypesResponse
+          - button "ReferenceVehicleType" [ref=e2436] [cursor=pointer]:
+            - generic [ref=e2438]: ReferenceVehicleType
+          - button "ReferenceVehicleModelsResponse" [ref=e2442] [cursor=pointer]:
+            - generic [ref=e2444]: ReferenceVehicleModelsResponse
+          - button "ReferenceVehicleModel" [ref=e2448] [cursor=pointer]:
+            - generic [ref=e2450]: ReferenceVehicleModel
+          - button "PingResponse" [ref=e2454] [cursor=pointer]:
+            - generic [ref=e2456]: PingResponse
+          - button "ReferenceTimezonesResponse" [ref=e2460] [cursor=pointer]:
+            - generic [ref=e2462]: ReferenceTimezonesResponse
+          - button "Timezone" [ref=e2466] [cursor=pointer]:
+            - generic [ref=e2468]: Timezone
+          - button "TagsListResponse" [ref=e2472] [cursor=pointer]:
+            - generic [ref=e2474]: TagsListResponse
+          - button "Tag" [ref=e2478] [cursor=pointer]:
+            - generic [ref=e2480]: Tag
+          - button "TagCreateRequest" [ref=e2484] [cursor=pointer]:
+            - generic [ref=e2486]: TagCreateRequest
+          - button "TagCreateResponse" [ref=e2490] [cursor=pointer]:
+            - generic [ref=e2492]: TagCreateResponse
+          - button "TagUpdateRequest" [ref=e2496] [cursor=pointer]:
+            - generic [ref=e2498]: TagUpdateRequest
+          - button "TagMapVehicleRequest" [ref=e2502] [cursor=pointer]:
+            - generic [ref=e2504]: TagMapVehicleRequest
+          - button "GeofenceUpdateRequest" [ref=e2508] [cursor=pointer]:
+            - generic [ref=e2510]: GeofenceUpdateRequest
+          - button "VehicleStatusByTimeResponse" [ref=e2514] [cursor=pointer]:
+            - generic [ref=e2516]: VehicleStatusByTimeResponse
+          - button "VehicleIdleResponse" [ref=e2520] [cursor=pointer]:
+            - generic [ref=e2522]: VehicleIdleResponse
+          - button "IdlePeriod" [ref=e2526] [cursor=pointer]:
+            - generic [ref=e2528]: IdlePeriod
+          - button "VehicleMotorHoursResponse" [ref=e2532] [cursor=pointer]:
+            - generic [ref=e2534]: VehicleMotorHoursResponse
+          - button "DriverSearchResponse" [ref=e2538] [cursor=pointer]:
+            - generic [ref=e2540]: DriverSearchResponse
+          - button "DriverSearchItem" [ref=e2544] [cursor=pointer]:
+            - generic [ref=e2546]: DriverSearchItem
+          - button "WaybillListResponse" [ref=e2550] [cursor=pointer]:
+            - generic [ref=e2552]: WaybillListResponse
+          - button "Waybill" [ref=e2556] [cursor=pointer]:
+            - generic [ref=e2558]: Waybill
+          - button "WaybillCreateRequest" [ref=e2562] [cursor=pointer]:
+            - generic [ref=e2564]: WaybillCreateRequest
+          - button "WaybillCreateResponse" [ref=e2568] [cursor=pointer]:
+            - generic [ref=e2570]: WaybillCreateResponse
+          - button "WaybillDeleteRequest" [ref=e2574] [cursor=pointer]:
+            - generic [ref=e2576]: WaybillDeleteRequest
+          - button "UserCreateRequest" [ref=e2580] [cursor=pointer]:
+            - generic [ref=e2582]: UserCreateRequest
+          - button "UserCreateResponse" [ref=e2586] [cursor=pointer]:
+            - generic [ref=e2588]: UserCreateResponse
+          - button "UserGetResponse" [ref=e2592] [cursor=pointer]:
+            - generic [ref=e2594]: UserGetResponse
+          - button "UserUpdateAuthRequest" [ref=e2598] [cursor=pointer]:
+            - generic [ref=e2600]: UserUpdateAuthRequest
+          - button "UserUpdateVehiclesRequest" [ref=e2604] [cursor=pointer]:
+            - generic [ref=e2606]: UserUpdateVehiclesRequest
+          - button "UserFoldersResponse" [ref=e2610] [cursor=pointer]:
+            - generic [ref=e2612]: UserFoldersResponse
+          - button "UserUpdateFoldersRequest" [ref=e2616] [cursor=pointer]:
+            - generic [ref=e2618]: UserUpdateFoldersRequest
+          - button "VehicleDistanceResponse" [ref=e2622] [cursor=pointer]:
+            - generic [ref=e2624]: VehicleDistanceResponse
+          - button "NearestVehiclesResponse" [ref=e2628] [cursor=pointer]:
+            - generic [ref=e2630]: NearestVehiclesResponse
+          - button "VehiclePointsResponse" [ref=e2634] [cursor=pointer]:
+            - generic [ref=e2636]: VehiclePointsResponse
+          - button "AgEventsResponse" [ref=e2640] [cursor=pointer]:
+            - generic [ref=e2642]: AgEventsResponse
+          - button "ApprovedTracksResponse" [ref=e2646] [cursor=pointer]:
+            - generic [ref=e2648]: ApprovedTracksResponse
+          - button "ApprovedTracksSetRequest" [ref=e2652] [cursor=pointer]:
+            - generic [ref=e2654]: ApprovedTracksSetRequest
+          - button "VehicleCustomFieldsRequest" [ref=e2658] [cursor=pointer]:
+            - generic [ref=e2660]: VehicleCustomFieldsRequest
+          - button "VehicleMediaResponse" [ref=e2664] [cursor=pointer]:
+            - generic [ref=e2666]: VehicleMediaResponse
+          - button "VehicleFinesResponse" [ref=e2670] [cursor=pointer]:
+            - generic [ref=e2672]: VehicleFinesResponse
+          - button "GeofenceLinkVehicleRequest" [ref=e2676] [cursor=pointer]:
+            - generic [ref=e2678]: GeofenceLinkVehicleRequest
+          - button "GeofenceUnlinkVehicleRequest" [ref=e2682] [cursor=pointer]:
+            - generic [ref=e2684]: GeofenceUnlinkVehicleRequest
+          - button "ContractLinkRequest" [ref=e2688] [cursor=pointer]:
+            - generic [ref=e2690]: ContractLinkRequest
+          - button "ContractUnlinkRequest" [ref=e2694] [cursor=pointer]:
+            - generic [ref=e2696]: ContractUnlinkRequest
+          - button "RouteResponse" [ref=e2700] [cursor=pointer]:
+            - generic [ref=e2702]: RouteResponse
+          - button "ReportsListResponse" [ref=e2706] [cursor=pointer]:
+            - generic [ref=e2708]: ReportsListResponse
+          - button "ReportRunRequest" [ref=e2712] [cursor=pointer]:
+            - generic [ref=e2714]: ReportRunRequest
+  - link "Online validator badge" [ref=e2717] [cursor=pointer]:
+    - /url: https://validator.swagger.io/validator/debug?url=https%3A%2F%2Fpilot-gps.com%2Fdoc%2Fapi%2Fv3.en.yaml
+    - img "Online validator badge" [ref=e2718]

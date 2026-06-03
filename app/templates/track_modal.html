@@ -430,9 +430,13 @@ var tm = (function() {
   }
 
   // ===== ИНИЦИАЛИЗАЦИЯ =====
-  document.getElementById('tm-date-from').value = '{{ date_from }}';
-  document.getElementById('tm-date-to').value = '{{ date_to }}';
-  document.querySelector('.period-chips .chip:first-child').classList.add('active');
+  var df = '{{ date_from }}', dt = '{{ date_to }}';
+  document.getElementById('tm-date-from').value = df;
+  document.getElementById('tm-date-to').value = dt;
+  // Активируем чип "Сегодня" если date_from == date_to, иначе "7 дней"
+  var chips = document.querySelectorAll('.period-chips .chip');
+  if (df === dt && chips[1]) chips[1].classList.add('active');
+  else if (chips[0]) chips[0].classList.add('active');
 
   // Запускаем загрузку Leaflet → initMap() → load()
   loadMap();

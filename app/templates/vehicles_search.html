@@ -9,7 +9,7 @@
     hx-trigger="keyup changed delay:300ms, search"
     hx-target="{{ search_target or '#vehicles-table' }}"
     hx-swap="innerHTML"
-    hx-include="closest .search-bar"
+    hx-include="closest .search-bar{% if hx_include_extra %}, {{ hx_include_extra }}{% endif %}"
     autocomplete="off"
   >
   {% if plate %}

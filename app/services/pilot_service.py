@@ -92,6 +92,27 @@ class PilotService:
         except PilotAuthError:
             return None
 
+    async def get_all_vehicle_statuses(self, token: str, node_id: int, imeis: list[str] | None = None) -> dict[str, dict]:
+        """Возвращает статусы ТС: {imei: {lat, lon, ts}}.
+
+        Делает параллельные запросы (с ограничением 10) для каждого imei.
+        API требует imei или agent_id, без них возвращает ошибку.
+        """
+        if not imeis:
+            return {}
+        sem = asyncio.Semaphore(10)
+        async def _fetch(imei: str) -> tuple[str, dict | None]:
+            async with sem:
+                try:
+                    d = await self.get_vehicle_status(token, node_id, imei)
+                    if d:
+                        return imei, {"lat": d.get("lat"), "lon": d.get("lon"), "ts": int(d.get("unixtimestamp", 0))}
+                except Exception:
+                    pass
+            return imei, None
+        results = await asyncio.gather(*[_fetch(i) for i in imeis if i])
+        return {imei: data for imei, data in results if data}
+
     async def get_refuel_report(
         self,
         token: str,
@@ -468,27 +489,39 @@ class PilotService:
         """
         Стоянки за период.
 
-        Response: может быть в двух форматах:
-          1. data.data.stops[] — стандартный
-          2. data.data.parkings[] — альтернативный
+        Response от /api/v3/vehicles/track/stops может содержать:
+          data.stops[] — короткие остановки (светофор, пробка)
+          data.parkings[] — длительные стоянки (ночь, погрузка)
+
+        Объединяем оба массива, отбрасываем короткие (< MIN_DURATION сек).
         """
+        MIN_DURATION = 180  # 3 минуты — отсекаем светофоры/пробки
         path = f"/api/v3/vehicles/track/stops?imei={imei}&agent_id={agent_id}&ts={ts_from}&te={ts_to}"
         try:
             data = await self._request("GET", path, token=token, node_id=node_id)
-            stops_raw = data.get("data") or data
-            if isinstance(stops_raw, dict):
-                stops_raw = stops_raw.get("stops") or stops_raw.get("parkings") or []
-            if not isinstance(stops_raw, list):
+            raw = data.get("data") or data
+            if isinstance(raw, dict):
+                stops = raw.get("stops") or []
+                parkings = raw.get("parkings") or []
+                if not isinstance(stops, list): stops = []
+                if not isinstance(parkings, list): parkings = []
+                stops_raw = stops + parkings
+            elif isinstance(raw, list):
+                stops_raw = raw
+            else:
                 stops_raw = []
             result = []
             for s in stops_raw:
+                dur = s.get("duration") or (s.get("te", 0) - s.get("ts", 0))
+                if dur < MIN_DURATION:
+                    continue
                 addr = s.get("address") or {}
                 result.append({
                     "lat": s.get("lat"),
                     "lon": s.get("lon"),
                     "ts": s.get("ts"),
                     "te": s.get("te"),
-                    "duration": s.get("duration"),
+                    "duration": dur,
                     "address": (addr.get("street") or addr.get("city") or addr.get("house") or "") if isinstance(addr, dict) else str(addr),
                 })
             return result

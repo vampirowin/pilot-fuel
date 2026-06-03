@@ -24,6 +24,7 @@ class Vehicle(Base):
     sensor_count: Mapped[int] = mapped_column(Integer, default=0)
     has_fuel_sensor: Mapped[bool] = mapped_column(Boolean, default=True, server_default='t')
     sensor_status: Mapped[str] = mapped_column(String(20), default="normal", server_default="normal")
+    icon_style: Mapped[str | None] = mapped_column(String(10), nullable=True)
 
     enable_abs_threshold: Mapped[bool] = mapped_column(Boolean, default=False, server_default='f')
     normal_threshold_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
