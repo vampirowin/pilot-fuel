@@ -118,7 +118,15 @@ var tm = (function() {
           var sname = nameMap[sid] || ('sensor#' + sid);
           var sval = sensors[sid];
           var meta = sensorMeta(sname);
-          if (typeof sval === 'number') sval = sval.toFixed(1);
+          var nlower = (sname || '').toLowerCase();
+          var isIgn = nlower.includes('зажиг') || nlower.includes('ignit');
+          if (isIgn && sval === 1) {
+            sval = '<span style="color:#22c55e">Вкл</span>';
+          } else if (isIgn && sval === 0) {
+            sval = '<span style="color:#ef4444">Выкл</span>';
+          } else if (typeof sval === 'number') {
+            sval = sval.toFixed(1);
+          }
           sensorRows.push('<div style="display:flex;align-items:center;justify-content:space-between;padding:3px 0;border-bottom:1px solid #2a2a50;font-size:12px">' +
             '<span style="display:flex;align-items:center;gap:5px;color:#d1d5db"><span style="font-size:14px">' + meta.icon + '</span>' + sname + '</span>' +
             '<span style="font-weight:600;color:' + meta.color + '">' + sval + (meta.unit ? ' <span style="font-weight:400;color:#6b7280;font-size:11px">' + meta.unit + '</span>' : '') + '</span></div>');

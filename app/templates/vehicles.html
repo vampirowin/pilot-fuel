@@ -472,8 +472,16 @@ function openLocationMap(el) {
       data.sensors.forEach(function(s){
         var m = sensorMeta(s.name);
         if (!m) return;
-        var val = s.dig_value !== null && s.dig_value !== undefined ? (s.dig_value === 1 ? 'Вкл' : s.dig_value === 0 ? 'Выкл' : s.dig_value) : s.hum_value;
-        sensorRows += '<div style="display:flex;align-items:center;gap:6px;padding:2px 0"><span style="font-size:14px">'+m.icon+'</span><span style="flex:1;font-size:12px;color:var(--text-secondary)">'+s.name+'</span><span style="font-weight:600;font-size:13px;color:'+m.color+'">'+(val !== null && val !== undefined ? val + (m.unit ? ' '+m.unit : '') : '—')+'</span></div>';
+        var isIgn = (s.name||'').toLowerCase().includes('зажиг') || (s.name||'').toLowerCase().includes('ignit');
+        var val, clr;
+        if (s.dig_value !== null && s.dig_value !== undefined) {
+          if (isIgn && s.dig_value === 1) { val = 'Вкл'; clr = '#22c55e'; }
+          else if (isIgn && s.dig_value === 0) { val = 'Выкл'; clr = '#ef4444'; }
+          else { val = s.dig_value; clr = m.color; }
+        } else {
+          val = s.hum_value; clr = m.color;
+        }
+        sensorRows += '<div style="display:flex;align-items:center;gap:6px;padding:2px 0"><span style="font-size:14px">'+m.icon+'</span><span style="flex:1;font-size:12px;color:var(--text-secondary)">'+s.name+'</span><span style="font-weight:600;font-size:13px;color:'+clr+'">'+(val !== null && val !== undefined ? val + (m.unit ? ' '+m.unit : '') : '—')+'</span></div>';
       });
     }
     body.innerHTML =

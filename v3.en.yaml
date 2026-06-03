@@ -1,0 +1,6190 @@
+openapi: 3.0.3
+info:
+  title: Pilot GPS API v3
+  version: 7.9.1
+  description: |
+    REST API (v3)
+
+    Get a token: `POST /api/v3/auth/token` (using login and password).
+    
+    Use the token via the `Authorization: Bearer {token}` header.
+    
+    If the authentication response returns a non-zero `node_id` parameter
+    
+    the client must send the `X-Node: {node_id}` header to route requests to the correct cluster node.
+    
+    When using the API in the context of `PILOT Extension`, it can be used without a token and node_id
+    (a cookie-based session is used).
+
+
+servers:
+  - url: https://boooch.pilot-gps.com
+    description: Sandbox
+  - url: https://pilot-gps.com
+    description: Production
+  - url: https://pilot-gps.africa
+    description: Africa
+  - url: https://blade.pilot-gps.com
+    description: Blade
+  - url: https://ksa.pilot-gps.com
+    description: Saudi Arabia
+security:
+  - BearerAuth: [ ]
+tags:
+  - name: Auth
+    description: Authentication and token issuance
+  - name: Vehicles
+    description: Vehicles, statuses, and tracks
+  - name: Tracks
+    description: Movement, tracks, and mileage
+  - name: Sensors
+    description: Sensor data
+  - name: Geo
+    description: Geofences, visits, and mileage by zone
+  - name: Fuel
+    description: Fuel, filling stations, and transactions
+  - name: Drivers
+    description: Drivers, iButton, and waybills
+  - name: Notifications
+    description: Notifications and live events
+  - name: Accounts
+    description: Partner accounts and users
+  - name: References
+    description: Reference data (vehicle types, models, prices, modules, timezones)
+  - name: Tags
+    description: Vehicle tag management
+  - name: Waybills
+    description: Waybill management
+  - name: Users
+    description: User management within an account
+  - name: Geofences
+    description: Geofence management and vehicle links
+  - name: Reports
+    description: Report listing and execution
+paths:
+  /api/v3/auth/token:
+    post:
+      tags:
+        - Auth
+      security: [ ]
+      summary: Get access token
+      description: 'Authenticates by login and password and returns a token,
+        which must be sent in the `Authorization: Bearer {token}` header.
+        The response also returns `node_id`, which must be sent in the `X-Node-Id` header in all subsequent API v3 requests.
+'
+      operationId: getToken
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - username
+                - password
+              properties:
+                username:
+                  type: string
+                  description: User login
+                password:
+                  type: string
+                  description: User password
+      responses:
+        '200':
+          description: Successful authentication
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                    description: 'Access token (used in Authorization: Bearer
+                      {token})'
+                  expires_in:
+                    type: integer
+                    description: Token lifetime in seconds
+                  node_id:
+                    type: integer
+                    example: 2
+                    description: User node identifier for the `X-Node-Id` header
+        '401':
+          description: Invalid username or password
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      tags:
+        - Auth
+      summary: Logout (revoke token)
+      description: 'Destroys the current session and invalidates the access token.'
+      operationId: revokeToken
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+      responses:
+        '200':
+          description: Successfully logged out
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v3/auth/me:
+    get:
+      tags:
+        - Auth
+      summary: Get current authenticated user
+      description: 'Returns information about the currently authenticated user.
+        Requires an active session and/or a valid token used as session_id.
+        '
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+      security:
+        - BearerAuth: [ ]
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 0
+                  msg:
+                    type: string
+                    example: OK
+                  process_time:
+                    type: number
+                    example: 0.001
+                  user:
+                    type: object
+                    properties:
+                      usr_id:
+                        type: integer
+                        example: 123
+                      account_id:
+                        type: integer
+                        example: 10
+                      partner_id:
+                        type: integer
+                        example: 5
+                      node_id:
+                        type: integer
+                        example: 2
+                      role_id:
+                        type: integer
+                        example: 1
+                      username:
+                        type: string
+                        example: demo
+                      name:
+                        type: string
+                        example: John Smith
+                      email:
+                        type: string
+                        nullable: true
+                        example: user@example.com
+                      ips_on:
+                        type: integer
+                        description: Flag indicating whether the IP filter is enabled
+                        example: 0
+                      ips:
+                        type: string
+                        nullable: true
+                        description: List of allowed IPs (if the IP filter is enabled)
+                        example: 1.2.3.4,5.6.7.8
+        '401':
+          description: Unauthorized (session not active or user not logged in)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 1
+                  msg:
+                    type: string
+                    example: Unauthorized
+  /api/v3/vehicles:
+    get:
+      tags:
+        - Vehicles
+      summary: Vehicles list
+      description: 'Returns the list of vehicles for the current account.'
+      operationId: listVehicles
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+      responses:
+        '200':
+          description: Vehicle list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehiclesListResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: list
+  /api/v3/vehicles/by-plate:
+    get:
+      tags:
+        - Vehicles
+      summary: Get IMEI by license plate
+      description: 'Returns the IMEI by the vehicle license plate.'
+      operationId: getImeiByPlate
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+        - in: query
+          name: vehnum
+          required: true
+          example: 'Velavu-00Q8E'
+          schema:
+            type: string
+          description: Vehicle license plate number (as stored in Pilot)
+      responses:
+        '200':
+          description: IMEI found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImeiResponse'
+        '404':
+          description: Vehicle with this plate was not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: get_imei
+  /api/v3/fuel/stations:
+    get:
+      tags:
+        - Fuel
+      summary: Fuel stations list
+      description: 'Returns the list of fuel stations.'
+      operationId: listFuelStations
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+      responses:
+        '200':
+          description: Fuel stations list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FuelStationsResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: azs
+  /api/v3/fuel/transactions:
+    post:
+      tags:
+        - Fuel
+      summary: Add fuel card transaction
+      description: 'Adds a fuel card transaction.'
+      operationId: addFuelTransaction
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FuelTransactionCreateRequest'
+      responses:
+        '200':
+          description: Transaction saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FuelTransactionCreateResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: add_fuel_transaction
+  /api/v3/ibuttons:
+    get:
+      tags:
+        - Drivers
+      summary: Global iButton list
+      description: 'iButton usage history across all vehicles.'
+      operationId: listIButtons
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+        - $ref: '#/components/parameters/StartQuery'
+        - $ref: '#/components/parameters/StopQuery'
+      responses:
+        '200':
+          description: iButton list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IButtonListResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: take_ibutton_list
+
+  /api/v3/vehicles/ibuttons:
+    get:
+      tags:
+        - Drivers
+      summary: iButton history for a vehicle
+      description: 'iButton usage history for a specific vehicle.'
+      operationId: getIButtonsForVehicle
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+        - $ref: '#/components/parameters/VehicleImei'
+        - $ref: '#/components/parameters/VehicleAgentId'
+
+        - $ref: '#/components/parameters/StartQuery'
+        - $ref: '#/components/parameters/StopQuery'
+      responses:
+        '200':
+          description: iButton history
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IButtonHistoryResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: take_ibutton_list
+  /api/v3/drivers:
+    get:
+      tags:
+        - Drivers
+      summary: Drivers list
+      description: 'Returns the list of drivers.'
+      operationId: listDrivers
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+      responses:
+        '200':
+          description: Drivers
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DriversListResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: drivers_list
+    post:
+      tags:
+        - Drivers
+      summary: Create or update driver
+      description: 'Creates or updates a driver record.'
+      operationId: createOrUpdateDriver
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DriverCreateRequest'
+      responses:
+        '200':
+          description: Driver saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DriverCreateResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: drivers_add
+  /api/v3/drivers/activity:
+    get:
+      tags:
+        - Drivers
+      summary: Driver activity
+      description: 'Returns driver activity data for the selected period.'
+      operationId: getDriverActivity
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+        - in: query
+          name: driver_id
+          required: true
+          schema:
+            type: integer
+            example: 36
+        - $ref: '#/components/parameters/StartQuery'
+        - $ref: '#/components/parameters/StopQuery'
+      responses:
+        '200':
+          description: Driver activity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DriverActivityResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: drivers_activity
+  /api/v3/geofences:
+    get:
+      tags:
+        - Geo
+      summary: Geofence list
+      description: 'Returns the list of geofences.'
+      operationId: listGeofences
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+      responses:
+        '200':
+          description: Geofence list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GeofencesListResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: geofencelist
+    post:
+      tags:
+        - Geo
+      summary: Create geofence
+      description: 'Creates a new geofence.'
+      operationId: createGeofence
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GeofenceAdd'
+      responses:
+        '200':
+          description: Geofence created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GeofenceCreateResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: geofenceadd
+    delete:
+      tags:
+        - Geo
+      summary: Delete geofence
+      description: 'Deletes a geofence by ID.'
+      operationId: deleteGeofence
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+        - in: query
+          name: id
+          schema:
+            type: integer
+        - in: query
+          name: external_id
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Geofence deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: geofencedel
+    put:
+      tags:
+        - Geo
+      summary: Update geofence
+      description: |
+        Updates the geometry and/or name of an existing geofence.
+        Supports Polygon and Circle geometry types.
+      operationId: geofenceUpdate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GeofenceUpdateRequest'
+      responses:
+        '200':
+          description: Geofence updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Geofence not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v3/geofences/visits:
+    get:
+      tags:
+        - Geo
+      summary: Geofence visit history
+      description: 'History of entries to and exits from geofences.'
+      operationId: getGeofenceVisits
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+        - $ref: '#/components/parameters/StartQuery'
+        - $ref: '#/components/parameters/StopQuery'
+        - $ref: '#/components/parameters/VehicleImei'
+        - $ref: '#/components/parameters/VehicleAgentId'
+      responses:
+        '200':
+          description: Geofence visits
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GeoVisitsResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: ag_geofences
+  /api/v3/geofences/mileage:
+    get:
+      tags:
+        - Geo
+      summary: Mileage in geofences
+      description: 'Returns mileage by geofences for the selected period.'
+      operationId: getZonesMileage
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+        - $ref: '#/components/parameters/StartQuery'
+        - $ref: '#/components/parameters/StopQuery'
+        - $ref: '#/components/parameters/VehicleImei'
+        - $ref: '#/components/parameters/VehicleAgentId'
+        - in: query
+          name: fences
+          required: false
+          schema:
+            type: string
+          description: Comma-separated list of geofence names
+      responses:
+        '200':
+          description: Mileage by geofence
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ZonesMileageResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: fences_mileage
+
+  /api/v3/notifications:
+    get:
+      tags:
+        - Notifications
+      summary: Notification module events
+      description: 'Returns Notification module events for the selected period.'
+      operationId: listNotifications
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+        - $ref: '#/components/parameters/StartQuery'
+        - $ref: '#/components/parameters/StopQuery'
+        - in: query
+          name: notification
+          required: false
+          schema:
+            type: string
+          description: Notification name
+      responses:
+        '200':
+          description: Notifications
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationsResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: notifications
+  /api/v3/events/live:
+    get:
+      tags:
+        - Notifications
+      summary: Live events
+      description: 'Stream of current events.'
+      operationId: getLiveEvents
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+      responses:
+        '200':
+          description: Live events
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiveEventsResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: live_events
+  /api/v3/vehicles/status:
+    get:
+      tags:
+        - Vehicles
+      summary: Current vehicle status
+      description: 'Returns the current status of vehicles: coordinates, speed, direction, sensor states, and so on.'
+      operationId: getVehicleStatus
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+        - $ref: '#/components/parameters/VehicleImeiList'
+        - $ref: '#/components/parameters/VehicleAgentIdList'
+      responses:
+        '200':
+          description: Vehicle status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleStatusResponse'
+        '404':
+          description: Device not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: status
+  /api/v3/vehicles/last24h:
+    get:
+      tags:
+        - Vehicles
+      summary: Vehicle status for the last 24 hours
+      description: 'Vehicle data for the last 24 hours.
+
+        '
+      operationId: VehicleStatus24
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+        - $ref: '#/components/parameters/VehicleImei'
+        - $ref: '#/components/parameters/VehicleAgentId'
+      responses:
+        '200':
+          description: Vehicle status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleMetricsResponse'
+        '404':
+          description: Device not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: status
+  /api/v3/vehicles/instant-status:
+    get:
+      tags:
+        - Vehicles
+      summary: Mileage and fuel at a point in time
+      description: 'Returns the odometer and fuel level at a specific point in time.'
+      operationId: getInstantStatus
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+        - $ref: '#/components/parameters/VehicleImei'
+        - $ref: '#/components/parameters/VehicleAgentId'
+        - $ref: '#/components/parameters/StartQuery'
+      responses:
+        '200':
+          description: Mileage and fuel at a point in time
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InstantStatusResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: istatus
+  /api/v3/vehicles/track:
+    get:
+      tags:
+        - Tracks
+      summary: Movement track for a period
+      description: 'Returns the sequence of movement points.'
+      operationId: getTrack
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+        - $ref: '#/components/parameters/VehicleImei'
+        - $ref: '#/components/parameters/VehicleAgentId'
+
+        - $ref: '#/components/parameters/StartQuery'
+        - $ref: '#/components/parameters/StopQuery'
+        - in: query
+          name: fences
+          required: false
+          schema:
+            type: integer
+            enum:
+              - 0
+              - 1
+          description: Whether to include geofence information
+        - in: query
+          name: eco
+          required: false
+          schema:
+            type: integer
+            enum:
+              - 0
+              - 1
+          description: Whether to include eco-driving metrics
+      responses:
+        '200':
+          description: Track
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrackResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: run
+  /api/v3/vehicles/track/geo:
+    get:
+      tags:
+        - Tracks
+      summary: Trips and parking report
+      description: 'Returns the structure of trips and parking intervals for the selected period.'
+      operationId: getTrackGeo
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+        - $ref: '#/components/parameters/VehicleImei'
+        - $ref: '#/components/parameters/VehicleAgentId'
+
+        - $ref: '#/components/parameters/StartQuery'
+        - $ref: '#/components/parameters/StopQuery'
+      responses:
+        '200':
+          description: Trips and parking
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrackGeoResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: rungeo
+  /api/v3/vehicles/track/stops:
+    get:
+      tags:
+        - Tracks
+      summary: Stops report
+      description: 'Returns the list of stops / parking intervals for the selected period.'
+      operationId: getTrackStops
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+        - $ref: '#/components/parameters/VehicleImei'
+        - $ref: '#/components/parameters/VehicleAgentId'
+
+        - $ref: '#/components/parameters/StartQuery'
+        - $ref: '#/components/parameters/StopQuery'
+      responses:
+        '200':
+          description: Stops
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrackStopsResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v3/vehicles/forecast_here:
+    get:
+      tags:
+        - Tracks
+      summary: Route arrival forecast using the HERE service
+      description: 'Route arrival forecast using the HERE service.
+        A HERE service key must be configured in the contract settings to use this endpoint.
+        '
+      operationId: getRoute
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+        - in: query
+          name: mode
+          required: false
+          schema:
+            type: string
+            enum:
+              - car
+              - truck
+              - bus
+              - taxi
+              - scooter
+              - bicycle
+              - pedestrian
+
+          description: Transport type, one of
+            bicycle - bicycle
+            bus - bus
+            car - car
+            pedestrian - pedestrian
+            scooter - scooter
+            taxi - taxi
+            truck - truck
+            default is car
+          example: car
+        - in: query
+          name: origin
+          required: true
+          schema:
+            type: string
+          description: Start point coordinates
+            in `lat,lon` format
+          example: 47.211908,39.613767
+        - in: query
+          name: destination
+          required: true
+          schema:
+            type: string
+          description: Destination point coordinates
+            in `lat,lon` format
+          example: 47.201699,39.668183
+
+      responses:
+        '200':
+          description: Route summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RouteSummaryResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v3/vehicles/trips:
+    get:
+      tags:
+        - Tracks
+      summary: Summary of trips, parking, speed, and parking intervals
+      description: 'Returns total mileage, travel time, average and maximum
+        speed
+
+        and other aggregated information.
+
+        '
+      operationId: getDistanceSummary
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+        - $ref: '#/components/parameters/VehicleImei'
+        - $ref: '#/components/parameters/VehicleAgentId'
+
+        - $ref: '#/components/parameters/StartQuery'
+        - $ref: '#/components/parameters/StopQuery'
+      responses:
+        '200':
+          description: Trips and parking
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TripsResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: distance
+  /api/v3/vehicles/sensors/dip:
+    get:
+      tags:
+        - Sensors
+      summary: History of dip sensor readings
+      description: 'Returns the history of readings for all connected sensors over the selected period.'
+      operationId: getSensorsHistory
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+        - $ref: '#/components/parameters/VehicleImei'
+        - $ref: '#/components/parameters/VehicleAgentId'
+
+        - $ref: '#/components/parameters/StartQuery'
+        - $ref: '#/components/parameters/StopQuery'
+        - in: query
+          name: tag_id
+          required: false
+          schema:
+            type: string
+          description: Comma-separated sensor tags (tag_id)
+      responses:
+        '200':
+          description: Sensor history
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SensorsHistoryResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: sensors
+  /api/v3/vehicles/sensors/discrete:
+    get:
+      tags:
+        - Sensors
+      summary: Discrete sensor history
+      description: 'History of discrete sensor states.
+
+        '
+      operationId: getDiscreteSensorData
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+        - $ref: '#/components/parameters/VehicleImei'
+        - $ref: '#/components/parameters/VehicleAgentId'
+
+        - $ref: '#/components/parameters/StartQuery'
+        - $ref: '#/components/parameters/StopQuery'
+        - in: query
+          name: tag_id
+          required: false
+          schema:
+            type: string
+          description: Comma-separated sensor tags (tag_id)
+      responses:
+        '200':
+          description: Discrete sensor history
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiscreteSensorHistoryResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: get_discrete_sensor_data
+  /api/v3/vehicles/events/raw:
+    get:
+      tags:
+        - Tracks
+      summary: Raw points by vehicle
+      description: 'Returns raw data points for the vehicle over the selected period.'
+      operationId: getRawEvents
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+        - $ref: '#/components/parameters/VehicleImei'
+        - $ref: '#/components/parameters/VehicleAgentId'
+
+        - $ref: '#/components/parameters/StartQuery'
+        - $ref: '#/components/parameters/StopQuery'
+      responses:
+        '200':
+          description: Raw events
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RawEventsResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: ag_events
+  /api/v3/vehicles/data-quality:
+    get:
+      tags:
+        - Tracks
+      summary: Vehicle data quality
+      description: Returns precomputed data quality statistics for one or more vehicles. The source is ag_data_quality, not ag_event.
+      operationId: getDataQuality
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+        - $ref: '#/components/parameters/VehicleImeiList'
+        - $ref: '#/components/parameters/VehicleAgentIdList'
+        - $ref: '#/components/parameters/StartQuery'
+        - $ref: '#/components/parameters/StopQuery'
+      responses:
+        '200':
+          description: Data quality report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataQualityResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v3/vehicles/passengers:
+    get:
+      tags:
+        - Tracks
+      summary: Passenger flow data
+      description: 'Returns passenger counter data.'
+      operationId: getPassengerCounter
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+        - $ref: '#/components/parameters/VehicleImei'
+        - $ref: '#/components/parameters/VehicleAgentId'
+
+        - $ref: '#/components/parameters/StartQuery'
+        - $ref: '#/components/parameters/StopQuery'
+      responses:
+        '200':
+          description: Passenger flow
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PassengerCounterResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: pass_counter
+  /api/v3/vehicles/sensors/eco:
+    get:
+      tags:
+        - Sensors
+      summary: Eco-driving and equipment operation
+      description: 'Returns eco-driving metrics and equipment operation data.'
+      operationId: getEcoDrive
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+        - $ref: '#/components/parameters/VehicleImei'
+        - $ref: '#/components/parameters/VehicleAgentId'
+
+        - $ref: '#/components/parameters/StartQuery'
+        - $ref: '#/components/parameters/StopQuery'
+      responses:
+        '200':
+          description: Eco-driving
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EcoDriveResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: mileco_drive
+  /api/v3/vehicles/fuel:
+    get:
+      tags:
+        - Fuel
+      summary: Detailed fuel data
+      description: 'Detailed fuel report: refuels, drains, daily balances, and
+        and related aggregates.'
+      operationId: getFuelDetails
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+        - $ref: '#/components/parameters/VehicleImei'
+        - $ref: '#/components/parameters/VehicleAgentId'
+
+        - $ref: '#/components/parameters/StartQuery'
+        - $ref: '#/components/parameters/StopQuery'
+      responses:
+        '200':
+          description: Fuel report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FuelDetailsResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: fuel
+  /api/v3/vehicles/fuel/consumption:
+    get:
+      tags:
+        - Fuel
+      summary: Fuel consumption and idle time
+      description: 'Returns consumed fuel and idle time.'
+      operationId: getFuelConsumption
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+        - $ref: '#/components/parameters/VehicleImei'
+        - $ref: '#/components/parameters/VehicleAgentId'
+
+        - $ref: '#/components/parameters/StartQuery'
+        - $ref: '#/components/parameters/StopQuery'
+      responses:
+        '200':
+          description: Fuel consumption
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FuelConsumptionResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: fuelconsumtion
+  /api/v3/vehicles/odo-fuel:
+    get:
+      tags:
+        - Fuel
+      summary: Odometer and fuel for a period
+      description: 'Returns mileage and fuel for the selected period.'
+      operationId: getOdoAndFuel
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+        - $ref: '#/components/parameters/VehicleImei'
+        - $ref: '#/components/parameters/VehicleAgentId'
+
+        - $ref: '#/components/parameters/StartQuery'
+        - $ref: '#/components/parameters/StopQuery'
+      responses:
+        '200':
+          description: Odometer and fuel
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OdoAndFuelResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: odo_and_fuel
+
+  /api/v3/vehicles/driver-bind:
+    post:
+      tags:
+        - Drivers
+      summary: Bind driver to vehicle
+      description: 'Binds a driver (by name or code) to a vehicle.'
+      operationId: bindDriverToVehicle
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+        - $ref: '#/components/parameters/VehicleImei'
+        - $ref: '#/components/parameters/VehicleAgentId'
+        - in: query
+          name: driver_id
+          required: false
+          schema:
+           type: integer
+        - in: query
+          name: ibutton
+          required: false
+          schema:
+            type: string
+
+      responses:
+        '200':
+          description: Driver bound
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: linkdriver
+
+  /api/v3/vehicles/share-link:
+    get:
+      tags:
+        - Vehicles
+      summary: Create temporary tracking link
+      description: 'Creates a temporary link for tracking a vehicle.'
+      operationId: createTempLink
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+        - $ref: '#/components/parameters/VehicleImei'
+        - $ref: '#/components/parameters/VehicleAgentId'
+        - name: startgeo
+          in: query
+          schema:
+            type: string
+            example: 'Exit test API'
+          description: 'Geofence for link activation'
+
+        - name: stopgeo
+          in: query
+          schema:
+            type: string
+            example: 'Exit test API'
+          description: 'Geofence for link deactivation'
+
+        - name: max_duration
+          in: query
+          schema:
+            type: integer
+            example: 1440
+          description: 'Duration in minutes during which the logic remains active regardless of geofence visits. Default is 24 hours.'
+
+      responses:
+        '200':
+          description: Link created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateTempLinkResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: get_temp_link
+  /api/v3/vehicles/commands:
+    post:
+      tags:
+        - Vehicles
+      summary: Send command to vehicle
+      description: |
+        Sends a command to the vehicle by template name.
+
+        Maps to legacy cmd=send_command.
+      operationId: sendVehicleCommand
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+        - $ref: '#/components/parameters/VehicleImei'
+        - $ref: '#/components/parameters/VehicleAgentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VehicleCommandRequest'
+      responses:
+        '200':
+          description: Command created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleCommandResponse'
+        '400':
+          description: Command request error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: send_command
+  /api/v3/vehicles/commands/status:
+    get:
+      tags:
+        - Vehicles
+      summary: Get command status
+      description: |
+        Returns the status of a previously sent command.
+
+        Maps to legacy cmd=get_command_status.
+      operationId: getVehicleCommandStatus
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+        - $ref: '#/components/parameters/VehicleImei'
+        - $ref: '#/components/parameters/VehicleAgentId'
+        - in: query
+          name: command_id
+          required: true
+          schema:
+            type: integer
+            example: 12345
+      responses:
+        '200':
+          description: Command status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleCommandStatusResponse'
+        '400':
+          description: Status request error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: get_command_status
+  /api/v3/stations/forecast:
+    get:
+      tags:
+        - Notifications
+      summary: Get station arrival forecast
+      description: Returns the arrival forecast for the specified station.
+      operationId: getStationForecast
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+        - in: query
+          name: stop_id
+          required: true
+          schema:
+            type: integer
+            example: 1234
+      responses:
+        '200':
+          description: Arrival forecast
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StationForecastResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v3/accounts:
+    get:
+      tags:
+        - Accounts
+      summary: Partner accounts list
+      description: 'Returns the list of accounts belonging to the authenticated partner.'
+      operationId: listAccounts
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+      responses:
+        '200':
+          description: Accounts list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountsListResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Partner access required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v3/accounts/users:
+    get:
+      tags:
+        - Accounts
+      summary: Account users list
+      description: 'Returns the list of users for the specified account. Partner must have access to the account.'
+      operationId: listAccountUsers
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+        - in: query
+          name: account_id
+          required: true
+          schema:
+            type: integer
+            example: 42
+      responses:
+        '200':
+          description: Users list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountUsersResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Access denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v3/vehicles/block-by-admin:
+    post:
+      tags:
+        - Vehicles
+      summary: Block vehicle (admin level)
+      description: 'Blocks the vehicle at the operator level (sets field `on = 0`). Use `unblock-by-admin` to restore.'
+      operationId: blockVehicleByAdmin
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+        - $ref: '#/components/parameters/VehicleImei'
+        - $ref: '#/components/parameters/VehicleAgentId'
+      responses:
+        '200':
+          description: Vehicle blocked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Vehicle not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v3/vehicles/unblock-by-admin:
+    post:
+      tags:
+        - Vehicles
+      summary: Unblock vehicle (admin level)
+      description: 'Unblocks the vehicle at the operator level (sets field `on = 1`).'
+      operationId: unblockVehicleByAdmin
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+        - $ref: '#/components/parameters/VehicleImei'
+        - $ref: '#/components/parameters/VehicleAgentId'
+      responses:
+        '200':
+          description: Vehicle unblocked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Vehicle not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v3/vehicles/block-by-self:
+    post:
+      tags:
+        - Vehicles
+      summary: Block vehicle (owner level)
+      description: 'Blocks the vehicle at the owner level (sets field `active = 0`). Use `unblock-by-self` to restore.'
+      operationId: blockVehicleBySelf
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+        - $ref: '#/components/parameters/VehicleImei'
+        - $ref: '#/components/parameters/VehicleAgentId'
+      responses:
+        '200':
+          description: Vehicle blocked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Vehicle not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v3/vehicles/unblock-by-self:
+    post:
+      tags:
+        - Vehicles
+      summary: Unblock vehicle (owner level)
+      description: 'Unblocks the vehicle at the owner level (sets field `active = 1`).'
+      operationId: unblockVehicleBySelf
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+        - $ref: '#/components/parameters/VehicleImei'
+        - $ref: '#/components/parameters/VehicleAgentId'
+      responses:
+        '200':
+          description: Vehicle unblocked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Vehicle not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v3/vehicles/services:
+    get:
+      tags:
+        - Vehicles
+      summary: Vehicle service records
+      description: 'Returns the service history records for the specified vehicle.'
+      operationId: getVehicleServices
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+        - $ref: '#/components/parameters/VehicleImei'
+        - $ref: '#/components/parameters/VehicleAgentId'
+      responses:
+        '200':
+          description: Service records list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleServicesResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Vehicle not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      tags:
+        - Vehicles
+      summary: Add vehicle service record
+      description: 'Adds a new service record for the specified vehicle.'
+      operationId: addVehicleService
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+        - $ref: '#/components/parameters/VehicleImei'
+        - $ref: '#/components/parameters/VehicleAgentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VehicleServiceAddRequest'
+      responses:
+        '200':
+          description: Service record added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '400':
+          description: Missing required fields
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Vehicle not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v3/references/prices:
+    get:
+      tags:
+        - References
+      summary: Price list
+      description: 'Returns the billing price list. Optionally filtered by currency code.'
+      operationId: listPrices
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+        - in: query
+          name: coden
+          required: false
+          schema:
+            type: string
+          description: Numeric currency code (e.g. 840 for USD)
+        - in: query
+          name: codea
+          required: false
+          schema:
+            type: string
+          description: Alphabetic currency code (e.g. USD)
+      responses:
+        '200':
+          description: Price list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReferencePricesResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v3/references/modules:
+    get:
+      tags:
+        - References
+      summary: Modules list
+      description: 'Returns the list of available service modules.'
+      operationId: listModules
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+      responses:
+        '200':
+          description: Modules list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReferenceModulesResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v3/references/vehicle-types:
+    get:
+      tags:
+        - References
+      summary: Vehicle types list
+      description: 'Returns the list of vehicle types.'
+      operationId: listVehicleTypes
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+      responses:
+        '200':
+          description: Vehicle types list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReferenceVehicleTypesResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v3/references/vehicle-models:
+    get:
+      tags:
+        - References
+      summary: Vehicle models list
+      description: 'Returns the list of GPS device models (agent types).'
+      operationId: listVehicleModels
+      parameters:
+        - $ref: '#/components/parameters/XNodeIdHeader'
+      responses:
+        '200':
+          description: Vehicle models list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReferenceVehicleModelsResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v3/ping:
+    get:
+      tags:
+        - Auth
+      summary: Health check
+      description: Returns pong. Can be used to verify that the API is reachable.
+      security: []
+      operationId: ping
+      responses:
+        '200':
+          description: Pong response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PingResponse'
+
+  /api/v3/references/timezones:
+    get:
+      tags:
+        - References
+      summary: Get timezones list
+      description: Returns the list of all available timezones with UTC offsets.
+      operationId: referencesTimezones
+      responses:
+        '200':
+          description: Timezones list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReferenceTimezonesResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v3/tags:
+    get:
+      tags:
+        - Tags
+      summary: Get tags list
+      description: Returns all tags for the current account.
+      operationId: tagsList
+      responses:
+        '200':
+          description: Tags list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagsListResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      tags:
+        - Tags
+      summary: Create tag
+      description: Creates a new tag for the current account.
+      operationId: tagCreate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TagCreateRequest'
+      responses:
+        '200':
+          description: Tag created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagCreateResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    put:
+      tags:
+        - Tags
+      summary: Update tag
+      description: Updates name, description, and/or color of an existing tag.
+      operationId: tagUpdate
+      parameters:
+        - name: id
+          in: query
+          required: true
+          schema:
+            type: integer
+          description: Tag ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TagUpdateRequest'
+      responses:
+        '200':
+          description: Tag updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Tag not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      tags:
+        - Tags
+      summary: Delete tag
+      description: Permanently deletes a tag and all its vehicle mappings.
+      operationId: tagDelete
+      parameters:
+        - name: id
+          in: query
+          required: true
+          schema:
+            type: integer
+          description: Tag ID
+      responses:
+        '200':
+          description: Tag deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Tag not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v3/tags/map-vehicle:
+    post:
+      tags:
+        - Tags
+      summary: Link / unlink tag to vehicles
+      description: |
+        Links or unlinks a tag to one or more vehicles.
+        Pass `unlink: true` to remove the mapping.
+      operationId: tagMapVehicle
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TagMapVehicleRequest'
+      responses:
+        '200':
+          description: Operation completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Tag not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v3/vehicles/status-by-time:
+    get:
+      tags:
+        - Vehicles
+      summary: Vehicle status at a historical timestamp
+      description: |
+        Returns the position, speed, movement status, and sensor snapshot
+        for a vehicle at a given unix timestamp.
+      operationId: vehicleStatusByTime
+      parameters:
+        - name: agent_id
+          in: query
+          required: true
+          schema:
+            type: integer
+          description: Vehicle agent ID
+        - name: ts
+          in: query
+          required: true
+          schema:
+            type: integer
+          description: Unix timestamp to query
+      responses:
+        '200':
+          description: Status at the requested timestamp
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleStatusByTimeResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v3/vehicles/idle:
+    get:
+      tags:
+        - Vehicles
+      summary: Idle time report
+      description: |
+        Returns idle periods for a vehicle in the given time range.
+        Maximum range: 3 months. Requires vehicle access via m2m_usr_veh.
+      operationId: vehicleIdle
+      parameters:
+        - name: agent_id
+          in: query
+          required: true
+          schema:
+            type: integer
+          description: Vehicle agent ID
+        - name: ts
+          in: query
+          required: true
+          schema:
+            type: integer
+          description: Period start (unix timestamp)
+        - name: te
+          in: query
+          required: true
+          schema:
+            type: integer
+          description: Period end (unix timestamp)
+      responses:
+        '200':
+          description: Idle periods list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleIdleResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v3/vehicles/motor-hours:
+    get:
+      tags:
+        - Vehicles
+      summary: CAN motor hours
+      description: Returns total CAN motor hours for a vehicle in a given period (in seconds).
+      operationId: vehicleMotorHours
+      parameters:
+        - name: agent_id
+          in: query
+          required: true
+          schema:
+            type: integer
+          description: Vehicle agent ID
+        - name: sensor_id
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: Sensor ID. If omitted, auto-detects the CAN motor hours sensor (semanticid=20).
+        - name: ts
+          in: query
+          required: true
+          schema:
+            type: integer
+          description: Period start (unix timestamp)
+        - name: te
+          in: query
+          required: true
+          schema:
+            type: integer
+          description: Period end (unix timestamp)
+      responses:
+        '200':
+          description: Motor hours result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleMotorHoursResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v3/drivers/search:
+    get:
+      tags:
+        - Drivers
+      summary: Search drivers by name
+      description: Case-insensitive partial name search within the current account. Returns up to 50 results.
+      operationId: driverSearch
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Search query string (partial driver name)
+      responses:
+        '200':
+          description: Matching drivers
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DriverSearchResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v3/waybills:
+    get:
+      tags:
+        - Waybills
+      summary: Get waybills
+      description: Returns waybills for a vehicle starting from the specified timestamp.
+      operationId: waybillGet
+      parameters:
+        - name: agent_id
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: Vehicle agent ID (required if vehnum is not provided)
+        - name: vehnum
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Vehicle plate number (required if agent_id is not provided)
+        - name: ts
+          in: query
+          required: true
+          schema:
+            type: integer
+          description: Start timestamp (unix)
+      responses:
+        '200':
+          description: Waybills list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WaybillListResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      tags:
+        - Waybills
+      summary: Create waybill
+      description: Creates or updates (upserts) a waybill for a vehicle.
+      operationId: waybillCreate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WaybillCreateRequest'
+      responses:
+        '200':
+          description: Waybill created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WaybillCreateResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      tags:
+        - Waybills
+      summary: Delete waybill
+      description: Deletes a waybill identified by ts, te and vehicle.
+      operationId: waybillDelete
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WaybillDeleteRequest'
+      responses:
+        '200':
+          description: Waybill deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v3/users:
+    post:
+      tags:
+        - Users
+      summary: Create user
+      description: Creates a new user under the current account.
+      operationId: userCreate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCreateRequest'
+      responses:
+        '200':
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserCreateResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    get:
+      tags:
+        - Users
+      summary: Get user
+      description: Returns details of a user belonging to the current account.
+      operationId: userGet
+      parameters:
+        - name: id
+          in: query
+          required: true
+          schema:
+            type: integer
+          description: User ID
+      responses:
+        '200':
+          description: User details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserGetResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      tags:
+        - Users
+      summary: Delete user
+      description: Permanently deletes a user and all their access rights.
+      operationId: userDelete
+      parameters:
+        - name: id
+          in: query
+          required: true
+          schema:
+            type: integer
+          description: User ID
+      responses:
+        '200':
+          description: User deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '400':
+          description: Cannot delete own account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v3/users/auth:
+    put:
+      tags:
+        - Users
+      summary: Update user login and password
+      description: Changes the login and/or password of a user in the current account.
+      operationId: userUpdateAuth
+      parameters:
+        - name: id
+          in: query
+          required: true
+          schema:
+            type: integer
+          description: User ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserUpdateAuthRequest'
+      responses:
+        '200':
+          description: Login/password updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v3/users/vehicles:
+    put:
+      tags:
+        - Users
+      summary: Update user vehicle access
+      description: Replaces the full set of vehicles the user has access to.
+      operationId: userUpdateVehicles
+      parameters:
+        - name: id
+          in: query
+          required: true
+          schema:
+            type: integer
+          description: User ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserUpdateVehiclesRequest'
+      responses:
+        '200':
+          description: Vehicle access updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v3/users/folders:
+    get:
+      tags:
+        - Users
+      summary: Get user folders
+      description: Returns folders accessible to a user. If id is omitted, returns folders of the current user.
+      operationId: userGetFolders
+      parameters:
+        - name: id
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: User ID (optional, defaults to current user)
+      responses:
+        '200':
+          description: Folder list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserFoldersResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    put:
+      tags:
+        - Users
+      summary: Update user folder access
+      description: Replaces the full set of folders the user has access to.
+      operationId: userUpdateFolders
+      parameters:
+        - name: id
+          in: query
+          required: true
+          schema:
+            type: integer
+          description: User ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserUpdateFoldersRequest'
+      responses:
+        '200':
+          description: Folder access updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v3/vehicles/distance:
+    get:
+      tags:
+        - Vehicles
+      summary: Vehicle odometer distance
+      description: Calculates mileage for a vehicle over a time period (max 31 days).
+      operationId: vehicleDistance
+      parameters:
+        - name: agent_id
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: ts
+          in: query
+          required: true
+          schema:
+            type: integer
+          description: Period start (Unix timestamp)
+        - name: te
+          in: query
+          required: true
+          schema:
+            type: integer
+          description: Period end (Unix timestamp)
+      responses:
+        '200':
+          description: Distance data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleDistanceResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: distance
+
+  /api/v3/vehicles/nearest:
+    get:
+      tags:
+        - Vehicles
+      summary: Nearest vehicles
+      description: Returns vehicles within a radius of a location, sorted by travel distance (OSRM routing).
+      operationId: nearestVehicles
+      parameters:
+        - name: group_id
+          in: query
+          required: true
+          schema:
+            type: integer
+          description: Vehicle group ID (orgdep.id)
+        - name: lat
+          in: query
+          required: true
+          schema:
+            type: number
+            format: float
+          description: Target latitude
+        - name: lon
+          in: query
+          required: true
+          schema:
+            type: number
+            format: float
+          description: Target longitude
+        - name: radius
+          in: query
+          required: true
+          schema:
+            type: integer
+          description: Search radius in meters
+      responses:
+        '200':
+          description: Nearest vehicles list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NearestVehiclesResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: get_nearest_vehicles
+
+  /api/v3/vehicles/points:
+    get:
+      tags:
+        - Vehicles
+      summary: Raw GPS points
+      description: Returns raw GPS points from the telemetry server for a vehicle (max 3-day range).
+      operationId: vehiclePoints
+      parameters:
+        - name: vehnum
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Vehicle plate number
+        - name: ts
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: te
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: GPS points
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehiclePointsResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: ag_points
+
+  /api/v3/vehicles/events/ag:
+    get:
+      tags:
+        - Vehicles
+      summary: Raw vehicle events (ag_event)
+      description: Returns raw GPS events from the ag_event table for a vehicle by IMEI.
+      operationId: vehicleAgEvents
+      parameters:
+        - name: imei
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: ts
+          in: query
+          required: true
+          schema:
+            type: integer
+          description: Period start (Unix timestamp, max 90 days ago)
+        - name: te
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Events list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgEventsResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: ag_events
+
+  /api/v3/vehicles/events/latest:
+    get:
+      tags:
+        - Vehicles
+      summary: Latest cached events for a vehicle
+      description: Returns the latest cached event history for a vehicle by vehnum.
+      operationId: vehicleEventLatest
+      parameters:
+        - name: vehnum
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Vehicle number
+      responses:
+        '200':
+          description: Events
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: get_event
+
+  /api/v3/vehicles/events:
+    delete:
+      tags:
+        - Vehicles
+      summary: Clear vehicle events cache
+      description: Clears cached events for a specific vehicle or all account vehicles.
+      operationId: cleanVehicleEvents
+      parameters:
+        - name: vehnum
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Vehicle number (omit to clear all)
+      responses:
+        '200':
+          description: Events cleared
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: clean_events
+
+  /api/v3/vehicles/approved-tracks:
+    get:
+      tags:
+        - Vehicles
+      summary: Get approved/non-approved track periods
+      description: Returns track periods split into approved and non-approved for a vehicle.
+      operationId: approvedTracksGet
+      parameters:
+        - name: veh
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Vehicle plate number
+        - name: ts
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: te
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Track periods
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovedTracksResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: get_approved_tracks
+    post:
+      tags:
+        - Vehicles
+      summary: Approve a track period
+      description: Marks a time period as approved for a vehicle.
+      operationId: approvedTracksSet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovedTracksSetRequest'
+      responses:
+        '200':
+          description: Track period approved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: set_approved_tracks
+
+  /api/v3/vehicles/custom-fields:
+    put:
+      tags:
+        - Vehicles
+      summary: Update vehicle custom fields
+      description: Updates custom (extra) fields for a vehicle.
+      operationId: vehicleCustomFields
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VehicleCustomFieldsRequest'
+      responses:
+        '200':
+          description: Custom fields updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: agent_update_custom_fields
+
+  /api/v3/vehicles/media:
+    get:
+      tags:
+        - Vehicles
+      summary: Vehicle camera media
+      description: Returns media records (images/video) from vehicle cameras.
+      operationId: vehicleMedia
+      parameters:
+        - name: agent_id
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Comma-separated agent IDs
+        - name: ts
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: te
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Media list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleMediaResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: get_media
+
+  /api/v3/vehicles/fines:
+    get:
+      tags:
+        - Vehicles
+      summary: Vehicle traffic fines
+      description: Returns traffic fines for vehicles by agent_id or IMEI.
+      operationId: vehicleFines
+      parameters:
+        - name: agent_id
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Comma-separated agent IDs
+        - name: imei
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Comma-separated IMEI values
+        - name: ts
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: Period start (Unix timestamp)
+        - name: te
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: Period end (Unix timestamp)
+      responses:
+        '200':
+          description: Fines list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleFinesResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: get_fines
+
+  /api/v3/geofences/link-vehicle:
+    post:
+      tags:
+        - Geofences
+      summary: Link geofence to vehicle
+      description: Associates a geofence with a vehicle, setting idle and speed-limit alert parameters.
+      operationId: geofenceLinkVehicle
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GeofenceLinkVehicleRequest'
+      responses:
+        '200':
+          description: Geofence linked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: geofencelink
+
+  /api/v3/geofences/unlink-vehicle:
+    post:
+      tags:
+        - Geofences
+      summary: Unlink geofence from vehicle
+      description: Removes the association between a geofence and a vehicle.
+      operationId: geofenceUnlinkVehicle
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GeofenceUnlinkVehicleRequest'
+      responses:
+        '200':
+          description: Geofence unlinked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: geofenceunlink
+
+  /api/v3/geofences/process:
+    get:
+      tags:
+        - Geofences
+      summary: Process geofence zone events
+      description: Returns geofence entry/exit events and sensor data for a vehicle.
+      operationId: geofencesProcess
+      parameters:
+        - name: agent_id
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: imei
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: start
+          in: query
+          required: true
+          schema:
+            type: integer
+          description: Period start (Unix timestamp, max 90 days ago)
+        - name: stop
+          in: query
+          required: true
+          schema:
+            type: integer
+          description: Period end (Unix timestamp, max 7 days range)
+        - name: zones
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Comma-separated zone IDs
+      responses:
+        '200':
+          description: Zone processing result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: geozones_process
+
+  /api/v3/rentcar/contracts:
+    get:
+      tags:
+        - Vehicles
+      summary: Rental contracts
+      description: Returns rental contracts for the current user context.
+      operationId: rentcarContracts
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            default: open,booked,closed
+          description: Comma-separated contract statuses.
+      responses:
+        '200':
+          description: Contract list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing rent car permission
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: rentcar_contracts
+
+  /api/v3/rentcar/contracts/link:
+    post:
+      tags:
+        - Vehicles
+      summary: Link vehicle to rental contract
+      description: Associates a vehicle with a rental contract.
+      operationId: contractLink
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContractLinkRequest'
+      responses:
+        '200':
+          description: Contract linked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: link_contract
+
+  /api/v3/rentcar/contracts/unlink:
+    post:
+      tags:
+        - Vehicles
+      summary: Unlink vehicle from rental contract
+      description: Closes the active rental contract for a vehicle.
+      operationId: contractUnlink
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContractUnlinkRequest'
+      responses:
+        '200':
+          description: Contract unlinked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: unlink_contract
+
+  /api/v3/route:
+    get:
+      tags:
+        - References
+      summary: Calculate route (HERE Maps)
+      description: Calculates a driving route between two points using HERE Maps API.
+      operationId: calculateRoute
+      parameters:
+        - name: origin
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Origin coordinates (lat,lon)
+          example: '55.7558,37.6173'
+        - name: destination
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Destination coordinates (lat,lon)
+          example: '55.7522,37.6156'
+        - name: mode
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - car
+              - truck
+              - pedestrian
+              - bicycle
+              - bus
+              - scooter
+              - taxi
+            default: car
+      responses:
+        '200':
+          description: Route result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RouteResponse'
+        '400':
+          description: Route not found or invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: route
+
+  /api/v3/reports:
+    get:
+      tags:
+        - Reports
+      summary: List available reports
+      description: Returns the list of report types available for the current account.
+      operationId: reportsList
+      responses:
+        '200':
+          description: Reports list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportsListResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: reports_list
+
+  /api/v3/reports/run:
+    post:
+      tags:
+        - Reports
+      summary: Run a report
+      description: Runs a report and returns the result in JSON format.
+      operationId: reportRun
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportRunRequest'
+      responses:
+        '200':
+          description: Report result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-legacy:
+        cmd: get_report
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    VehicleImeiList:
+      in: query
+      name: imei
+      required: false
+      schema:
+        type: string
+        example: '866795036141404,12312333398'
+      description: Comma-separated list of vehicle IMEIs. Takes precedence over agent_id if both parameters are specified.
+
+    VehicleAgentIdList:
+      name: agent_id
+      in: query
+      description: Comma-separated list of Agent IDs
+      required: false
+      schema:
+        type: string
+        example: 196,197,198
+
+    VehicleImei:
+      name: imei
+      in: query
+      required: false
+      schema:
+        type: string
+        example: '866795036141404'
+      description: Vehicle IMEI. Takes precedence over agent_id if both parameters are specified.
+    VehicleAgentId:
+      name: agent_id
+      in: query
+      required: false
+      schema:
+        type: integer
+        example: 196
+      description: Vehicle agent_id.
+    StartQuery:
+      in: query
+      name: ts
+      required: true
+      example: 1763638500
+      schema:
+        type: integer
+        format: int64
+      description: Start time (UTC) of the period (Unix timestamp)
+    StopQuery:
+      in: query
+      name: te
+      required: true
+      schema:
+        type: integer
+        format: int64
+        example: 1763838500
+      description: End time (UTC) of the period (Unix timestamp)
+    XNodeIdHeader:
+      in: header
+      name: X-Node
+      required: false
+      schema:
+        type: integer
+        example: 2
+      description: User node used to route the request to the correct backend
+
+  schemas:
+    OkResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          example: 0
+        msg:
+          type: string
+          example: OK
+        process_time:
+          type: number
+          example: 0.001
+    ErrorResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          example: 1
+        msg:
+          type: string
+          example: Error message
+        process_time:
+          type: number
+          format: float
+          example: 0.001
+        error:
+          type: string
+          example: Additional error details
+
+    VehiclesListResponse:
+      allOf:
+        - $ref: '#/components/schemas/OkResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/Vehicle'
+          required:
+            - code
+            - msg
+            - data
+    VehicleData:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 196
+        agentid:
+          type: integer
+          example: 196
+        vehiclenumber:
+          type: string
+          example: TEST ODO
+        driver:
+          type: string
+          example: Ivanov Peter
+        motor_hours:
+          type: integer
+          example: 15075052
+        imei:
+          type: string
+          example: '866795036141404'
+        lat:
+          type: number
+          format: float
+          example: 55.470108
+        lon:
+          type: number
+          format: float
+          example: 37.573349
+        alt:
+          type: integer
+          example: 0
+        dir:
+          type: integer
+          example: 124
+        sat:
+          type: integer
+          example: 19
+        unixtimestamp:
+          type: string
+          example: '1763633238'
+        speed:
+          type: integer
+          example: 0
+        firing:
+          type: integer
+          example: 1
+        fence:
+          type: string
+          example: ''
+        sensors:
+          type: array
+          items:
+            $ref: '#/components/schemas/Sensor'
+      required:
+        - id
+        - agentid
+        - vehiclenumber
+        - driver
+        - motor_hours
+        - imei
+        - lat
+        - lon
+        - alt
+        - dir
+        - sat
+        - unixtimestamp
+        - speed
+        - firing
+        - fence
+        - sensors
+    Vehicle:
+      type: object
+      properties:
+        agentid:
+          type: integer
+          example: 9003
+        imei:
+          type: string
+          example: "356307046873054"
+        typeid:
+          type: integer
+        type:
+          type: string
+          example: "Car"
+        vehiclenumber:
+          type: string
+          example: "X444MP123"
+        folder:
+          type: string
+          example: "Geo-Center LLC"
+        created_time:
+          type: integer
+          format: int64
+        current_mileage:
+          type: number
+          format: double
+        status:
+          $ref: '#/components/schemas/VehicleStatus'
+
+    Sensor:
+      type: object
+      properties:
+        name:
+          type: string
+          example: Axle load #2
+        id:
+          type: integer
+          example: 940
+        hum_value:
+          type: string
+          example: 14356 kg
+        dig_value:
+          type: number
+          oneOf:
+            - type: integer
+            - type: number
+          example: 14356
+        raw_value:
+          type: string
+          example: '14356'
+        change_ts:
+          type: integer
+          example: 1763633148
+        group:
+          type: string
+          example: ''
+        tags:
+          type: string
+          example: '12,34'
+        issues:
+          type: integer
+          example: 0
+      required:
+        - name
+        - id
+        - hum_value
+        - dig_value
+        - raw_value
+        - change_ts
+        - group
+    ImeiResponse:
+      allOf:
+        - $ref: '#/components/schemas/OkResponse'
+        - type: object
+          properties:
+            imei:
+              type: string
+              example: '356307045913463'
+    VehicleStatusResponse:
+      allOf:
+        - $ref: '#/components/schemas/OkResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/VehicleData'
+              description: Array of vehicle status data
+          required:
+            - data
+    VehicleMetricsResponse:
+      allOf:
+        - $ref: '#/components/schemas/OkResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/VehicleMetrics'
+              description: Array of vehicle status data
+          required:
+            - data
+    VehicleMetrics:
+      type: object
+      properties:
+        full_mileage:
+          type: number
+          format: float
+          minimum: 0
+          example: 14.7
+          description: Total mileage in kilometers
+        fuel_start:
+          type: number
+          format: float
+          minimum: 0
+          example: 120.33
+          description: Initial fuel level in liters
+        fuel_stop:
+          type: integer
+          format: int32
+          minimum: 0
+          example: 0
+          description: Final fuel level in liters
+        fuel_fill:
+          type: number
+          format: float
+          minimum: 0
+          example: 0
+          description: Fuel refilled in liters
+        fuel_drain:
+          type: number
+          format: float
+          minimum: 0
+          example: 0
+          description: Fuel drained in liters
+        fuel_consumption(l):
+          type: number
+          format: float
+          example: 10.2
+          description: Total fuel consumption in liters
+        fuel_consumption(l/100km):
+          type: number
+          format: float
+          example: 10.2
+          description: Fuel consumption per 100 km (can be number or dash for no data)
+        fuel_consumption_norm(l):
+          type: number
+          format: float
+          example: 10.2
+          description: Normalized fuel consumption in liters (can be number or dash
+            for no data)
+        fuel_consumption_norm(l/100km):
+          type: number
+          format: float
+          example: 10.2
+          description: Normalized fuel consumption per 100 km
+        motohours:
+          type: integer
+          minimum: 0
+          example: 0
+          description: Engine running time in hours
+        imei:
+          type: string
+          example: 866795036141404
+          description: Vehicle device IMEI number
+        id:
+          type: integer
+          example: 196
+          description: Vehicle Agent ID
+      required:
+        - full_mileage
+        - fuel_start
+        - fuel_stop
+        - fuel_fill
+        - fuel_drain
+        - fuel_consumption(l)
+        - fuel_consumption(l/100km)
+        - fuel_consumption_norm(l)
+        - fuel_consumption_norm(l/100km)
+        - motohours
+    VehicleStatus:
+      type: object
+      properties:
+        unixtimestamp:
+          type: integer
+          format: int64
+        lat:
+          type: number
+        lon:
+          type: number
+        speed:
+          type: number
+        dir:
+          type: integer
+        alt:
+          type: integer
+        satsinview:
+          type: integer
+        sensors_status:
+          type: array
+          items:
+            $ref: '#/components/schemas/SensorStatus'
+    SensorStatus:
+      type: object
+      properties:
+        name:
+          type: string
+          example: Axle load #2
+        id:
+          type: integer
+          example: 940
+        hum_value:
+          type: string
+          example: '14356.5 kg'
+        dig_value:
+          type: number
+          format: float
+          example: 14356.5
+        raw_value:
+          type: string
+          example: '14356.5'
+        change_ts:
+          type: integer
+          format: int64
+          example: 1763633148
+        group:
+          type: string
+          example: 'Weight'
+    InstantStatusResponse:
+      allOf:
+        - $ref: '#/components/schemas/OkResponse'
+        - type: object
+          properties:
+            imei:
+              type: string
+            ts:
+              type: integer
+              format: int64
+            odometer:
+              type: number
+            fuel_level:
+              type: number
+    TrackResponse:
+      allOf:
+        - $ref: '#/components/schemas/OkResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                fences:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/ZoneMessage'
+                tracks:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/TrackPoint'
+                equipment:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Equipment'
+    ZoneMessage:
+      type: object
+      properties:
+        ts:
+          type: integer
+          format: int64
+          example: 1763574959
+          description: Timestamp
+        id:
+          type: integer
+          example: 10484
+          description: Start user ID
+        name:
+          type: string
+          example: "REGION"
+          description: Start name/region
+        lat:
+          type: number
+          format: float
+          example: 55.420689
+          description: Latitude coordinate
+        lon:
+          type: number
+          format: float
+          example: 37.511608
+          description: Longitude coordinate
+        msgtype:
+          type: integer
+          example: 1
+          description: Message type 1 - Enter 2 - Exit
+    TrackPoint:
+      type: object
+      properties:
+        avgspeed:
+          type: integer
+          example: 25
+          description: Average speed
+        length:
+          type: number
+          format: float
+          example: 77.9
+          description: Track length
+        maxspeed:
+          type: integer
+          example: 67
+          description: Maximum speed
+        lat_end:
+          type: string
+          example: "55.470051"
+          description: End latitude
+        lat_start:
+          type: string
+          example: "55.470127"
+          description: Start latitude
+        lon_end:
+          type: string
+          example: "37.571861"
+          description: End longitude
+        lon_start:
+          type: string
+          example: "37.571964"
+          description: Start longitude
+        ts:
+          type: integer
+          format: int64
+          example: 1763557029
+          description: Start timestamp
+        te:
+          type: integer
+          format: int64
+          example: 1763577137
+          description: End timestamp
+        eco:
+          type: array
+          items:
+            type: object
+          description: Eco data (empty in example)
+    TrackGeoPoint:
+      type: object
+      properties:
+        avgspeed:
+          type: integer
+          example: 25
+          description: Average speed
+        length:
+          type: number
+          format: float
+          example: 77.9
+          description: Track length
+        maxspeed:
+          type: integer
+          example: 67
+          description: Maximum speed
+        lat_end:
+          type: string
+          example: "55.470051"
+          description: End latitude
+        lat_start:
+          type: string
+          example: "55.470127"
+          description: Start latitude
+        lon_end:
+          type: string
+          example: "37.571861"
+          description: End longitude
+        lon_start:
+          type: string
+          example: "37.571964"
+          description: Start longitude
+        ts:
+          type: integer
+          format: int64
+          example: 1763557029
+          description: Start timestamp
+        te:
+          type: integer
+          format: int64
+          example: 1763577137
+          description: End timestamp
+        geo_start:
+          type: object
+          $ref: '#/components/schemas/Address'
+          description: Start address object
+        geo_end:
+          type: object
+          $ref: '#/components/schemas/Address'
+          description: End address object
+    Address:
+      type: object
+      properties:
+        street:
+          type: string
+          example: 'Lenina street'
+        city:
+          type: string
+          example: Podolsk
+        house:
+          type: string
+          example: 'Podolsk Urban Okrug'
+        state:
+          type: string
+          example: Moscow Oblast
+        region:
+          type: string
+          example: 'Central Federal District'
+        postcode:
+          type: string
+          example: 142100
+        country:
+          type: string
+          example: Russia
+        country_code:
+          type: string
+          example: ru
+    Equipment:
+      type: object
+      properties:
+        sensor_id:
+          type: integer
+          example: 940
+          description: Sensor ID
+        name:
+          type: string
+          example: "Axle load #2"
+          description: Sensor name
+        ts:
+          type: integer
+          format: int64
+          example: 1763574959
+          description: Start Timestamp
+        te:
+          type: integer
+          format: int64
+          example: 1763574959
+          description: End Timestamp
+
+    TrackGeoResponse:
+      allOf:
+        - $ref: '#/components/schemas/OkResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/TrackGeoPoint'
+    Parking:
+      type: object
+      properties:
+        ts:
+          type: integer
+          format: int64
+          example: 1763574959
+          description: Start timestamp
+        te:
+          type: integer
+          format: int64
+          example: 1763574959
+          description: End timestamp
+        lat:
+          type: number
+          example: 55.420689
+          description: Latitude coordinate
+        lon:
+          type: number
+          example: 37.511608
+          description: Longitude coordinate
+        duration:
+          type: integer
+          example: 120
+          description: Parking duration in seconds
+        address:
+          $ref: '#/components/schemas/Address'
+    ParkingSimple:
+      type: object
+      properties:
+        ts:
+          type: integer
+          format: int64
+          example: 1763574959
+          description: Start timestamp
+        te:
+          type: integer
+          format: int64
+          example: 1763574959
+          description: End timestamp
+        lat:
+          type: number
+          example: 55.420689
+          description: Latitude coordinate
+        lon:
+          type: number
+          example: 37.511608
+          description: Longitude coordinate
+        can:
+          type: number
+          example: 1202.2
+          description: CAN odometer value
+        gps:
+          type: number
+          example: 1202.2
+          description: GPS odometer value
+    TrackStopsResponse:
+      allOf:
+        - $ref: '#/components/schemas/OkResponse'
+        - type: object
+          properties:
+            stops:
+              type: array
+              items:
+                $ref: '#/components/schemas/Parking'
+            parkings:
+              type: array
+              items:
+                $ref: '#/components/schemas/Parking'
+    RouteSummaryResponse:
+      allOf:
+        - $ref: '#/components/schemas/OkResponse'
+        - type: object
+          properties:
+            summary:
+              type: object
+              additionalProperties: true
+    TripsResponse:
+      allOf:
+        - $ref: '#/components/schemas/OkResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                ts:
+                  type: integer
+                  example: 1763574959
+                te:
+                  type: integer
+                  example: 1763574959
+                can:
+                  type: number
+                  example: 120
+                gps:
+                  type: number
+                  example: 120
+                maxspeed:
+                  type: integer
+                  example: 99
+                avgspeed:
+                  type: number
+                  example: 76
+                lat_start:
+                  type: number
+                  example: 55.420689
+                lon_start:
+                  type: number
+                  example: 37.511608
+                lat_end:
+                  type: number
+                  example: 55.420689
+                lon_end:
+                  type: number
+                  example: 37.511608
+                can_start:
+                  type: number
+                  example: 1234.3
+                  description: Start CAN value
+                can_end:
+                  type: number
+                  example: 1234.3
+                  description: End CAN value
+                gps_start:
+                  type: number
+                  example: 1234.3
+                  description: Start GPS value
+                gps_end:
+                  type: number
+                  example: 1234.3
+                  description: End GPS value
+                parkings:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/ParkingSimple'
+
+    SensorsHistoryResponse:
+      allOf:
+        - $ref: '#/components/schemas/OkResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                    example: 940
+                    description: Sensor ID
+                  agent_id:
+                    type: integer
+                    example: 196
+                    description: Agent ID
+                  imei:
+                    type: string
+                    example: 359710080000000
+                    description: IMEI
+                  name:
+                    type: string
+                    example: "Ignition"
+                    description: Sensor name
+                  description:
+                    type: string
+                    example: "Ignition"
+                    description: Sensor description
+                  fieldname:
+                    type: string
+                    example: "DIS1"
+                    description: Field name
+                  function:
+                    type: string
+                    example: "Ignition"
+                    description: Sensor Function
+                  work:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        ts:
+                          type: integer
+                          format: int64
+                          description: Timestamp
+                          example: 1763574959
+                        te:
+                          type: integer
+                          format: int64
+                          description: Timestamp
+                          example: 1763574959
+                        lat_start:
+                          type: number
+                          example: 55.420689
+                        lon_start:
+                          type: number
+                          example: 37.511608
+                        lat_end:
+                          type: number
+                          example: 55.420689
+                        lon_end:
+                          type: number
+                          example: 37.511608
+
+    DiscreteSensorHistoryResponse:
+      allOf:
+        - $ref: '#/components/schemas/OkResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                    example: 940
+                    description: Sensor ID
+                  agent_id:
+                    type: integer
+                    example: 196
+                    description: Agent ID
+                  imei:
+                    type: string
+                    example: 359710080000000
+                    description: IMEI
+                  name:
+                    type: string
+                    example: "Engine temperature"
+                    description: Sensor name
+                  description:
+                    type: string
+                    example: "Engine temperature"
+                    description: Sensor description
+                  fieldname:
+                    type: string
+                    example: "engine_temp"
+                    description: Field name
+                  function:
+                    type: string
+                    example: "Special sensor"
+                    description: Sensor Function
+                  work:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        ts:
+                          type: integer
+                          format: int64
+                          description: Timestamp
+                          example: 1763574959
+                        value:
+                          type: number
+                          description: Sensor Value
+                          example: 12.44
+                        speed:
+                          type: integer
+                          description: Speed
+                          example: 92
+
+    RawEventsResponse:
+      allOf:
+        - $ref: '#/components/schemas/OkResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                count:
+                  type: integer
+                  description: Count of events
+                  example: 10
+                agent_id:
+                  type: integer
+                  description: Agent ID
+                  example: 196
+                imei:
+                  type: string
+                  description: IMEI
+                  example: 359710080000000
+                raw:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      ts:
+                        type: integer
+                        format: int64
+                        example: 1763574959
+                        description: Timestamp
+                      lat:
+                        type: number
+                        example: 55.420689
+                        description: Latitude coordinate
+                      lon:
+                        type: number
+                        example: 37.511608
+                        description: Longitude coordinate
+                      speed:
+                        type: number
+                        example: 120
+                        description: Speed
+                      sat:
+                        type: integer
+                        example: 12
+                        description: Satellites
+                      alt:
+                        type: number
+                        example: 130
+                        description: Altitude
+
+    DataQualityResponse:
+      allOf:
+        - $ref: '#/components/schemas/OkResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                ts:
+                  type: integer
+                  format: int64
+                te:
+                  type: integer
+                  format: int64
+                vehicles:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/DataQualityVehicle'
+    DataQualityVehicle:
+      type: object
+      properties:
+        agent_id:
+          type: integer
+          example: 196
+        imei:
+          type: string
+          nullable: true
+          example: 359710080000000
+        quality_score:
+          type: integer
+          example: 87
+        status:
+          type: string
+          enum: [ok, warning, bad, no_data]
+        summary:
+          type: object
+          description: Aggregated quality metrics with readable keys.
+        thresholds:
+          type: object
+          description: Thresholds used for calculation.
+        issues:
+          type: array
+          items:
+            type: object
+          description: Decoded issues intersecting the requested period.
+        days:
+          type: array
+          items:
+            type: object
+          description: Per-day source rows used for the response.
+
+    PassengerCounterResponse:
+      allOf:
+        - $ref: '#/components/schemas/OkResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                type: object
+                properties:
+                  agent_id:
+                    type: integer
+                    description: Agent ID
+                    example: 196
+                  plate:
+                    type: string
+                    description: Plate
+                    example: AA123BB
+
+                  stops:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        ts:
+                          type: integer
+                          format: int64
+                          description: Timestamp
+                          example: 1763574959
+                        door_id:
+                          type: integer
+                          description: Door ID
+                          example: 1
+
+                        p_in:
+                          type: integer
+                          description: Passengers in
+                          example: 1
+                        p_out:
+                          type: integer
+                          description: Passengers out
+                          example: 2
+
+                        busline_id:
+                          type: integer
+                          description: Busline ID
+                          example: 14
+                        lat:
+                          type: number
+                          example: 55.420689
+                          description: Latitude coordinate
+                        lon:
+                          type: number
+                          example: 37.511608
+                          description: Longitude coordinate
+
+    EcoDriveResponse:
+      allOf:
+        - $ref: '#/components/schemas/OkResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                agent_id:
+                  type: integer
+                  description: Agent ID
+                  example: 196
+                imei:
+                  type: string
+                  description: IMEI
+                  example: 359710080000000
+                plate:
+                  type: string
+                  description: Plate
+                  example: AA123BB
+                vehicle_type:
+                  type: string
+                  description: Vehicle type
+                  example: Bus
+                data:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      ts:
+                        type: integer
+                        format: int64
+                        description: Timestamp
+                        example: 1763574959
+                      te:
+                        type: integer
+                        format: int64
+                        description: Timestamp
+                        example: 1763574959
+                      distance:
+                        type: number
+                        description: Distance
+                        example: 202.8,
+                      eco_data:
+                        type: object
+                        additionalProperties: true
+                        description: Eco data
+
+    FuelDetailsResponse:
+      allOf:
+        - $ref: '#/components/schemas/OkResponse'
+        - type: object
+          properties:
+            imei:
+              type: string
+            agent_id:
+              oneOf:
+                - type: integer
+                - type: string
+            fuel:
+              oneOf:
+                - type: object
+                  additionalProperties: true
+                - type: array
+                  items:
+                    type: object
+                    additionalProperties: true
+    FuelConsumptionResponse:
+      allOf:
+        - $ref: '#/components/schemas/OkResponse'
+        - type: object
+          properties:
+            consumption:
+              type: object
+              additionalProperties: true
+    OdoAndFuelResponse:
+      allOf:
+        - $ref: '#/components/schemas/OkResponse'
+        - type: object
+          properties:
+            imei:
+              type: string
+            agent_id:
+              oneOf:
+                - type: integer
+                - type: string
+            points:
+              type: array
+              items:
+                type: object
+                additionalProperties: true
+    IButtonHistoryResponse:
+      allOf:
+        - $ref: '#/components/schemas/OkResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/IButtonEvent'
+    IButtonEvent:
+      type: object
+      properties:
+        ts:
+          type: integer
+          format: int64
+        ibutton:
+          type: string
+        driver_id:
+          type: integer
+    CreateTempLinkResponse:
+      allOf:
+        - $ref: '#/components/schemas/OkResponse'
+        - type: object
+          properties:
+            data:
+              type: string
+              format: uri
+    GeofencesListResponse:
+      allOf:
+        - $ref: '#/components/schemas/OkResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/Geofence'
+    Geofence:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+          description: Zone name
+          example: "Zone 1"
+        type:
+          type: string
+          description: Zone type
+          example: "polygon"
+        color:
+          type: string
+          description: Color
+          example: "#FF0000"
+        created_at:
+          type: integer
+          format: int64
+          description: Created at
+          example: 1763574959
+        updated_at:
+          type: integer
+          format: int64
+          description: Updated at
+          example: 1763574959
+        info:
+          type: string
+          description: Info
+          example: "Zone 1 information"
+        group_name:
+          type: string
+          description: Group name
+          example: "Group 1"
+        group_id:
+          type: integer
+          description: Group ID
+          example: 33
+        points:
+          type: array
+          items:
+            type: array
+            items:
+              type: number
+              format: float
+              example: 50.758124
+            minItems: 2
+            maxItems: 2
+            description: Array of [latitude, longitude] coordinate pairs
+          description: Geographic points defining the zone polygon
+
+    GeofenceAdd:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [ 'polygon', 'circle', 'line' ]
+          description: Geofence type
+        name:
+          type: string
+          description: Zone name
+          example: "Zone 1"
+        color:
+          type: string
+          description: Color
+          example: "#FF0000"
+        info:
+          type: string
+          description: Info
+          example: "Zone 1 information"
+        group_name:
+          type: string
+          description: Group name
+          example: "Group 1"
+        points:
+          description: Geofence coordinates
+          oneOf:
+            - title: Polygon points
+              type: array
+              items:
+                type: array
+                items:
+                  type: number
+                minItems: 2
+                maxItems: 2
+              minItems: 3
+              example: [ [ 47.2164,39.7063 ],[ 47.2166,39.7073 ],[ 47.2159,39.7076 ],[ 47.2157,39.7066 ] ]
+            - title: Circle points
+              type: array
+              items:
+                type: number
+              minItems: 3
+              maxItems: 3
+              example: [ 47.2164, 39.7063, 150 ]
+            - title: Line points
+              type: array
+              items:
+                type: array
+                items:
+                  type: number
+                minItems: 2
+                maxItems: 2
+              minItems: 2
+              example: [ [ 47.2164,39.7063 ],[ 47.2166,39.7073 ] ]
+        width:
+          type: number
+          default: 10
+          minimum: 1
+          description: Line width
+
+      required: [ 'name', 'type', 'group_name', 'points' ]
+    GeofenceCreateResponse:
+      allOf:
+        - $ref: '#/components/schemas/OkResponse'
+        - type: object
+          properties:
+            id:
+              type: integer
+    GeoVisitsResponse:
+      allOf:
+        - $ref: '#/components/schemas/OkResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                type: object
+                properties:
+                  agent_id:
+                    type: integer
+                    description: Agent ID
+                    example: 196
+                  imei:
+                    type: string
+                    description: IMEI
+                    example: 359710080000000
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/GeoFenceVisit'
+
+    GeoFenceVisit:
+      type: object
+      properties:
+        group_name:
+          type: string
+          description: Group name
+          example: "Group 1"
+        name:
+          type: string
+          description: Geofence name
+          example: "City"
+        ts:
+          type: integer
+          format: int64
+          description: Start Timestamp
+          example: 1763651294
+        te:
+          type: integer
+          format: int64
+          description: End Timestamp
+          example: 1763652766
+    ZonesMileageResponse:
+      allOf:
+        - $ref: '#/components/schemas/OkResponse'
+        - type: object
+          properties:
+            mileage:
+              type: array
+              items:
+                type: object
+                properties:
+                  fence_id:
+                    type: integer
+                  imei:
+                    type: string
+                  distance:
+                    type: number
+    FuelStationsResponse:
+      allOf:
+        - $ref: '#/components/schemas/OkResponse'
+        - type: object
+          properties:
+            stations:
+              type: array
+              items:
+                $ref: '#/components/schemas/FuelStation'
+    FuelStation:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        lat:
+          type: number
+        lon:
+          type: number
+    FuelTransactionCreateRequest:
+      type: object
+      required:
+        - card_num
+        - operation
+        - unixtimestamp
+        - place
+        - azs
+        - liters
+        - fuel
+        - price
+        - sum
+      properties:
+        card_num:
+          type: string
+        operation:
+          type: string
+        unixtimestamp:
+          type: integer
+          format: int64
+        place:
+          type: string
+        azs:
+          type: string
+        liters:
+          type: number
+        fuel:
+          type: string
+        price:
+          type: number
+        sum:
+          type: number
+        priceg:
+          type: number
+        sumg:
+          type: number
+        driver:
+          type: string
+        lat:
+          type: number
+        lon:
+          type: number
+        info:
+          type: string
+        internal_id:
+          type: string
+    FuelTransactionCreateResponse:
+      allOf:
+        - $ref: '#/components/schemas/OkResponse'
+    IButtonListResponse:
+      allOf:
+        - $ref: '#/components/schemas/OkResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/IButton'
+    IButton:
+      type: object
+      properties:
+        id:
+          type: integer
+        code:
+          type: string
+        driver_id:
+          type: integer
+    DriversListResponse:
+      allOf:
+        - $ref: '#/components/schemas/OkResponse'
+        - type: object
+          properties:
+            drivers:
+              type: array
+              items:
+                $ref: '#/components/schemas/Driver'
+    Driver:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        phone:
+          type: string
+        description:
+          type: string
+        license:
+          type: string
+        email:
+          type: string
+    DriverCreateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        code:
+          type: string
+        description:
+          type: string
+        phone:
+          type: string
+        license:
+          type: string
+        email:
+          type: string
+        access:
+          type: array
+          items:
+            type: integer
+    DriverCreateResponse:
+      allOf:
+        - $ref: '#/components/schemas/OkResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              additionalProperties: true
+    VehicleCommandRequest:
+      type: object
+      required:
+        - template_name
+      properties:
+        template_name:
+          type: string
+          example: engine_block
+        params:
+          type: object
+          additionalProperties: true
+    VehicleCommandResponse:
+      allOf:
+        - $ref: '#/components/schemas/OkResponse'
+        - type: object
+          properties:
+            imei:
+              type: string
+            agent_id:
+              oneOf:
+                - type: integer
+                - type: string
+            command_id:
+              type: integer
+              nullable: true
+    VehicleCommandStatusResponse:
+      allOf:
+        - $ref: '#/components/schemas/OkResponse'
+        - type: object
+          properties:
+            imei:
+              type: string
+            agent_id:
+              oneOf:
+                - type: integer
+                - type: string
+            command_id:
+              type: integer
+            status:
+              oneOf:
+                - type: string
+                - type: array
+                  items:
+                    type: object
+                    additionalProperties: true
+                - type: object
+                  additionalProperties: true
+            finished:
+              type: boolean
+    StationForecastResponse:
+      allOf:
+        - $ref: '#/components/schemas/OkResponse'
+        - type: object
+          properties:
+            arrivals:
+              type: array
+              items:
+                type: object
+                additionalProperties: true
+    DriverActivityResponse:
+      allOf:
+        - $ref: '#/components/schemas/OkResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                type: object
+                properties:
+                  driver_id:
+                    type: integer
+                    example: 196
+                  agent_id:
+                    type: integer
+                    example: 221
+                  ts:
+                    type: integer
+                    format: int64
+                    example: 1763651294
+                  te:
+                    type: integer
+                    format: int64
+                    example: 1763652766
+                  ibutton:
+                    type: string
+                    example: "12345678901234567890"
+                  veniclenumber:
+                    type: string
+                    example: "k860sd177"
+                  name:
+                    type: string
+                    example: "Mark Twain"
+
+    NotificationsResponse:
+      allOf:
+        - $ref: '#/components/schemas/OkResponse'
+        - type: object
+          properties:
+            notifications:
+              type: array
+              items:
+                $ref: '#/components/schemas/Notification'
+    Notification:
+      type: object
+      properties:
+        ts:
+          type: integer
+          format: int64
+        imei:
+          type: string
+        type:
+          type: string
+        text:
+          type: string
+    LiveEventsResponse:
+      allOf:
+        - $ref: '#/components/schemas/OkResponse'
+        - type: object
+          properties:
+            events:
+              type: array
+              items:
+                type: object
+
+    AccountsListResponse:
+      allOf:
+        - $ref: '#/components/schemas/OkResponse'
+        - type: object
+          properties:
+            accounts:
+              type: array
+              items:
+                $ref: '#/components/schemas/Account'
+    Account:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 42
+        org_name:
+          type: string
+          example: Acme Corp
+        org_type:
+          type: string
+          nullable: true
+        balance:
+          type: number
+          example: 1500.00
+        acc_deposit:
+          type: number
+          nullable: true
+        comment:
+          type: string
+          nullable: true
+        inn:
+          type: string
+          nullable: true
+        kpp:
+          type: string
+          nullable: true
+        bill_email:
+          type: string
+          nullable: true
+        bill_phone:
+          type: string
+          nullable: true
+        active:
+          type: integer
+          description: Account status (1 = active, 0 = inactive)
+          example: 1
+
+    AccountUsersResponse:
+      allOf:
+        - $ref: '#/components/schemas/OkResponse'
+        - type: object
+          properties:
+            users:
+              type: array
+              items:
+                $ref: '#/components/schemas/AccountUser'
+    AccountUser:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 7
+        name:
+          type: string
+          example: John Smith
+        login:
+          type: string
+          example: jsmith
+        info:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        lang:
+          type: string
+          example: en
+        roleid:
+          type: integer
+          example: 1
+        msisdn:
+          type: string
+          nullable: true
+
+    VehicleServicesResponse:
+      allOf:
+        - $ref: '#/components/schemas/OkResponse'
+        - type: object
+          properties:
+            services:
+              type: array
+              items:
+                $ref: '#/components/schemas/VehicleService'
+    VehicleService:
+      type: object
+      properties:
+        moment:
+          type: string
+          format: date-time
+          example: '2026-03-15T10:00:00'
+        description:
+          type: string
+          example: Oil change
+        person:
+          type: string
+          example: John Smith
+    VehicleServiceAddRequest:
+      type: object
+      required:
+        - moment
+        - description
+        - person
+      properties:
+        moment:
+          type: string
+          format: date-time
+          description: Service date/time
+          example: '2026-03-15T10:00:00'
+        description:
+          type: string
+          description: Service description
+          example: Oil change
+        person:
+          type: string
+          description: Person responsible
+          example: John Smith
+
+    ReferencePricesResponse:
+      allOf:
+        - $ref: '#/components/schemas/OkResponse'
+        - type: object
+          properties:
+            prices:
+              type: array
+              items:
+                $ref: '#/components/schemas/ReferencePrice'
+    ReferencePrice:
+      type: object
+      properties:
+        id:
+          type: integer
+        price:
+          type: number
+        descr:
+          type: string
+        currency:
+          type: integer
+        codea:
+          type: string
+          example: USD
+        coden:
+          type: string
+          example: '840'
+        name:
+          type: string
+          example: US Dollar
+
+    ReferenceModulesResponse:
+      allOf:
+        - $ref: '#/components/schemas/OkResponse'
+        - type: object
+          properties:
+            modules:
+              type: array
+              items:
+                $ref: '#/components/schemas/ReferenceModule'
+    ReferenceModule:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        descr:
+          type: string
+          nullable: true
+        master:
+          type: integer
+        paid:
+          type: boolean
+        price:
+          type: number
+          nullable: true
+        partner_price:
+          type: number
+          nullable: true
+        json_config:
+          type: string
+          nullable: true
+
+    ReferenceVehicleTypesResponse:
+      allOf:
+        - $ref: '#/components/schemas/OkResponse'
+        - type: object
+          properties:
+            types:
+              type: array
+              items:
+                $ref: '#/components/schemas/ReferenceVehicleType'
+    ReferenceVehicleType:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+
+    ReferenceVehicleModelsResponse:
+      allOf:
+        - $ref: '#/components/schemas/OkResponse'
+        - type: object
+          properties:
+            models:
+              type: array
+              items:
+                $ref: '#/components/schemas/ReferenceVehicleModel'
+    ReferenceVehicleModel:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        vendor:
+          type: string
+          nullable: true
+
+    PingResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          example: 0
+        msg:
+          type: string
+          example: pong
+
+    ReferenceTimezonesResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          example: 0
+        msg:
+          type: string
+          example: OK
+        timezones:
+          type: array
+          items:
+            $ref: '#/components/schemas/Timezone'
+    Timezone:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: Europe/Moscow
+        offset:
+          type: integer
+          description: UTC offset in minutes
+          example: 180
+
+    TagsListResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          example: 0
+        msg:
+          type: string
+          example: OK
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tag'
+    Tag:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 42
+        tag_name:
+          type: string
+          example: Fleet A
+        descr:
+          type: string
+          nullable: true
+          example: Main fleet group
+        color:
+          type: string
+          example: '#FF6600'
+
+    TagCreateRequest:
+      type: object
+      required:
+        - tag_name
+      properties:
+        tag_name:
+          type: string
+          example: Fleet A
+        color:
+          type: string
+          description: HEX color code
+          example: '#FF6600'
+        descr:
+          type: string
+          nullable: true
+          example: Main fleet group
+
+    TagCreateResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          example: 0
+        msg:
+          type: string
+          example: Tag created
+        tag:
+          $ref: '#/components/schemas/Tag'
+
+    TagUpdateRequest:
+      type: object
+      properties:
+        tag_name:
+          type: string
+          example: Fleet A Updated
+        color:
+          type: string
+          example: '#00AAFF'
+        descr:
+          type: string
+          nullable: true
+          example: Updated description
+
+    TagMapVehicleRequest:
+      type: object
+      required:
+        - tag_id
+        - agent_ids
+      properties:
+        tag_id:
+          type: integer
+          example: 42
+        agent_ids:
+          type: array
+          items:
+            type: integer
+          example:
+            - 1001
+            - 1002
+        unlink:
+          type: boolean
+          description: Set to true to remove the mapping instead of adding
+          example: false
+
+    GeofenceUpdateRequest:
+      type: object
+      required:
+        - zone_id
+      properties:
+        zone_id:
+          type: integer
+          description: Geofence ID
+          example: 5001
+        name:
+          type: string
+          description: New name for the geofence (optional)
+          example: Warehouse Zone
+        geometry:
+          type: object
+          description: |
+            GeoJSON-style geometry object.
+            For Polygon: `{"type":"Polygon","coordinates":[[lon,lat],...]}`.
+            For Circle: `{"type":"Circle","coordinates":[lon,lat],"radius":200}`.
+          properties:
+            type:
+              type: string
+              enum:
+                - Polygon
+                - Circle
+              example: Circle
+            coordinates:
+              type: array
+              items:
+                type: number
+              example:
+                - 37.6176
+                - 55.7558
+            radius:
+              type: integer
+              description: Radius in metres (Circle only)
+              example: 500
+
+    VehicleStatusByTimeResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          example: 0
+        msg:
+          type: string
+          example: OK
+        agent_id:
+          type: integer
+          example: 1001
+        ts:
+          type: integer
+          example: 1700000000
+        status:
+          type: string
+          enum:
+            - moving
+            - parked
+            - unknown
+          example: parked
+        lat:
+          type: number
+          nullable: true
+          example: 55.7558
+        lon:
+          type: number
+          nullable: true
+          example: 37.6176
+        speed:
+          type: number
+          nullable: true
+          example: 0
+        parked_for_seconds:
+          type: integer
+          nullable: true
+          description: Seconds parked (only when status=parked)
+          example: 3600
+        sensors:
+          type: array
+          items:
+            type: object
+
+    VehicleIdleResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          example: 0
+        msg:
+          type: string
+          example: OK
+        agent_id:
+          type: integer
+          example: 1001
+        ts:
+          type: integer
+          example: 1700000000
+        te:
+          type: integer
+          example: 1700086400
+        idles:
+          type: array
+          items:
+            $ref: '#/components/schemas/IdlePeriod'
+    IdlePeriod:
+      type: object
+      properties:
+        idle_start:
+          type: integer
+          description: Unix timestamp of idle start
+          example: 1700010000
+        idle_end:
+          type: integer
+          description: Unix timestamp of idle end
+          example: 1700013600
+        duration_seconds:
+          type: integer
+          description: Duration in seconds
+          example: 3600
+
+    VehicleMotorHoursResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          example: 0
+        msg:
+          type: string
+          example: OK
+        agent_id:
+          type: integer
+          example: 1001
+        sensor_id:
+          type: integer
+          nullable: true
+          example: null
+        ts:
+          type: integer
+          example: 1700000000
+        te:
+          type: integer
+          example: 1700086400
+        motor_hours_in_seconds:
+          type: number
+          format: float
+          example: 25200
+
+    DriverSearchResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          example: 0
+        msg:
+          type: string
+          example: OK
+        drivers:
+          type: array
+          items:
+            $ref: '#/components/schemas/DriverSearchItem'
+    DriverSearchItem:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 77
+        name:
+          type: string
+          example: John Doe
+        code:
+          type: string
+          example: DRV-001
+        description:
+          type: string
+          nullable: true
+          example: Senior driver
+        phone:
+          type: string
+          nullable: true
+          example: '+79001234567'
+        license:
+          type: string
+          nullable: true
+          example: AB 123456
+        email:
+          type: string
+          nullable: true
+          example: john.doe@example.com
+
+    WaybillListResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          example: 0
+        msg:
+          type: string
+          example: OK
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Waybill'
+    Waybill:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 100
+        ts:
+          type: integer
+          description: Start timestamp (unix)
+          example: 1700000000
+        te:
+          type: integer
+          description: End timestamp (unix)
+          example: 1700086400
+        agent_id:
+          type: integer
+          example: 1001
+        account_id:
+          type: integer
+          example: 200
+        waybill:
+          type: object
+          properties:
+            name:
+              type: string
+              example: Waybill #1
+
+    WaybillCreateRequest:
+      type: object
+      required:
+        - ts
+        - te
+        - name
+      properties:
+        ts:
+          type: integer
+          description: Start timestamp (unix)
+          example: 1700000000
+        te:
+          type: integer
+          description: End timestamp (unix)
+          example: 1700086400
+        name:
+          type: string
+          description: Waybill name
+          example: Waybill #1
+        agent_id:
+          type: integer
+          description: Vehicle agent ID (required if vehnum not provided)
+          example: 1001
+        vehnum:
+          type: string
+          description: Vehicle plate number (required if agent_id not provided)
+          example: A123BC
+
+    WaybillCreateResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          example: 0
+        msg:
+          type: string
+          example: Waybill created
+        data:
+          $ref: '#/components/schemas/Waybill'
+
+    WaybillDeleteRequest:
+      type: object
+      required:
+        - ts
+        - te
+      properties:
+        ts:
+          type: integer
+          description: Start timestamp (unix)
+          example: 1700000000
+        te:
+          type: integer
+          description: End timestamp (unix)
+          example: 1700086400
+        agent_id:
+          type: integer
+          description: Vehicle agent ID (required if vehnum not provided)
+          example: 1001
+        vehnum:
+          type: string
+          description: Vehicle plate number (required if agent_id not provided)
+          example: A123BC
+
+    UserCreateRequest:
+      type: object
+      required:
+        - login
+        - password
+        - name
+        - phone
+        - email
+        - role_id
+      properties:
+        login:
+          type: string
+          example: john.doe
+        password:
+          type: string
+          format: password
+          example: Secret123!
+        name:
+          type: string
+          example: John Doe
+        phone:
+          type: string
+          example: '+79001234567'
+        email:
+          type: string
+          format: email
+          example: john@example.com
+        role_id:
+          type: integer
+          description: "0 = Administrator, 1 = User, 2 = Logistic"
+          example: 1
+        description:
+          type: string
+          nullable: true
+          example: Fleet manager
+        history_days:
+          type: integer
+          description: Number of track history days available to the user
+          example: 30
+        vehicle_ids:
+          type: array
+          description: Array of veh.id values (NOT agentid)
+          items:
+            type: integer
+          example:
+            - 10
+            - 20
+
+    UserCreateResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          example: 0
+        msg:
+          type: string
+          example: User created
+        user_id:
+          type: integer
+          example: 555
+
+    UserGetResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          example: 0
+        msg:
+          type: string
+          example: OK
+        user:
+          type: object
+          properties:
+            id:
+              type: integer
+              example: 555
+            roleid:
+              type: integer
+              example: 1
+            name:
+              type: string
+              example: John Doe
+            email:
+              type: string
+              example: john@example.com
+            msisdn:
+              type: string
+              nullable: true
+              example: '+79001234567'
+            account_id:
+              type: integer
+              example: 200
+            lang:
+              type: string
+              nullable: true
+              example: en
+
+    UserUpdateAuthRequest:
+      type: object
+      required:
+        - login
+        - password
+      properties:
+        login:
+          type: string
+          example: john.doe.new
+        password:
+          type: string
+          format: password
+          example: NewSecret456!
+
+    UserUpdateVehiclesRequest:
+      type: object
+      required:
+        - vehicle_ids
+      properties:
+        vehicle_ids:
+          type: array
+          description: Array of veh.id values (NOT agentid). Replaces the full access list.
+          items:
+            type: integer
+          example:
+            - 10
+            - 20
+            - 30
+
+    UserFoldersResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        code:
+          type: integer
+          example: 0
+        msg:
+          type: string
+          example: OK
+        folders:
+          type: array
+          items:
+            type: object
+
+    UserUpdateFoldersRequest:
+      type: object
+      required:
+        - folder_ids
+      properties:
+        folder_ids:
+          type: array
+          items:
+            type: integer
+          example:
+            - 1
+            - 2
+
+    VehicleDistanceResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        code:
+          type: integer
+          example: 0
+        msg:
+          type: string
+          example: OK
+        distance:
+          type: object
+          description: Mileage calculation result from MileageCalculator
+
+    NearestVehiclesResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        code:
+          type: integer
+          example: 0
+        msg:
+          type: string
+          example: OK
+        group_id:
+          type: integer
+        group_name:
+          type: string
+        location:
+          type: object
+          properties:
+            latitude:
+              type: number
+            longitude:
+              type: number
+        radius_meters:
+          type: integer
+        vehicles_found:
+          type: integer
+        vehicles:
+          type: array
+          items:
+            type: object
+
+    VehiclePointsResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        code:
+          type: integer
+          example: 0
+        msg:
+          type: string
+          example: OK
+        imei:
+          type: string
+        points:
+          type: array
+          items:
+            type: object
+
+    AgEventsResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        code:
+          type: integer
+          example: 0
+        msg:
+          type: string
+          example: OK
+        vehicle:
+          type: object
+        events:
+          type: array
+          items:
+            type: object
+            properties:
+              ts:
+                type: integer
+              lat:
+                type: number
+              lon:
+                type: number
+              speed:
+                type: integer
+              sat:
+                type: integer
+              alt:
+                type: integer
+
+    ApprovedTracksResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        code:
+          type: integer
+          example: 0
+        msg:
+          type: string
+          example: OK
+        data:
+          type: object
+          properties:
+            approved:
+              type: array
+              items:
+                type: object
+            notapproved:
+              type: array
+              items:
+                type: object
+
+    ApprovedTracksSetRequest:
+      type: object
+      required:
+        - veh
+        - ts
+        - te
+      properties:
+        veh:
+          type: string
+          description: Vehicle plate number
+          example: A001AA77
+        ts:
+          type: integer
+          description: Period start (Unix timestamp)
+        te:
+          type: integer
+          description: Period end (Unix timestamp)
+
+    VehicleCustomFieldsRequest:
+      type: object
+      required:
+        - custom_fields
+      properties:
+        agent_id:
+          type: integer
+        imei:
+          type: string
+        custom_fields:
+          type: object
+          additionalProperties:
+            type: string
+          example:
+            color: red
+            department: logistics
+
+    VehicleMediaResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        code:
+          type: integer
+          example: 0
+        msg:
+          type: string
+          example: OK
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              agent_id:
+                type: integer
+              type_id:
+                type: integer
+              name:
+                type: string
+              unixtimestamp:
+                type: integer
+              descr:
+                type: string
+
+    VehicleFinesResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        code:
+          type: integer
+          example: 0
+        msg:
+          type: string
+          example: OK
+        data:
+          type: array
+          items:
+            type: object
+
+    GeofenceLinkVehicleRequest:
+      type: object
+      required:
+        - agent_id
+      properties:
+        zone_id:
+          type: integer
+          description: Zone ID (required if external_id not set)
+        external_id:
+          type: string
+          description: External zone ID (alternative to zone_id)
+        agent_id:
+          type: integer
+          description: Vehicle agent ID
+        idle:
+          type: integer
+          description: Idle alert threshold in minutes
+          default: 0
+        speedlimit:
+          type: integer
+          description: Speed limit alert in km/h
+          default: 0
+        alert:
+          type: integer
+          description: Alert type (0=none, 1=idle, 2=crossing, 3=both)
+          default: 0
+          enum:
+            - 0
+            - 1
+            - 2
+            - 3
+
+    GeofenceUnlinkVehicleRequest:
+      type: object
+      required:
+        - agent_id
+      properties:
+        zone_id:
+          type: integer
+        external_id:
+          type: string
+        agent_id:
+          type: integer
+
+    ContractLinkRequest:
+      type: object
+      required:
+        - plate_num
+        - date
+        - name
+        - distance
+      properties:
+        plate_num:
+          type: string
+          description: Vehicle plate number
+          example: A001AA77
+        date:
+          type: string
+          description: Contract start date (Y-m-d)
+          example: '2024-01-15'
+        name:
+          type: string
+          description: Contract ID/name
+          example: CONTRACT-2024-001
+        distance:
+          type: integer
+          description: Mileage limit in km
+          example: 10000
+
+    ContractUnlinkRequest:
+      type: object
+      required:
+        - plate_num
+      properties:
+        plate_num:
+          type: string
+          description: Vehicle plate number
+          example: A001AA77
+        date:
+          type: string
+          description: Contract end date (Y-m-d, defaults to now)
+          example: '2024-01-31'
+
+    RouteResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        code:
+          type: integer
+          example: 0
+        msg:
+          type: string
+          example: OK
+        data:
+          type: object
+          description: Raw HERE Maps v8 route response
+
+    ReportsListResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        code:
+          type: integer
+          example: 0
+        msg:
+          type: string
+          example: OK
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              name:
+                type: string
+              grp:
+                type: string
+
+    ReportRunRequest:
+      type: object
+      required:
+        - report_type
+        - start
+        - stop
+        - veh_id
+        - tz
+      properties:
+        report_type:
+          type: integer
+          description: Report type ID
+          example: 1
+        start:
+          type: integer
+          description: Period start (Unix timestamp)
+        stop:
+          type: integer
+          description: Period end (Unix timestamp)
+        veh_id:
+          type: string
+          description: Comma-separated vehicle IDs
+          example: '42,43'
+        explode:
+          type: integer
+          description: Split by vehicle (1=yes)
+          default: 0
+        group:
+          type: integer
+          description: Group by day (1=yes)
+          default: 0
+        tz:
+          type: string
+          description: Timezone name
+          example: Europe/Moscow
+        drivers_id:
+          type: string
+        zones_id:
+          type: string
+        tags:
+          type: string

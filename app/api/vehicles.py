@@ -440,6 +440,16 @@ async def vehicle_location(
                     "dig_value": s.get("dig_value"),
                     "hum_value": s.get("hum_value"),
                 })
+        if ts_int and vehicle.imei:
+            try:
+                inst = await ps.get_instant_status(token, node_id, vehicle.imei, ts_int)
+                if inst:
+                    iraw = inst.get("data") or inst
+                    odo = iraw.get("odometer")
+                    if odo is not None:
+                        sensor_list.append({"name": "Пробег", "dig_value": float(odo), "hum_value": None})
+            except Exception:
+                pass
         return JSONResponse({
             "lat": raw.get("lat"),
             "lon": raw.get("lon"),

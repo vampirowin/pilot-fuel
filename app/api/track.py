@@ -242,8 +242,10 @@ async def vehicle_points(
                     first_ts = sorted_pts[0].get("ts")
                     if first_ts:
                         status_data = await pilot.get_instant_status(token, node_id, vehicle.imei, first_ts)
-                        if status_data and status_data.get("odometer") is not None:
-                            base_odo = float(status_data["odometer"])
+                        raw = status_data.get("data") if status_data else None
+                        if raw is None: raw = status_data
+                        if raw and raw.get("odometer") is not None:
+                            base_odo = float(raw["odometer"])
                             cum_dist = 0.0
                             prev = None
                             for pt in sorted_pts:
