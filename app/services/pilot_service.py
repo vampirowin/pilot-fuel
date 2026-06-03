@@ -528,6 +528,22 @@ class PilotService:
         except PilotAuthError:
             return []
 
+    async def get_instant_status(
+        self, token: str, node_id: int,
+        imei: str, ts: int,
+    ) -> dict | None:
+        """
+        Одометр и уровень топлива в конкретный момент времени.
+
+        GET /api/v3/vehicles/instant-status?imei={imei}&ts={ts}
+        Response: {code, msg, odometer, fuel_level, ts, imei}
+        """
+        path = f"/api/v3/vehicles/instant-status?imei={imei}&ts={ts}"
+        try:
+            return await self._request("GET", path, token=token, node_id=node_id)
+        except PilotAuthError:
+            return None
+
     async def get_track(
         self, token: str, node_id: int,
         imei: str, agent_id: int, ts_from: int, ts_to: int,

@@ -26,7 +26,9 @@
 
 7. **Fix root causes** — don't paper over errors with try/except or fallbacks.
 
-8. **Database safety** — use the `pilot_fuel` database. Never modify `ural_monitor` or `lapa59_db`.
+8. **Pilot API reference** — when adding new Pilot API functions, always check `v3.en.yaml` in the project root for endpoint params, schemas, and response formats.
+
+9. **Database safety** — use the `pilot_fuel` database. Never modify `ural_monitor` or `lapa59_db`.
 
 ## Tech Stack
 - FastAPI (async) + SQLAlchemy 2.0 (async) + Alembic
@@ -40,12 +42,14 @@
 - `run.py` — app entry point
 - `app/config.py` — configuration
 - `app/services/pilot_service.py` — async Pilot API client
-- `docs/pilot-api-v3.yaml` — Pilot GPS API v3 OpenAPI spec (reference for endpoint params/responses)
+- `v3.en.yaml` — Pilot GPS API v3 OpenAPI spec (reference for endpoint params/responses)
+- `REUSE_GUIDE.md` — reusable code patterns (Pilot API calls, sensor matching, etc.)
 
 ## Pilot API v3 — Sensor Endpoints (used in track map)
 - `GET /api/v3/vehicles/status` — current position + all sensor values (`sensors[]` with `name, dig_value, hum_value`)
 - `GET /api/v3/vehicles/sensors/dip` — analog sensor history for period
 - `GET /api/v3/vehicles/sensors/discrete` — discrete sensor history for period
-- `GET /api/v3/vehicles/instant-status?imei=...&ts=...` — fuel_level + odometer at a timestamp
+- `GET /api/v3/vehicles/instant-status?imei=...&ts=...` — odometer + fuel_level at a timestamp
 - `GET /api/v3/vehicles/status-by-time?agent_id=...&ts=...` — sensor snapshot at a timestamp
 - `GET /api/v3/vehicles/events/raw` — raw GPS points (lat, lon, ts, speed, sat, alt)
+- `GET /api/v3/vehicles/odo-fuel?imei=...&agent_id=...&ts=...&te=...` — odometer + fuel points for a period

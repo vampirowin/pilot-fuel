@@ -1,3 +1,4 @@
+import math
 import zoneinfo
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Request, Depends, Query, HTTPException
@@ -184,9 +185,14 @@ async def vehicle_points(
                 vals = []
                 for w in s.get("work", []):
                     ts = w.get("ts")
-                    val = w.get("value") or (w.get("te") if w.get("ts") == w.get("te") else None)
-                    if ts and val is not None:
-                        vals.append({"ts": ts, "value": float(val)})
+                    te = w.get("te")
+                    val = w.get("value")
+                    if val is not None:
+                        if ts:
+                            vals.append({"ts": ts, "value": float(val)})
+                    elif ts and te:
+                        vals.append({"ts": ts, "value": 1.0})
+                        vals.append({"ts": te, "value": 0.0})
                 if vals:
                     vals.sort(key=lambda x: x["ts"])
                     sensor_map[sid] = {"name": name, "values": vals}
@@ -228,6 +234,31 @@ async def vehicle_points(
                         pt_sensors[str(sid)] = nearest["value"]
                 pt["sensors"] = pt_sensors
             sensors_info = [{"id": sid, "name": sdata2["name"]} for sid, sdata2 in sensor_map.items()]
+
+            # Пробег (одометр) — через instant-status для первой точки + cumulative haversine
+            if points and vehicle.imei:
+                try:
+                    sorted_pts = sorted(points, key=lambda p: p.get("ts", 0))
+                    first_ts = sorted_pts[0].get("ts")
+                    if first_ts:
+                        status_data = await pilot.get_instant_status(token, node_id, vehicle.imei, first_ts)
+                        if status_data and status_data.get("odometer") is not None:
+                            base_odo = float(status_data["odometer"])
+                            cum_dist = 0.0
+                            prev = None
+                            for pt in sorted_pts:
+                                if prev is not None:
+                                    dlat = math.radians(float(pt["lat"]) - float(prev["lat"]))
+                                    dlon = math.radians(float(pt["lon"]) - float(prev["lon"]))
+                                    a = math.sin(dlat / 2) ** 2 + math.cos(math.radians(float(prev["lat"]))) * math.cos(math.radians(float(pt["lat"]))) * math.sin(dlon / 2) ** 2
+                                    cum_dist += 6371 * 2 * math.asin(math.sqrt(a))
+                                if pt.get("sensors") is None:
+                                    pt["sensors"] = {}
+                                pt["sensors"]["_mileage"] = round(base_odo + cum_dist, 1)
+                                prev = pt
+                            sensors_info.append({"id": "_mileage", "name": "Пробег"})
+                except Exception:
+                    pass
         except Exception:
             pass
 
