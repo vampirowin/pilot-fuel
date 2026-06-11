@@ -702,19 +702,7 @@ async def sync_refuels(
     return HTMLResponse(html)
 
 
-@router.post("/api/refuels/sync/preview", response_class=HTMLResponse)
-async def sync_refuels_preview(
-    request: Request,
-    user=Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    days: int = Query(default=7),
-    date_from: str = Form(default=None),
-    date_to: str = Form(default=None),
-    vehicle_id: str | None = Form(default=None),
-    conflict_actions: str = Form(default="{}"),
-    confirmed: str = Form(default="0"),
-    force: str = Form(default="0"),
-):
+async def _prepare_sync_context(user, db, request, date_from, date_to, days, vehicle_id) -> tuple:
     if user.role not in ("superadmin", "company_admin"):
         raise HTTPException(status_code=403)
 
@@ -750,22 +738,55 @@ async def sync_refuels_preview(
     if vehicle_id:
         q = q.where(Vehicle.id == int(vehicle_id))
     vehicles = (await db.execute(q)).scalars().all()
+
     site_ids = {v.site_id for v in vehicles if v.site_id}
     sites = {}
     if site_ids:
         for s in (await db.execute(select(Site).where(Site.id.in_(site_ids)))).scalars().all():
             sites[s.id] = s.name
+
     if not vehicles:
-        return HTMLResponse('<div class="modal-overlay" onclick="if(event.target===this)this.remove()"><div class="modal"><div class="modal-body"><div class="empty-state"><p>Нет ТС для синхронизации.</p></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="this.closest(\'.modal-overlay\').remove()">Закрыть</button></div></div></div>')
+        return None, HTMLResponse('<div class="modal-overlay" onclick="if(event.target===this)this.remove()"><div class="modal"><div class="modal-body"><div class="empty-state"><p>Нет ТС для синхронизации.</p></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="this.closest(\'.modal-overlay\').remove()">Закрыть</button></div></div></div>')
 
     veh_ids = [v.pilot_agent_id for v in vehicles if v.pilot_agent_id]
     if not veh_ids:
-        return HTMLResponse('<div class="modal-overlay" onclick="if(event.target===this)this.remove()"><div class="modal"><div class="modal-body"><div class="empty-state"><p>Нет ТС с agent_id.</p></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="this.closest(\'.modal-overlay\').remove()">Закрыть</button></div></div></div>')
+        return None, HTMLResponse('<div class="modal-overlay" onclick="if(event.target===this)this.remove()"><div class="modal"><div class="modal-body"><div class="empty-state"><p>Нет ТС с agent_id.</p></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="this.closest(\'.modal-overlay\').remove()">Закрыть</button></div></div></div>')
 
     try:
         all_events = await pilot.fetch_refuel_reports_batch(token, node_id, veh_ids, start_str, stop_str)
     except Exception as e:
-        return HTMLResponse(f'<div class="modal-overlay" onclick="if(event.target===this)this.remove()"><div class="modal"><div class="modal-body"><div class="empty-state"><p>Ошибка Pilot API: {html.escape(str(e)[:200])}</p></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="this.closest(\'.modal-overlay\').remove()">Закрыть</button></div></div></div>')
+        return None, HTMLResponse(f'<div class="modal-overlay" onclick="if(event.target===this)this.remove()"><div class="modal"><div class="modal-body"><div class="empty-state"><p>Ошибка Pilot API: {html.escape(str(e)[:200])}</p></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="this.closest(\'.modal-overlay\').remove()">Закрыть</button></div></div></div>')
+
+    return {
+        "pilot": pilot, "token": token, "node_id": node_id,
+        "start_str": start_str, "stop_str": stop_str,
+        "vehicles": vehicles, "sites": sites, "veh_ids": veh_ids,
+        "all_events": all_events, "df": df, "dt": dt,
+    }, None
+
+
+@router.post("/api/refuels/sync/preview", response_class=HTMLResponse)
+async def sync_refuels_preview(
+    request: Request,
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    days: int = Query(default=7),
+    date_from: str = Form(default=None),
+    date_to: str = Form(default=None),
+    vehicle_id: str | None = Form(default=None),
+    conflict_actions: str = Form(default="{}"),
+    confirmed: str = Form(default="0"),
+    force: str = Form(default="0"),
+):
+    ctx, err = await _prepare_sync_context(user, db, request, date_from, date_to, days, vehicle_id)
+    if ctx is None:
+        return err
+
+    vehicles = ctx["vehicles"]
+    sites = ctx["sites"]
+    df = ctx["df"]
+    dt = ctx["dt"]
+    all_events = ctx["all_events"]
 
     try:
         actions = json.loads(conflict_actions)
