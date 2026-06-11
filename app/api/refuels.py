@@ -139,9 +139,10 @@ def _render_refuel_hierarchy(nested_groups: list, vmap: dict, user, page: int = 
 def _render_vehicle_group(vehicle_id: int, entries: list, vmap: dict, page: int = 1, date_from: str = "", date_to: str = "", user = None, n_th: float = 3.0, w_th: float = 10.0, user_names: dict | None = None, pilot_levels: dict | None = None) -> str:
     plate = vmap.get(vehicle_id, {}).get("plate_number", "—")
     imei_val = vmap.get(vehicle_id, {}).get("imei", "")
-    add_btn = f'<button class="btn btn-sm btn-secondary" hx-get="/api/refuels/add-form?vehicle_id={vehicle_id}&page={page}&date_from={date_from}&date_to={date_to}" hx-target="#modal-container" hx-swap="innerHTML">+ Добавить</button>'
     gid = f"vg-{vehicle_id}"
-    h = f'<div class="card vehicle-group"><div class="vehicle-group-title collapsible-header" onclick="toggleGroup(\'{gid}\')"><span class="vg-left"><input type="checkbox" class="vehicle-select" data-vehicle-id="{vehicle_id}" onclick="event.stopPropagation()" title="Выбрать для экспорта" style="cursor:pointer"><span class="arrow">&#9660;</span></span><span class="vg-center">{plate} <span class="vehicle-group-count">{len(entries)}</span></span><span class="vg-right">{add_btn}</span></div><div class="collapsible-body" id="{gid}"><div class="table-container"><table><thead><tr><th>Дата</th><th>Pilot (л)</th><th>Чек (л)</th><th>Разница</th><th>Погрешность</th><th>Статус</th><th>Прим.</th><th>Действия</th></tr></thead><tbody>'
+    add_btn = f'<button class="btn btn-sm btn-secondary" hx-get="/api/refuels/add-form?vehicle_id={vehicle_id}&page={page}&date_from={date_from}&date_to={date_to}" hx-target="#modal-container" hx-swap="innerHTML">+ Добавить</button>'
+
+    rows = []
     for e in entries:
         rc = ' class="row-false"' if e.is_false else ""
         if e.is_false:
@@ -152,7 +153,7 @@ def _render_vehicle_group(vehicle_id: int, entries: list, vmap: dict, page: int 
             sl = STATUS_LABELS.get(e.comparison_status, e.comparison_status or "—")
         pa = f"{e.pilot_amount:.2f}" if e.pilot_amount is not None else "—"
         aa = f"{e.actual_amount:.2f}" if e.actual_amount is not None else "—"
-        df = f"{e.difference:.2f}" if e.difference is not None else "—"
+        df_val = f"{e.difference:.2f}" if e.difference is not None else "—"
         er = f"{e.error_percent:.1f}%" if e.error_percent is not None else "—"
         diff_style = ""
         if e.difference is not None:
@@ -175,10 +176,10 @@ def _render_vehicle_group(vehicle_id: int, entries: list, vmap: dict, page: int 
             title_attr = f' title="Создано: {created_at_str}"'
         if e.comment:
             title_attr += f' title="Примечание: {html.escape(e.comment)}"'
-        date_ymd = format_dt(e.event_date, "%Y-%m-%d", user) if e.event_date else ""
+        date_ymd_str = format_dt(e.event_date, "%Y-%m-%d", user) if e.event_date else ""
         actions = (
             f'<button class="btn btn-sm btn-secondary" hx-get="/api/refuels/{e.id}/edit?page={page}&date_from={date_from}&date_to={date_to}" hx-target="#modal-container" hx-swap="innerHTML">Правка</button>'
-            f'<button class="btn btn-sm btn-track" hx-get="/api/vehicles/{vehicle_id}/track-modal?imei={imei_val}&date_from={date_ymd}&date_to={date_ymd}" hx-target="#modal-container" hx-swap="innerHTML">Трек</button>'
+            f'<button class="btn btn-sm btn-track" hx-get="/api/vehicles/{vehicle_id}/track-modal?imei={imei_val}&date_from={date_ymd_str}&date_to={date_ymd_str}" hx-target="#modal-container" hx-swap="innerHTML">Трек</button>'
         )
         note_cell = ""
         if e.exclude_from_stats:
@@ -190,8 +191,17 @@ def _render_vehicle_group(vehicle_id: int, entries: list, vmap: dict, page: int 
             start_lvl, end_lvl = pilot_levels[e.pilot_refuel_id]
             if start_lvl is not None and end_lvl is not None:
                 pilot_title = f' title="До: {start_lvl:.1f}л → После: {end_lvl:.1f}л (заправка: {end_lvl-start_lvl:.1f}л)"'
-        pilot_cell = f'<td data-label="Pilot"{pilot_title} style="cursor:pointer;text-decoration:underline dotted #888" hx-get="/api/refuels/{e.id}/detail" hx-target="#modal-container" hx-swap="innerHTML">{pa}</td>'
-        h += f"<tr{rc}{title_attr}><td data-label=\"Дата\" style=\"cursor:pointer;text-decoration:underline dotted #888\" hx-get=\"/api/fuel-graph/modal?vehicle_id={vehicle_id}&imei={imei_val}&date_from={date_ymd}&date_to={date_ymd}\" hx-target=\"#modal-container\" hx-swap=\"innerHTML\">{ds}</td>{pilot_cell}<td data-label=\"Чек\">{aa}</td><td data-label=\"Разница\"{diff_style}>{df}</td><td data-label=\"Погрешность\">{er}</td><td data-label=\"Статус\"><span class=\"status-badge {sc}\">{sl}</span></td><td data-label=\"Прим.\" style=\"font-size:13px\">{note_cell}</td><td>{actions}</td></tr>"
+        rows.append({
+            "row_class": "row-false" if e.is_false else "",
+            "title_attr": title_attr,
+            "ds": ds,
+            "date_ymd": date_ymd_str,
+            "pa": pa, "aa": aa, "df": df_val, "er": er,
+            "diff_style": diff_style,
+            "sc": sc, "sl": sl,
+            "actions": actions, "note_cell": note_cell,
+            "pilot_title": pilot_title, "entry_id": e.id,
+        })
 
     stats_entries = [e for e in entries if not e.is_false and not e.exclude_from_stats]
     real_entries = [e for e in entries if not e.is_false]
@@ -227,9 +237,16 @@ def _render_vehicle_group(vehicle_id: int, entries: list, vmap: dict, page: int 
         parts.append(f"{excluded_count} искл.")
     if parts:
         footer_label += " (" + ", ".join(parts) + " не учтены)"
-    h += f'<tfoot class="vehicle-group-tfoot"><tr><td data-label=""><strong>{footer_label}</strong></td><td data-label="Pilot"><strong>{total_pilot:.2f}</strong></td><td data-label="Чек"><strong>{total_actual:.2f}</strong></td><td data-label="Разница"><strong>{df_total:.2f}</strong></td><td data-label="Погрешность"><strong>{f"{err_pct:.1f}%" if err_pct is not None else "—"}</strong></td><td data-label="Статус"><span class="status-badge {overall_sc}">{overall_sl}</span></td><td></td><td></td></tr></tfoot>'
-    h += "</tbody></table></div></div></div>"
-    return h
+
+    return templates.env.get_template("_vehicle_group.html").render(
+        gid=gid, vehicle_id=vehicle_id, plate=plate, entry_count=len(entries),
+        add_btn=add_btn, imei_val=imei_val,
+        rows=rows, footer_label=footer_label,
+        total_pilot=total_pilot, total_actual=total_actual,
+        df_total=df_total,
+        err_pct_display=f"{err_pct:.1f}%" if err_pct is not None else "—",
+        overall_sc=overall_sc, overall_sl=overall_sl,
+    )
 
 
 def _pagination_html(page: int, total: int, qs: str) -> str:

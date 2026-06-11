@@ -1,0 +1,47 @@
+<div class="card vehicle-group">
+  <div class="vehicle-group-title collapsible-header" onclick="toggleGroup('{{ gid }}')">
+    <span class="vg-left">
+      <input type="checkbox" class="vehicle-select" data-vehicle-id="{{ vehicle_id }}" onclick="event.stopPropagation()" title="Выбрать для экспорта" style="cursor:pointer">
+      <span class="arrow">&#9660;</span>
+    </span>
+    <span class="vg-center">{{ plate }} <span class="vehicle-group-count">{{ entry_count }}</span></span>
+    <span class="vg-right">{{ add_btn|safe }}</span>
+  </div>
+  <div class="collapsible-body" id="{{ gid }}">
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>Дата</th><th>Pilot (л)</th><th>Чек (л)</th><th>Разница</th>
+            <th>Погрешность</th><th>Статус</th><th>Прим.</th><th>Действия</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows %}
+          <tr{% if r.row_class %} class="{{ r.row_class }}"{% endif %}{{ r.title_attr|safe }}>
+            <td data-label="Дата" style="cursor:pointer;text-decoration:underline dotted #888" hx-get="/api/fuel-graph/modal?vehicle_id={{ vehicle_id }}&imei={{ imei_val }}&date_from={{ r.date_ymd }}&date_to={{ r.date_ymd }}" hx-target="#modal-container" hx-swap="innerHTML">{{ r.ds }}</td>
+            <td data-label="Pilot"{{ r.pilot_title|safe }} style="cursor:pointer;text-decoration:underline dotted #888" hx-get="/api/refuels/{{ r.entry_id }}/detail" hx-target="#modal-container" hx-swap="innerHTML">{{ r.pa }}</td>
+            <td data-label="Чек">{{ r.aa }}</td>
+            <td data-label="Разница"{{ r.diff_style|safe }}>{{ r.df }}</td>
+            <td data-label="Погрешность">{{ r.er }}</td>
+            <td data-label="Статус"><span class="status-badge {{ r.sc }}">{{ r.sl }}</span></td>
+            <td data-label="Прим." style="font-size:13px">{{ r.note_cell|safe }}</td>
+            <td>{{ r.actions|safe }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot class="vehicle-group-tfoot">
+          <tr>
+            <td data-label=""><strong>{{ footer_label }}</strong></td>
+            <td data-label="Pilot"><strong>{{ "%.2f"|format(total_pilot) }}</strong></td>
+            <td data-label="Чек"><strong>{{ "%.2f"|format(total_actual) }}</strong></td>
+            <td data-label="Разница"><strong>{{ "%.2f"|format(df_total) }}</strong></td>
+            <td data-label="Погрешность"><strong>{{ err_pct_display }}</strong></td>
+            <td data-label="Статус"><span class="status-badge {{ overall_sc }}">{{ overall_sl }}</span></td>
+            <td></td><td></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+</div>
