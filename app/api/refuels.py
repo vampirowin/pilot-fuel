@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Request, Depends, HTTPException, Query, Form, Path
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import select, desc, text as sa_text
+from sqlalchemy import select, desc, func, text as sa_text
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.refuel_entry import RefuelEntry
@@ -562,7 +562,7 @@ async def sync_refuels(
                 PilotRefuel.event_date <= ev_ts + timedelta(hours=1),
             )
         )
-        existing_pr = existing.scalar_one_or_none()
+        existing_pr = existing.order_by(func.abs(func.extract('epoch', PilotRefuel.event_date - ev_ts))).scalars().first()
         if existing_pr:
             # Link orphan manual entry if any
             orphan = await db.execute(
@@ -573,7 +573,7 @@ async def sync_refuels(
                     RefuelEntry.is_deleted == False,
                     RefuelEntry.event_date >= ev_ts - timedelta(hours=1),
                     RefuelEntry.event_date <= ev_ts + timedelta(hours=1),
-                )
+                ).order_by(func.abs(func.extract('epoch', RefuelEntry.event_date - ev_ts)))
             )
             orphan_entry = orphan.scalars().first()
             if orphan_entry:
@@ -594,7 +594,7 @@ async def sync_refuels(
                     RefuelEntry.pilot_refuel_id == existing_pr.id,
                     RefuelEntry.is_deleted == False,
                 )
-            )).scalar_one_or_none()
+            )).scalars().first()
 
             existing_pr.amount = amount
             existing_pr.event_date = ev_ts
@@ -622,7 +622,7 @@ async def sync_refuels(
                 RefuelEntry.is_deleted == False,
                 RefuelEntry.event_date >= ev_ts - timedelta(hours=1),
                 RefuelEntry.event_date <= ev_ts + timedelta(hours=1),
-            )
+            ).order_by(func.abs(func.extract('epoch', RefuelEntry.event_date - ev_ts)))
         )
         existing_manual_entry = existing_manual.scalars().first()
 
@@ -857,8 +857,8 @@ async def sync_refuels_preview(
                 PilotRefuel.vehicle_id == v.id,
                 PilotRefuel.event_date >= ev_ts - timedelta(hours=1),
                 PilotRefuel.event_date <= ev_ts + timedelta(hours=1),
-            )
-        )).scalar_one_or_none()
+            ).order_by(func.abs(func.extract('epoch', PilotRefuel.event_date - ev_ts)))
+        )).scalars().first()
 
         plate = v.plate_number or "—"
         check_value = None
@@ -872,7 +872,7 @@ async def sync_refuels_preview(
                     RefuelEntry.is_deleted == False,
                     RefuelEntry.event_date >= ev_ts - timedelta(hours=1),
                     RefuelEntry.event_date <= ev_ts + timedelta(hours=1),
-                )
+                ).order_by(func.abs(func.extract('epoch', RefuelEntry.event_date - ev_ts)))
             )).scalars().first()
 
             if existing_manual:
@@ -930,7 +930,7 @@ async def sync_refuels_preview(
                 RefuelEntry.pilot_refuel_id == existing_pr.id,
                 RefuelEntry.is_deleted == False,
             )
-        )).scalar_one_or_none()
+        )).scalars().first()
 
         old_amount = existing_pr.amount
         is_false = existing_entry.is_false if existing_entry else False
@@ -945,7 +945,7 @@ async def sync_refuels_preview(
                 RefuelEntry.is_deleted == False,
                 RefuelEntry.event_date >= ev_ts - timedelta(hours=1),
                 RefuelEntry.event_date <= ev_ts + timedelta(hours=1),
-            )
+            ).order_by(func.abs(func.extract('epoch', RefuelEntry.event_date - ev_ts)))
         )).scalars().first()
 
         if orphan_manual:

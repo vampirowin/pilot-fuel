@@ -3,7 +3,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from sqlalchemy import select
+from sqlalchemy import select, func
 
 from app.database import async_session
 from app.models.user import User
@@ -230,7 +230,7 @@ async def _sync_company(admin: User) -> dict:
                     PilotRefuel.event_date <= ev_ts + timedelta(hours=1),
                 )
             )
-            existing_pr = existing.scalar_one_or_none()
+            existing_pr = existing.order_by(func.abs(func.extract('epoch', PilotRefuel.event_date - ev_ts))).scalars().first()
 
             if existing_pr:
                 old_amount = existing_pr.amount
@@ -242,7 +242,7 @@ async def _sync_company(admin: User) -> dict:
                         RefuelEntry.is_deleted == False,
                     )
                 )
-                existing_entry = existing_entry.scalar_one_or_none()
+                existing_entry = existing_entry.scalars().first()
                 if existing_entry:
                     check_value = existing_entry.actual_amount
                 else:
@@ -254,7 +254,7 @@ async def _sync_company(admin: User) -> dict:
                             RefuelEntry.is_deleted == False,
                             RefuelEntry.event_date >= ev_ts - timedelta(hours=1),
                             RefuelEntry.event_date <= ev_ts + timedelta(hours=1),
-                        )
+                        ).order_by(func.abs(func.extract('epoch', RefuelEntry.event_date - ev_ts)))
                     )
                     existing_entry = orphan.scalars().first()
                     if existing_entry:
@@ -299,7 +299,7 @@ async def _sync_company(admin: User) -> dict:
                         RefuelEntry.is_deleted == False,
                         RefuelEntry.event_date >= ev_ts - timedelta(hours=1),
                         RefuelEntry.event_date <= ev_ts + timedelta(hours=1),
-                    )
+                    ).order_by(func.abs(func.extract('epoch', RefuelEntry.event_date - ev_ts)))
                 )
                 existing_manual = existing_manual.scalars().first()
 
