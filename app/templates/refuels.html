@@ -40,6 +40,7 @@
            name="plate_search" value="{{ plate_search or '' }}"
            hx-get="/refuels" hx-trigger="keyup changed delay:300ms, search"
            hx-target="#refuels-list" hx-swap="innerHTML"
+           hx-replace-url="true"
            hx-include="closest .filters-bar">
   </div>
   {% if is_superadmin and all_companies %}

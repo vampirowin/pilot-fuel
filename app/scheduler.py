@@ -245,6 +245,21 @@ async def _sync_company(admin: User) -> dict:
                 existing_entry = existing_entry.scalar_one_or_none()
                 if existing_entry:
                     check_value = existing_entry.actual_amount
+                else:
+                    orphan = await db.execute(
+                        select(RefuelEntry).where(
+                            RefuelEntry.vehicle_id == v.id,
+                            RefuelEntry.source == "manual",
+                            RefuelEntry.pilot_refuel_id.is_(None),
+                            RefuelEntry.is_deleted == False,
+                            RefuelEntry.event_date >= ev_ts - timedelta(hours=1),
+                            RefuelEntry.event_date <= ev_ts + timedelta(hours=1),
+                        )
+                    )
+                    existing_entry = orphan.scalar_one_or_none()
+                    if existing_entry:
+                        existing_entry.pilot_refuel_id = existing_pr.id
+                        check_value = existing_entry.actual_amount
 
                 existing_pr.amount = amount
                 existing_pr.event_date = ev_ts
@@ -276,6 +291,18 @@ async def _sync_company(admin: User) -> dict:
                     "check_value": check_value, "action": action, "name": ev.get("name", "?"),
                 })
             else:
+                existing_manual = await db.execute(
+                    select(RefuelEntry).where(
+                        RefuelEntry.vehicle_id == v.id,
+                        RefuelEntry.source == "manual",
+                        RefuelEntry.pilot_refuel_id.is_(None),
+                        RefuelEntry.is_deleted == False,
+                        RefuelEntry.event_date >= ev_ts - timedelta(hours=1),
+                        RefuelEntry.event_date <= ev_ts + timedelta(hours=1),
+                    )
+                )
+                existing_manual = existing_manual.scalar_one_or_none()
+
                 pr = PilotRefuel(
                     vehicle_id=v.id,
                     event_date=ev_ts,
@@ -290,26 +317,48 @@ async def _sync_company(admin: User) -> dict:
                 db.add(pr)
                 await db.flush()
 
-                entry = RefuelEntry(
-                    vehicle_id=v.id,
-                    pilot_refuel_id=pr.id,
-                    event_date=ev_ts,
-                    pilot_amount=amount,
-                    source="pilot_sync",
-                )
-                db.add(entry)
-                new_count += 1
-                vehicle_updates.append({
-                    "plate": plate,
-                    "date": ev_date_str,
-                    "amount": f"{amount:.1f}",
-                    "action": "+",
-                })
-                event_log.append({
-                    "plate": plate, "event_date": ev_date_str,
-                    "old_amount": None, "new_amount": amount,
-                    "check_value": None, "action": "new", "name": ev.get("name", "?"),
-                })
+                if existing_manual:
+                    existing_manual.pilot_refuel_id = pr.id
+                    existing_manual.pilot_amount = amount
+                    existing_manual.event_date = ev_ts
+                    if existing_manual.actual_amount:
+                        d, e, s = _calc_comparison(amount, existing_manual.actual_amount, n_pct, w_pct, n_abs, w_abs, enable_abs)
+                        existing_manual.difference = d
+                        existing_manual.error_percent = e
+                        existing_manual.comparison_status = s
+                    else:
+                        existing_manual.difference = None
+                        existing_manual.error_percent = None
+                        existing_manual.comparison_status = "check_missing"
+                    updated_count += 1
+                    vehicle_updates.append({
+                        "plate": plate, "date": ev_date_str,
+                        "amount": f"{amount:.1f}", "action": "linked_orphan",
+                    })
+                    event_log.append({
+                        "plate": plate, "event_date": ev_date_str,
+                        "old_amount": None, "new_amount": amount,
+                        "check_value": existing_manual.actual_amount, "action": "linked_orphan", "name": ev.get("name", "?"),
+                    })
+                else:
+                    entry = RefuelEntry(
+                        vehicle_id=v.id,
+                        pilot_refuel_id=pr.id,
+                        event_date=ev_ts,
+                        pilot_amount=amount,
+                        source="pilot_sync",
+                    )
+                    db.add(entry)
+                    new_count += 1
+                    vehicle_updates.append({
+                        "plate": plate, "date": ev_date_str,
+                        "amount": f"{amount:.1f}", "action": "+",
+                    })
+                    event_log.append({
+                        "plate": plate, "event_date": ev_date_str,
+                        "old_amount": None, "new_amount": amount,
+                        "check_value": None, "action": "new", "name": ev.get("name", "?"),
+                    })
 
         trip_count = await _sync_trip_summaries(db, pilot, token, node_id, admin, start_str, stop_str)
 
