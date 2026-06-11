@@ -487,6 +487,11 @@ tr:hover td {
   color: var(--critical);
 }
 
+.status-check-missing {
+  background: var(--secondary-bg);
+  color: var(--text-muted);
+}
+
 .status-false-reading {
   background: rgba(107, 114, 128, 0.1);
   color: var(--text-muted);

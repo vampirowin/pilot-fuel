@@ -27,9 +27,11 @@
           <label>Pilot (л)</label>
           <div style="display:flex;gap:8px;align-items:center">
             <input type="text" class="form-input" value="{{ '%.1f'|format(entry.pilot_amount) }}" disabled style="opacity:.7;flex:1">
+            {% if is_admin %}
             <button type="button" class="btn btn-sm btn-primary" style="white-space:nowrap"
                     hx-get="/api/refuels/sync-modal?date={{ default_date }}&vehicle_id={{ entry.vehicle_id }}"
                     hx-params="none" hx-target="#modal-container" hx-swap="innerHTML">Синхр. из Pilot</button>
+            {% endif %}
           </div>
         </div>
         {% else %}
@@ -37,9 +39,11 @@
           <label>Pilot (л)</label>
           <div style="display:flex;gap:8px;align-items:center">
             <input type="text" class="form-input" value="—" disabled style="opacity:.7;flex:1">
+            {% if is_admin %}
             <button type="button" class="btn btn-sm btn-primary" style="white-space:nowrap"
                     hx-get="/api/refuels/sync-modal?date={{ default_date }}&vehicle_id={{ entry.vehicle_id }}"
                     hx-params="none" hx-target="#modal-container" hx-swap="innerHTML">Синхр. из Pilot</button>
+            {% endif %}
           </div>
         </div>
         {% endif %}

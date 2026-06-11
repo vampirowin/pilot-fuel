@@ -264,6 +264,32 @@ async def vehicle_points(
         except Exception:
             pass
 
+    # Пересчитываем время в движении по GPS-точкам (а не по сегментам зажигания)
+    if points and trip and isinstance(trip, dict):
+        try:
+            sorted_pts = sorted(points, key=lambda p: p.get("ts", 0))
+            motion_sec = 0
+            for i in range(1, len(sorted_pts)):
+                spd = float(sorted_pts[i].get("speed") or 0)
+                if spd > 3:
+                    dt = sorted_pts[i]["ts"] - sorted_pts[i-1]["ts"]
+                    if 0 < dt < 600:
+                        motion_sec += dt
+            if motion_sec > 0:
+                trip["duration"] = motion_sec
+                trip["motion_duration"] = motion_sec
+        except Exception:
+            pass
+
+    # Отфильтровать ложную текущую стоянку, если машина сейчас двигается
+    if points and stops:
+        try:
+            last_pt = max(points, key=lambda p: p.get("ts", 0) or 0)
+            if float(last_pt.get("speed") or 0) > 3:
+                stops = [s for s in stops if not s.get("ongoing")]
+        except Exception:
+            pass
+
     return {"points": points, "refuels": refuels, "stops": stops, "trip": trip, "sensors_info": sensors_info, "plate": plate, "truncated": truncated}
 
 

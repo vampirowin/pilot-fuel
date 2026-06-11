@@ -7,6 +7,7 @@ from app.models.setting import Setting
 from app.models.sync_log import SyncLog
 from app.models.client_account import ClientAccount
 from app.models.site import Site
+from app.models.trip_summary import TripSummary
 
 __all__ = [
     "User",
@@ -18,4 +19,5 @@ __all__ = [
     "SyncLog",
     "ClientAccount",
     "Site",
+    "TripSummary",
 ]

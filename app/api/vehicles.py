@@ -18,6 +18,7 @@ from app.dependencies import get_current_user, apply_vehicle_filter
 from app.models.vehicle import SENSOR_STATUSES
 from app.api.refuels import _get_effective_thresholds, _calc_comparison, _resolve_pilot_credentials
 from app.models.setting import Setting
+from app.models.trip_summary import TripSummary
 from app.timezone_utils import get_user_timezone
 
 logger = logging.getLogger(__name__)
@@ -107,8 +108,15 @@ def group_by_folder(vehicles: list) -> list:
     return [(f, groups[f]) for f in sorted_folders]
 
 
-def build_vehicle_dict(v: Vehicle, company_name: str = "", site_name: str = "", status_info: dict | None = None) -> dict:
+def build_vehicle_dict(v: Vehicle, company_name: str = "", site_name: str = "", status_info: dict | None = None, trip_summary: dict | None = None) -> dict:
     si = (status_info or {}).get(v.imei) if status_info else None
+    trip_dur = None
+    if trip_summary:
+        sec = trip_summary.get("motion_seconds") or 0
+        if sec:
+            h = sec // 3600
+            m = (sec % 3600) // 60
+            trip_dur = f"{h}ч {m}м"
     return {
         "id": v.id,
         "pilot_agent_id": v.pilot_agent_id,
@@ -123,6 +131,7 @@ def build_vehicle_dict(v: Vehicle, company_name: str = "", site_name: str = "", 
         "status_dot": _status_dot_html(si.get("status") if si else None),
         "company_name": company_name,
         "site_name": site_name,
+        "trip_duration": trip_dur,
     }
 
 
@@ -214,7 +223,7 @@ def _sensor_cell(v: dict, editable: bool) -> str:
     return _sensor_status_badge(v)
 
 
-def _vehicle_row(v: dict, idx: int, can_act: bool) -> str:
+def _vehicle_row(v: dict, idx: int, can_act: bool, today_str: str) -> str:
     sensor = _sensor_cell(v, can_act)
     si = v.get("status_info") or {}
     dot = v.get("status_dot") or _status_dot_html(None)
@@ -232,6 +241,7 @@ def _vehicle_row(v: dict, idx: int, can_act: bool) -> str:
     cells += f'<td data-label="Заправки"><a href="/refuels?vehicle_id={v["id"]}" class="btn btn-sm btn-secondary">Заправки</a></td>'
     cells += f'<td data-label="Компания">{v.get("company_name") or "—"}</td>'
     cells += f'<td data-label="График"><button class="btn btn-sm btn-secondary" hx-get="/api/fuel-graph/modal?vehicle_id={v["id"]}&imei={v.get("imei") or ""}" hx-target="#modal-container" hx-swap="innerHTML">График</button></td>'
+    cells += f'<td data-label="Трек"><button class="btn btn-sm btn-track" hx-get="/api/vehicles/{v["id"]}/track-modal?imei={v.get("imei") or ""}&date_from={today_str}&date_to={today_str}" hx-target="#modal-container" hx-swap="innerHTML">Трек</button></td>'
     if can_act:
         cells += f'<td data-label="Действия"><button class="btn btn-sm btn-secondary" hx-get="/api/vehicles/{v["id"]}/thresholds" hx-target="#modal-container" hx-swap="innerHTML">Пороги</button> <button class="btn btn-sm btn-danger" hx-post="/api/vehicles/{v["id"]}/delete" hx-target="#vehicles-table" hx-swap="innerHTML" hx-confirm="Удалить ТС {v.get("plate_number") or "—"} и все его запросы?">Удалить</button></td>'
     else:
@@ -239,7 +249,7 @@ def _vehicle_row(v: dict, idx: int, can_act: bool) -> str:
     return f'<tr id="v-{v["id"]}">{cells}</tr>'
 
 
-def render_nested_partial(nested_groups: list, can_act: bool) -> str:
+def render_nested_partial(nested_groups: list, can_act: bool, today_str: str) -> str:
     if not nested_groups:
         return '<div class="card"><div class="empty-state"><h3>Нет транспортных средств</h3><p>Нажмите «Синхронизировать», чтобы загрузить список ТС из Pilot.</p></div></div>'
 
@@ -260,7 +270,7 @@ def render_nested_partial(nested_groups: list, can_act: bool) -> str:
                             html += '<th style="width:32px;"><input type="checkbox" onchange="var e=this;document.querySelectorAll(\'#bulk-vehicle-form input[name=vehicle_ids]\').forEach(function(c){c.checked=e.checked})"></th>'
                         html += '<th>#</th><th>Статус</th><th>Госномер</th><th>Датчик</th><th>Заправки</th><th>Компания</th><th>График</th><th>Трек</th><th>Действия</th></tr></thead><tbody>'
                         for idx, v in enumerate(vehicles, 1):
-                            html += _vehicle_row(v, idx, can_act)
+                            html += _vehicle_row(v, idx, can_act, today_str)
                         html += '</tbody></table></div>'
                     else:
                         fidx += 1
@@ -270,7 +280,7 @@ def render_nested_partial(nested_groups: list, can_act: bool) -> str:
                             html += '<th style="width:32px;"><input type="checkbox" onchange="var e=this;document.querySelectorAll(\'#bulk-vehicle-form input[name=vehicle_ids]\').forEach(function(c){c.checked=e.checked})"></th>'
                         html += '<th>#</th><th>Статус</th><th>Госномер</th><th>Датчик</th><th>Заправки</th><th>Компания</th><th>График</th><th>Трек</th><th>Действия</th></tr></thead><tbody>'
                         for idx, v in enumerate(vehicles, 1):
-                            html += _vehicle_row(v, idx, can_act)
+                            html += _vehicle_row(v, idx, can_act, today_str)
                         html += '</tbody></table></div></div></div>'
             else:
                 sidx += 1
@@ -283,7 +293,7 @@ def render_nested_partial(nested_groups: list, can_act: bool) -> str:
                             html += '<th style="width:32px;"><input type="checkbox" onchange="var e=this;document.querySelectorAll(\'#bulk-vehicle-form input[name=vehicle_ids]\').forEach(function(c){c.checked=e.checked})"></th>'
                         html += '<th>#</th><th>Статус</th><th>Госномер</th><th>Датчик</th><th>Заправки</th><th>Компания</th><th>График</th><th>Трек</th><th>Действия</th></tr></thead><tbody>'
                         for idx, v in enumerate(vehicles, 1):
-                            html += _vehicle_row(v, idx, can_act)
+                            html += _vehicle_row(v, idx, can_act, today_str)
                         html += '</tbody></table></div>'
                     else:
                         fidx += 1
@@ -293,18 +303,18 @@ def render_nested_partial(nested_groups: list, can_act: bool) -> str:
                             html += '<th style="width:32px;"><input type="checkbox" onchange="var e=this;document.querySelectorAll(\'#bulk-vehicle-form input[name=vehicle_ids]\').forEach(function(c){c.checked=e.checked})"></th>'
                         html += '<th>#</th><th>Статус</th><th>Госномер</th><th>Датчик</th><th>Заправки</th><th>Компания</th><th>График</th><th>Трек</th><th>Действия</th></tr></thead><tbody>'
                         for idx, v in enumerate(vehicles, 1):
-                            html += _vehicle_row(v, idx, can_act)
+                            html += _vehicle_row(v, idx, can_act, today_str)
                         html += '</tbody></table></div></div></div>'
                 html += '</div></div>'
         html += '</div></div>'
     return html
 
 
-def render_table_partial(vehicles: list, is_superadmin: bool = False, is_company_admin: bool = False) -> str:
+def render_table_partial(vehicles: list, is_superadmin: bool = False, is_company_admin: bool = False, today_str: str = "") -> str:
     can_act = is_superadmin or is_company_admin
     if not vehicles:
         return '<div class="card"><div class="empty-state"><h3>Нет транспортных средств</h3><p>Нажмите «Синхронизировать», чтобы загрузить список ТС из Pilot.</p></div></div>'
-    return render_nested_partial(build_nested_groups(vehicles), can_act)
+    return render_nested_partial(build_nested_groups(vehicles), can_act, today_str)
 
 
 @router.get("/vehicles", response_class=HTMLResponse)
@@ -337,10 +347,19 @@ async def vehicles_page(
         for s in (await db.execute(select(Site).where(Site.id.in_(site_ids)))).scalars().all():
             sites[s.id] = s.name
 
+    vehicle_ids = [v.id for v in db_vehicles]
+    latest_trips = {}
+    if vehicle_ids:
+        from sqlalchemy import func
+        subq = select(TripSummary.vehicle_id, func.max(TripSummary.date).label("max_date")).where(TripSummary.vehicle_id.in_(vehicle_ids)).group_by(TripSummary.vehicle_id).subquery()
+        trip_rows = await db.execute(select(TripSummary).join(subq, (TripSummary.vehicle_id == subq.c.vehicle_id) & (TripSummary.date == subq.c.max_date)))
+        for t in trip_rows.scalars().all():
+            latest_trips[t.vehicle_id] = {"duration_seconds": t.duration_seconds, "motion_seconds": t.motion_seconds}
+
     is_hx = request.headers.get("hx-request") == "true"
     is_boosted = request.headers.get("hx-boosted") == "true"
 
-    out = [build_vehicle_dict(v, companies.get(v.client_account_id, ""), sites.get(v.site_id, ""), None) for v in db_vehicles]
+    out = [build_vehicle_dict(v, companies.get(v.client_account_id, ""), sites.get(v.site_id, ""), None, latest_trips.get(v.id)) for v in db_vehicles]
     is_su = user.role == "superadmin"
     is_ca = user.role == "company_admin"
 
@@ -348,7 +367,7 @@ async def vehicles_page(
     today_str = datetime.now(timezone.utc).astimezone(user_tz).strftime("%Y-%m-%d")
 
     if is_hx and not is_boosted:
-        return HTMLResponse(render_table_partial(out, is_su, is_ca))
+        return HTMLResponse(render_table_partial(out, is_su, is_ca, today_str))
 
     return templates.TemplateResponse(request, "vehicles.html", {
         "nested_groups": build_nested_groups(out),

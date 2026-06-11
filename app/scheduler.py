@@ -12,6 +12,7 @@ from app.models.pilot_refuel import PilotRefuel
 from app.models.refuel_entry import RefuelEntry
 from app.models.sync_log import SyncLog
 from app.models.setting import Setting
+from app.models.trip_summary import TripSummary
 from app.services.pilot_service import PilotService
 from app.api.refuels import _match_vehicle, _parse_timestamp, _get_effective_thresholds, _calc_comparison
 
@@ -100,7 +101,9 @@ async def _sync_company(admin: User) -> dict:
 
         for i in range(0, len(veh_ids), BATCH_SIZE):
             batch = veh_ids[i:i + BATCH_SIZE]
-            for attempt in range(3):
+            max_attempts = 3
+            attempt = 0
+            while attempt < max_attempts:
                 try:
                     batch_events = await pilot.get_refuel_report(token, node_id, batch, start_str, stop_str)
                     break
@@ -122,7 +125,8 @@ async def _sync_company(admin: User) -> dict:
                                 logger.error(f"Re-login failed for {admin.username}: {login_err}")
                         else:
                             logger.warning(f"No saved password for {admin.username} — re-login needed")
-                    if attempt == 2 or is_auth_err:
+                    attempt += 1
+                    if attempt >= max_attempts or is_auth_err:
                         raise
                     await asyncio.sleep(1)
             all_events.extend(batch_events)
@@ -199,7 +203,7 @@ async def _sync_company(admin: User) -> dict:
                     else:
                         existing_entry.difference = None
                         existing_entry.error_percent = None
-                        existing_entry.comparison_status = "pilot_missing" if existing_entry.actual_amount else None
+                        existing_entry.comparison_status = "check_missing"
                     updated_count += 1
 
                 action = "identical" if abs((old_amount or 0) - amount) < 0.001 else "conflict" if check_value else "updated"
@@ -250,9 +254,70 @@ async def _sync_company(admin: User) -> dict:
                     "check_value": None, "action": "new", "name": ev.get("name", "?"),
                 })
 
+        ts_from = int(datetime.strptime(start_str, "%d.%m.%Y %H:%M").timestamp())
+        ts_to = int(datetime.strptime(stop_str, "%d.%m.%Y %H:%M").timestamp())
+        start_dt = datetime.strptime(start_str, "%d.%m.%Y %H:%M")
+
+        trip_vehicles = await db.execute(
+            select(Vehicle).where(
+                Vehicle.is_active == True,
+                Vehicle.client_account_id == admin.client_account_id,
+                Vehicle.imei.isnot(None),
+                Vehicle.pilot_agent_id.isnot(None),
+            )
+        )
+        trip_vehicles = trip_vehicles.scalars().all()
+
+        trip_count = 0
+        for tv in trip_vehicles:
+            try:
+                result = await pilot.get_trip_summary(
+                    token, node_id,
+                    tv.imei, tv.pilot_agent_id,
+                    ts_from, ts_to,
+                )
+                if result is None:
+                    continue
+
+                existing = await db.execute(
+                    select(TripSummary).where(
+                        TripSummary.vehicle_id == tv.id,
+                        TripSummary.date == start_dt,
+                    )
+                )
+                existing_ts = existing.scalar_one_or_none()
+
+                if existing_ts:
+                    existing_ts.duration_seconds = result["duration"]
+                    existing_ts.motion_seconds = result["motion_duration"]
+                    existing_ts.gps_km = result["gps_km"]
+                    existing_ts.can_km = result["can_km"]
+                    existing_ts.max_speed = result["maxspeed"]
+                    existing_ts.avg_speed = result["avgspeed"]
+                    existing_ts.parking_count = result["parking_count"]
+                    existing_ts.segment_count = result["segment_count"]
+                else:
+                    db.add(TripSummary(
+                        vehicle_id=tv.id,
+                        date=start_dt,
+                        duration_seconds=result["duration"],
+                        motion_seconds=result["motion_duration"],
+                        gps_km=result["gps_km"],
+                        can_km=result["can_km"],
+                        max_speed=result["maxspeed"],
+                        avg_speed=result["avgspeed"],
+                        parking_count=result["parking_count"],
+                        segment_count=result["segment_count"],
+                    ))
+                trip_count += 1
+            except Exception as e:
+                logger.error(f"Trip summary sync failed for {tv.imei}: {e}")
+
         details = f"new={new_count}, updated={updated_count}, pilot_events={total_events}"
         if errors:
             details += f"; unmatched({len(errors)}): {', '.join(errors[:5])}"
+        if trip_count:
+            details += f"; trip_summaries={trip_count}"
 
         log = SyncLog(
             sync_type="auto_refuels",

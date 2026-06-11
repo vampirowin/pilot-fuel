@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 import httpx
 
 # Pilot API v3 endpoints (некоторые эндпоинты — /backend — используют cookie-авторизацию вместо Bearer)
@@ -467,6 +467,45 @@ class PilotService:
         try:
             data = await self._request("GET", path, token=token, node_id=node_id)
             raw = data.get("data")
+            if isinstance(raw, list):
+                if not raw:
+                    return None
+                total_gps = 0.0
+                total_can = 0.0
+                maxspeed = 0.0
+                total_duration = 0
+                total_motion_duration = 0
+                parking_count = 0
+                for seg in raw:
+                    gps = seg.get("gps") or 0
+                    can = seg.get("can") or 0
+                    total_gps += float(gps)
+                    total_can += float(can)
+                    maxspeed = max(maxspeed, float(seg.get("maxspeed") or 0))
+                    ts = seg.get("ts")
+                    te = seg.get("te")
+                    if ts and te:
+                        dur = int(te) - int(ts)
+                        total_duration += dur
+                        park_sum = sum(
+                            p.get("duration", 0) or 0
+                            for p in seg.get("parkings", [])
+                        )
+                        total_motion_duration += dur - park_sum
+                    parking_count += len(seg.get("parkings", []))
+                avgspeed = 0.0
+                if total_duration > 0:
+                    avgspeed = round(total_gps * 3600 / total_duration, 1)
+                return {
+                    "can_km": total_can,
+                    "gps_km": total_gps,
+                    "maxspeed": maxspeed,
+                    "avgspeed": avgspeed,
+                    "duration": total_duration,
+                    "motion_duration": total_motion_duration,
+                    "parking_count": parking_count,
+                    "segment_count": len(raw),
+                }
             if isinstance(raw, dict):
                 return {
                     "can_km": raw.get("can"),
@@ -512,18 +551,30 @@ class PilotService:
                 stops_raw = []
             result = []
             for s in stops_raw:
-                dur = s.get("duration") or (s.get("te", 0) - s.get("ts", 0))
-                if dur < MIN_DURATION:
-                    continue
+                te = s.get("te")
+                ts = s.get("ts", 0) or 0
                 addr = s.get("address") or {}
-                result.append({
-                    "lat": s.get("lat"),
-                    "lon": s.get("lon"),
-                    "ts": s.get("ts"),
-                    "te": s.get("te"),
-                    "duration": dur,
-                    "address": (addr.get("street") or addr.get("city") or addr.get("house") or "") if isinstance(addr, dict) else str(addr),
-                })
+                addr_str = (addr.get("street") or addr.get("city") or addr.get("house") or "") if isinstance(addr, dict) else str(addr)
+                if te is None or (s.get("duration") is None and te >= ts_to - 120):
+                    dur_now = int(datetime.now(timezone.utc).timestamp()) - ts
+                    if dur_now < MIN_DURATION:
+                        continue
+                    result.append({
+                        "lat": s.get("lat"), "lon": s.get("lon"),
+                        "ts": ts, "te": None,
+                        "duration": dur_now, "ongoing": True,
+                        "address": addr_str,
+                    })
+                else:
+                    dur = s.get("duration") or (te - ts)
+                    if dur < MIN_DURATION:
+                        continue
+                    result.append({
+                        "lat": s.get("lat"), "lon": s.get("lon"),
+                        "ts": ts, "te": te,
+                        "duration": dur, "ongoing": False,
+                        "address": addr_str,
+                    })
             return result
         except PilotAuthError:
             return []

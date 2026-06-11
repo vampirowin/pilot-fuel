@@ -53,14 +53,14 @@
             </thead>
             <tbody>
               {% for e in entries %}
-              {% set class_map = {'normal': 'status-normal', 'small_deviation': 'status-small-deviation', 'unacceptable': 'status-unacceptable', 'pilot_missing': 'status-pilot-missing', 'false_reading': 'status-false-reading'} %}
-              {% set label_map = {'normal': 'Норма', 'small_deviation': 'Расхождение', 'unacceptable': 'Недопустимо', 'pilot_missing': 'Нет в Pilot', 'false_reading': 'Ложная'} %}
+              {% set class_map = {'normal': 'status-normal', 'small_deviation': 'status-small-deviation', 'unacceptable': 'status-unacceptable', 'pilot_missing': 'status-pilot-missing', 'check_missing': 'status-check-missing', 'false_reading': 'status-false-reading'} %}
+              {% set label_map = {'normal': 'Норма', 'small_deviation': 'Расхождение', 'unacceptable': 'Недопустимо', 'pilot_missing': 'Нет в Pilot', 'check_missing': 'Нет чека', 'false_reading': 'Ложная'} %}
               {% set diff_style = '' %}
               {% if e.difference is not none %}
                 {% if e.difference < 0 %}
-                  {% set diff_style = ' style="color:var(--warning);font-weight:600"' %}
+                  {% set diff_style = ' style="color:#e74c3c;font-weight:600"' %}
                 {% elif e.difference > 0 %}
-                  {% set diff_style = ' style="color:var(--danger);font-weight:600"' %}
+                  {% set diff_style = ' style="color:var(--warning);font-weight:600"' %}
                 {% endif %}
               {% endif %}
               <tr>

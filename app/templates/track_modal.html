@@ -147,9 +147,8 @@ var tm = (function() {
     if (container._leaflet_loaded) return;
     container._leaflet_loaded = true;
 
-    // Если Leaflet уже подгружен (повторное открытие модалки) — сразу инициализируем
     if (window.L) {
-      initMap();
+      setTimeout(initMap, 100);
       return;
     }
 
@@ -241,6 +240,7 @@ var tm = (function() {
           allLatLngs.push([lat1, lon1]);
           if (i === pts.length - 2) allLatLngs.push([lat2, lon2]);
         }
+        window._tmValidSegs = validSegs;
 
         // Зум на весь маршрут СРАЗУ
         if (allLatLngs.length > 0) {
@@ -341,10 +341,10 @@ var tm = (function() {
             for (var si = 0; si < stops.length; si++) {
               var st = stops[si];
               var dur = st.duration;
-              var durText = dur ? (Math.floor(dur / 3600) + 'ч ' + (Math.floor(dur % 3600 / 60)) + 'м') : '';
+              var durText = st.ongoing ? 'идёт\u2026' : (dur ? (Math.floor(dur / 3600) + 'ч ' + (Math.floor(dur % 3600 / 60)) + 'м') : '');
               var popupText = '<b>🅿️ Стоянка</b><br>' +
                 (st.ts ? 'с ' + new Date(st.ts * 1000).toLocaleString('ru-RU') + '<br>' : '') +
-                (durText ? 'длительность: <b>' + durText + '</b><br>' : '') +
+                (st.ongoing ? '' : (durText ? 'длительность: <b>' + durText + '</b><br>' : '')) +
                 (st.address || '');
               var m = L.marker([st.lat, st.lon], { icon: stopIcon }).addTo(map).bindPopup(popupText);
               stopMarkers.push(m);
@@ -364,6 +364,8 @@ var tm = (function() {
           if (trip) {
             var dist = trip.gps_km || trip.can_km;
             if (dist) statsHtml += '<span style="color:var(--accent)">🛣️ <b>' + parseFloat(dist).toFixed(0) + ' км</b></span>';
+            function fmtDur(sec) { if (!sec) return '—'; var h = Math.floor(sec / 3600); var m = Math.floor((sec % 3600) / 60); return h + 'ч ' + m + 'м'; }
+            if (trip.motion_duration) statsHtml += '<span>⏱️ ' + fmtDur(trip.motion_duration) + ' в движении</span>';
           }
           if (data.truncated) {
             statsHtml += '<span style="color:var(--warning)">⚠ Максимум 90 дней</span>';
@@ -375,6 +377,7 @@ var tm = (function() {
           window._tmPoints = pts;
           window._tmSensorsInfo = data.sensors_info || [];
         }
+        window._tmFinish = finishDrawing;
 
         // Прогресс анимации в плашке статистики
         document.getElementById('tm-stats').innerHTML =
@@ -391,13 +394,28 @@ var tm = (function() {
       });
   }
 
-  // Мгновенно дорисовать оставшиеся сегменты
   function skipAnim() {
-    // ничего не делаем — просто перерисовываем
-    if (!window._tmAnimTimer) return;
-    clearTimeout(window._tmAnimTimer);
-    window._tmAnimTimer = null;
-    load();
+    if (!window._tmValidSegs && !window._tmAnimTimer) return;
+    if (window._tmAnimTimer) {
+      clearTimeout(window._tmAnimTimer);
+      window._tmAnimTimer = null;
+    }
+    var validSegs = window._tmValidSegs;
+    if (!validSegs || !map) return;
+    var segs = window._tmSegments || [];
+    var arrows = window._tmArrows || [];
+    for (var i = 0; i < validSegs.length; i++) {
+      var s = validSegs[i];
+      segs.push(L.polyline([[s.lat1, s.lon1], [s.lat2, s.lon2]], {color: s.color, weight:3, opacity:0.85}).addTo(map));
+      if (i > 0 && i % 8 === 0) {
+        arrows.push(L.marker([(s.lat1+s.lat2)/2, (s.lon1+s.lon2)/2], {icon:L.divIcon({html:'<div style="transform:rotate(' + bearing(s.lat1, s.lon1, s.lat2, s.lon2) + 'deg);font-size:14px;color:' + s.color + ';opacity:0.8">▶</div>',iconSize:[14,14],iconAnchor:[7,7],className:''}),interactive:false}).addTo(map));
+      }
+    }
+    var pEl = document.getElementById('tm-anim-progress');
+    if (pEl) pEl.textContent = '100%';
+    window._tmSegments = segs;
+    window._tmArrows = arrows;
+    window._tmFinish();
   }
 
   function setPeriod(daysBack, btn) {

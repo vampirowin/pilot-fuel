@@ -86,6 +86,7 @@
                 <th>Статус</th>
                 <th>Госномер</th>
                 <th>Датчик</th>
+                <th>В пути</th>
                 <th>Заправки</th>
                 <th>Компания</th>
                 <th>График</th>
@@ -118,6 +119,7 @@
                     {%- else %}—{% endif %}</span>
                   {% endif %}
                 </td>
+                <td data-label="В пути">{{ v.trip_duration or '—' }}</td>
                 <td data-label="Заправки"><a href="/refuels?vehicle_id={{ v.id }}" class="btn btn-sm btn-refuel">Заправки</a></td>
                 <td data-label="Компания">{{ v.company_name or '—' }}</td>
                 <td data-label="График"><button class="btn btn-sm btn-graph" hx-get="/api/fuel-graph/modal?vehicle_id={{ v.id }}&imei={{ v.imei or '' }}" hx-target="#modal-container" hx-swap="innerHTML">График</button></td>
@@ -147,52 +149,54 @@
                 <thead>
                   <tr>
                     {% if is_superadmin or is_company_admin %}<th style="width: 32px;"><input type="checkbox" onchange="var e=this;document.querySelectorAll('input[name=vehicle_ids]').forEach(function(c){c.checked=e.checked})"></th>{% endif %}
-                    <th>#</th>
-                    <th>Статус</th>
-                    <th>Госномер</th>
-                    <th>Датчик</th>
-                    <th>Заправки</th>
-                    <th>Компания</th>
-                    <th>График</th>
-                    <th>Трек</th>
-                    <th>Действия</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {% for v in vehicles %}
-                  <tr id="v-{{ v.id }}">
-                    {% if is_superadmin or is_company_admin %}<td data-label=""><input type="checkbox" form="bulk-vehicle-form" name="vehicle_ids" value="{{ v.id }}"></td>{% endif %}
-                    <td data-label="#" style="color: var(--text-dim);">{{ loop.index }}</td>
-                    <td data-label="Статус">{{ v.status_dot|safe }}</td>
-                <td data-label="Госномер"><strong style="cursor:pointer" data-lat="{{ v.status_info.lat or '' }}" data-lon="{{ v.status_info.lon or '' }}" data-ts="{{ v.status_info.ts or '' }}" data-status="{{ v.status_info.status or '' }}" onclick="openLocationMap(this)">{{ v.plate_number or '—' }}</strong></td>
-                    <td data-label="Датчик" class="sensor-cell">
+                      <th>#</th>
+                      <th>Статус</th>
+                      <th>Госномер</th>
+                      <th>Датчик</th>
+                      <th>В пути</th>
+                      <th>Заправки</th>
+                      <th>Компания</th>
+                      <th>График</th>
+                      <th>Трек</th>
+                      <th>Действия</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for v in vehicles %}
+                    <tr id="v-{{ v.id }}">
+                      {% if is_superadmin or is_company_admin %}<td data-label=""><input type="checkbox" form="bulk-vehicle-form" name="vehicle_ids" value="{{ v.id }}"></td>{% endif %}
+                      <td data-label="#" style="color: var(--text-dim);">{{ loop.index }}</td>
+                      <td data-label="Статус">{{ v.status_dot|safe }}</td>
+                  <td data-label="Госномер"><strong style="cursor:pointer" data-lat="{{ v.status_info.lat or '' }}" data-lon="{{ v.status_info.lon or '' }}" data-ts="{{ v.status_info.ts or '' }}" data-status="{{ v.status_info.status or '' }}" onclick="openLocationMap(this)">{{ v.plate_number or '—' }}</strong></td>
+                      <td data-label="Датчик" class="sensor-cell">
+                        {% if is_superadmin or is_company_admin %}
+                         <select name="status" class="sensor-status-select status-{{ v.sensor_status }}" data-vehicle-id="{{ v.id }}" hx-post="/api/vehicles/{{ v.id }}/sensor-status" hx-trigger="change" hx-swap="innerHTML" hx-target="closest td">
+                            <option value="normal" {% if v.sensor_status == 'normal' %}selected{% endif %}>В норме</option>
+                            <option value="broken" {% if v.sensor_status == 'broken' %}selected{% endif %}>Не работает</option>
+                            <option value="stock" {% if v.sensor_status == 'stock' %}selected{% endif %}>Штатный датчик</option>
+                          </select>
+                        {% else %}
+                        <span class="status-badge
+                          {%- if v.sensor_status == 'normal' %} status-normal
+                          {%- elif v.sensor_status == 'broken' %} status-unacceptable
+                          {%- elif v.sensor_status == 'stock' %} status-small-deviation{% endif %}">
+                          {%- if v.sensor_status == 'normal' %}В норме
+                          {%- elif v.sensor_status == 'broken' %}Не работает
+                          {%- elif v.sensor_status == 'stock' %}Штатный датчик
+                          {%- else %}—{% endif %}</span>
+                        {% endif %}
+                      </td>
+                      <td data-label="В пути">{{ v.trip_duration or '—' }}</td>
+                      <td data-label="Заправки"><a href="/refuels?vehicle_id={{ v.id }}" class="btn btn-sm btn-refuel">Заправки</a></td>
+                      <td data-label="Компания">{{ v.company_name or '—' }}</td>
+                      <td data-label="График"><button class="btn btn-sm btn-graph" hx-get="/api/fuel-graph/modal?vehicle_id={{ v.id }}&imei={{ v.imei or '' }}" hx-target="#modal-container" hx-swap="innerHTML">График</button></td>
+                      <td data-label="Трек"><button class="btn btn-sm btn-track" hx-get="/api/vehicles/{{ v.id }}/track-modal?imei={{ v.imei or '' }}&date_from={{ today_str }}&date_to={{ today_str }}" hx-target="#modal-container" hx-swap="innerHTML">Трек</button></td>
                       {% if is_superadmin or is_company_admin %}
-                       <select name="status" class="sensor-status-select status-{{ v.sensor_status }}" data-vehicle-id="{{ v.id }}" hx-post="/api/vehicles/{{ v.id }}/sensor-status" hx-trigger="change" hx-swap="innerHTML" hx-target="closest td">
-                          <option value="normal" {% if v.sensor_status == 'normal' %}selected{% endif %}>В норме</option>
-                          <option value="broken" {% if v.sensor_status == 'broken' %}selected{% endif %}>Не работает</option>
-                          <option value="stock" {% if v.sensor_status == 'stock' %}selected{% endif %}>Штатный датчик</option>
-                        </select>
+                      <td data-label="Действия" ><button class="btn btn-sm btn-secondary" hx-get="/api/vehicles/{{ v.id }}/thresholds" hx-target="#modal-container" hx-swap="innerHTML">Пороги</button><button class="btn btn-sm btn-danger" hx-post="/api/vehicles/{{ v.id }}/delete" hx-target="#vehicles-table" hx-swap="innerHTML" hx-confirm="Удалить ТС {{ v.plate_number or '—' }} и все его заправки?">Удалить</button></td>
                       {% else %}
-                      <span class="status-badge
-                        {%- if v.sensor_status == 'normal' %} status-normal
-                        {%- elif v.sensor_status == 'broken' %} status-unacceptable
-                        {%- elif v.sensor_status == 'stock' %} status-small-deviation{% endif %}">
-                        {%- if v.sensor_status == 'normal' %}В норме
-                        {%- elif v.sensor_status == 'broken' %}Не работает
-                        {%- elif v.sensor_status == 'stock' %}Штатный датчик
-                        {%- else %}—{% endif %}</span>
+                      <td data-label="Действия"></td>
                       {% endif %}
-                    </td>
-                    <td data-label="Заправки"><a href="/refuels?vehicle_id={{ v.id }}" class="btn btn-sm btn-refuel">Заправки</a></td>
-                    <td data-label="Компания">{{ v.company_name or '—' }}</td>
-                    <td data-label="График"><button class="btn btn-sm btn-graph" hx-get="/api/fuel-graph/modal?vehicle_id={{ v.id }}&imei={{ v.imei or '' }}" hx-target="#modal-container" hx-swap="innerHTML">График</button></td>
-                    <td data-label="Трек"><button class="btn btn-sm btn-track" hx-get="/api/vehicles/{{ v.id }}/track-modal?imei={{ v.imei or '' }}&date_from={{ today_str }}&date_to={{ today_str }}" hx-target="#modal-container" hx-swap="innerHTML">Трек</button></td>
-                    {% if is_superadmin or is_company_admin %}
-                    <td data-label="Действия" ><button class="btn btn-sm btn-secondary" hx-get="/api/vehicles/{{ v.id }}/thresholds" hx-target="#modal-container" hx-swap="innerHTML">Пороги</button><button class="btn btn-sm btn-danger" hx-post="/api/vehicles/{{ v.id }}/delete" hx-target="#vehicles-table" hx-swap="innerHTML" hx-confirm="Удалить ТС {{ v.plate_number or '—' }} и все его заправки?">Удалить</button></td>
-                    {% else %}
-                    <td data-label="Действия"></td>
-                    {% endif %}
-                  </tr>
+                    </tr>
                   {% endfor %}
                 </tbody>
               </table>
@@ -224,6 +228,7 @@
                     <th>Статус</th>
                     <th>Госномер</th>
                     <th>Датчик</th>
+                    <th>В пути</th>
                     <th>Заправки</th>
                      <th>Компания</th>
                      <th>График</th>
@@ -256,6 +261,7 @@
                         {%- else %}—{% endif %}</span>
                       {% endif %}
                     </td>
+                    <td data-label="В пути">{{ v.trip_duration or '—' }}</td>
                     <td data-label="Заправки"><a href="/refuels?vehicle_id={{ v.id }}" class="btn btn-sm btn-refuel">Заправки</a></td>
                     <td data-label="Компания">{{ v.company_name or '—' }}</td>
                     <td data-label="График"><button class="btn btn-sm btn-graph" hx-get="/api/fuel-graph/modal?vehicle_id={{ v.id }}&imei={{ v.imei or '' }}" hx-target="#modal-container" hx-swap="innerHTML">График</button></td>
@@ -285,52 +291,54 @@
                     <thead>
                       <tr>
                         {% if is_superadmin or is_company_admin %}<th style="width: 32px;"><input type="checkbox" onchange="var e=this;document.querySelectorAll('input[name=vehicle_ids]').forEach(function(c){c.checked=e.checked})"></th>{% endif %}
-                        <th>#</th>
-                        <th>Статус</th>
-                        <th>Госномер</th>
-                        <th>Датчик</th>
-                        <th>Заправки</th>
-                        <th>Компания</th>
-                        <th>График</th>
-                        <th>Трек</th>
-                        <th>Действия</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {% for v in vehicles %}
-                      <tr id="v-{{ v.id }}">
-                        {% if is_superadmin or is_company_admin %}<td data-label=""><input type="checkbox" form="bulk-vehicle-form" name="vehicle_ids" value="{{ v.id }}"></td>{% endif %}
-                        <td data-label="#" style="color: var(--text-dim);">{{ loop.index }}</td>
-                        <td data-label="Статус">{{ v.status_dot|safe }}</td>
-                    <td data-label="Госномер"><strong style="cursor:pointer" data-lat="{{ v.status_info.lat or '' }}" data-lon="{{ v.status_info.lon or '' }}" data-ts="{{ v.status_info.ts or '' }}" data-status="{{ v.status_info.status or '' }}" onclick="openLocationMap(this)">{{ v.plate_number or '—' }}</strong></td>
-                        <td data-label="Датчик" class="sensor-cell">
-                      {% if is_superadmin or is_company_admin %}
-                       <select name="status" class="sensor-status-select status-{{ v.sensor_status }}" data-vehicle-id="{{ v.id }}" hx-post="/api/vehicles/{{ v.id }}/sensor-status" hx-trigger="change" hx-swap="innerHTML" hx-target="closest td">
-                          <option value="normal" {% if v.sensor_status == 'normal' %}selected{% endif %}>В норме</option>
-                          <option value="broken" {% if v.sensor_status == 'broken' %}selected{% endif %}>Не работает</option>
-                          <option value="stock" {% if v.sensor_status == 'stock' %}selected{% endif %}>Штатный датчик</option>
-                        </select>
-                      {% else %}
-                      <span class="status-badge
-                        {%- if v.sensor_status == 'normal' %} status-normal
-                        {%- elif v.sensor_status == 'broken' %} status-unacceptable
-                        {%- elif v.sensor_status == 'stock' %} status-small-deviation{% endif %}">
-                        {%- if v.sensor_status == 'normal' %}В норме
-                        {%- elif v.sensor_status == 'broken' %}Не работает
-                        {%- elif v.sensor_status == 'stock' %}Штатный датчик
-                        {%- else %}—{% endif %}</span>
-                      {% endif %}
-                    </td>
-                        <td data-label="Заправки"><a href="/refuels?vehicle_id={{ v.id }}" class="btn btn-sm btn-refuel">Заправки</a></td>
-                        <td data-label="Компания">{{ v.company_name or '—' }}</td>
-                         <td data-label="График"><button class="btn btn-sm btn-graph" hx-get="/api/fuel-graph/modal?vehicle_id={{ v.id }}&imei={{ v.imei or '' }}" hx-target="#modal-container" hx-swap="innerHTML">График</button></td>
-                         <td data-label="Трек"><button class="btn btn-sm btn-track" hx-get="/api/vehicles/{{ v.id }}/track-modal?imei={{ v.imei or '' }}&date_from={{ today_str }}&date_to={{ today_str }}" hx-target="#modal-container" hx-swap="innerHTML">Трек</button></td>
-                    {% if is_superadmin or is_company_admin %}
-                    <td data-label="Действия" ><button class="btn btn-sm btn-secondary" hx-get="/api/vehicles/{{ v.id }}/thresholds" hx-target="#modal-container" hx-swap="innerHTML">Пороги</button><button class="btn btn-sm btn-danger" hx-post="/api/vehicles/{{ v.id }}/delete" hx-target="#vehicles-table" hx-swap="innerHTML" hx-confirm="Удалить ТС {{ v.plate_number or '—' }} и все его заправки?">Удалить</button></td>
-                    {% else %}
-                    <td data-label="Действия"></td>
-                    {% endif %}
+                         <th>#</th>
+                         <th>Статус</th>
+                         <th>Госномер</th>
+                         <th>Датчик</th>
+                         <th>В пути</th>
+                         <th>Заправки</th>
+                         <th>Компания</th>
+                         <th>График</th>
+                         <th>Трек</th>
+                         <th>Действия</th>
                        </tr>
+                     </thead>
+                     <tbody>
+                       {% for v in vehicles %}
+                       <tr id="v-{{ v.id }}">
+                         {% if is_superadmin or is_company_admin %}<td data-label=""><input type="checkbox" form="bulk-vehicle-form" name="vehicle_ids" value="{{ v.id }}"></td>{% endif %}
+                         <td data-label="#" style="color: var(--text-dim);">{{ loop.index }}</td>
+                         <td data-label="Статус">{{ v.status_dot|safe }}</td>
+                     <td data-label="Госномер"><strong style="cursor:pointer" data-lat="{{ v.status_info.lat or '' }}" data-lon="{{ v.status_info.lon or '' }}" data-ts="{{ v.status_info.ts or '' }}" data-status="{{ v.status_info.status or '' }}" onclick="openLocationMap(this)">{{ v.plate_number or '—' }}</strong></td>
+                         <td data-label="Датчик" class="sensor-cell">
+                       {% if is_superadmin or is_company_admin %}
+                        <select name="status" class="sensor-status-select status-{{ v.sensor_status }}" data-vehicle-id="{{ v.id }}" hx-post="/api/vehicles/{{ v.id }}/sensor-status" hx-trigger="change" hx-swap="innerHTML" hx-target="closest td">
+                           <option value="normal" {% if v.sensor_status == 'normal' %}selected{% endif %}>В норме</option>
+                           <option value="broken" {% if v.sensor_status == 'broken' %}selected{% endif %}>Не работает</option>
+                           <option value="stock" {% if v.sensor_status == 'stock' %}selected{% endif %}>Штатный датчик</option>
+                         </select>
+                       {% else %}
+                       <span class="status-badge
+                         {%- if v.sensor_status == 'normal' %} status-normal
+                         {%- elif v.sensor_status == 'broken' %} status-unacceptable
+                         {%- elif v.sensor_status == 'stock' %} status-small-deviation{% endif %}">
+                         {%- if v.sensor_status == 'normal' %}В норме
+                         {%- elif v.sensor_status == 'broken' %}Не работает
+                         {%- elif v.sensor_status == 'stock' %}Штатный датчик
+                         {%- else %}—{% endif %}</span>
+                       {% endif %}
+                     </td>
+                         <td data-label="В пути">{{ v.trip_duration or '—' }}</td>
+                         <td data-label="Заправки"><a href="/refuels?vehicle_id={{ v.id }}" class="btn btn-sm btn-refuel">Заправки</a></td>
+                         <td data-label="Компания">{{ v.company_name or '—' }}</td>
+                          <td data-label="График"><button class="btn btn-sm btn-graph" hx-get="/api/fuel-graph/modal?vehicle_id={{ v.id }}&imei={{ v.imei or '' }}" hx-target="#modal-container" hx-swap="innerHTML">График</button></td>
+                          <td data-label="Трек"><button class="btn btn-sm btn-track" hx-get="/api/vehicles/{{ v.id }}/track-modal?imei={{ v.imei or '' }}&date_from={{ today_str }}&date_to={{ today_str }}" hx-target="#modal-container" hx-swap="innerHTML">Трек</button></td>
+                     {% if is_superadmin or is_company_admin %}
+                     <td data-label="Действия" ><button class="btn btn-sm btn-secondary" hx-get="/api/vehicles/{{ v.id }}/thresholds" hx-target="#modal-container" hx-swap="innerHTML">Пороги</button><button class="btn btn-sm btn-danger" hx-post="/api/vehicles/{{ v.id }}/delete" hx-target="#vehicles-table" hx-swap="innerHTML" hx-confirm="Удалить ТС {{ v.plate_number or '—' }} и все его заправки?">Удалить</button></td>
+                     {% else %}
+                     <td data-label="Действия"></td>
+                     {% endif %}
+                        </tr>
                       {% endfor %}
                     </tbody>
                   </table>
@@ -376,8 +384,8 @@ function refreshStatuses() {
     });
   }).catch(function(){});
 }
-document.addEventListener('DOMContentLoaded', function(){setTimeout(refreshStatuses,2000);setInterval(refreshStatuses,120000)});
-document.addEventListener('htmx:afterSwap',function(e){if(e.detail&&e.detail.target&&e.detail.target.id=='vehicles-table')setTimeout(refreshStatuses,2000)});
+setTimeout(refreshStatuses, 2000);
+setInterval(refreshStatuses, 120000);
 </script>
 <style>
 .sensor-filter-dropdown { position:relative; display:inline-block; }
@@ -499,7 +507,19 @@ function openLocationMap(el) {
       var popupHtml = '<b>' + plate + '</b><br>' + statusText + '<br>' + (agoText ? agoText : '') + '<br>' + data.lat + ', ' + data.lon;
       L.marker([latNum, lonNum]).addTo(map).bindPopup(popupHtml).openPopup();
     }
-    if (typeof L !== 'undefined') { showMap(); }
+    if (typeof L !== 'undefined') {
+      var el = document.getElementById(mapId);
+      if (el) { showMap(); }
+      else {
+        var retryTimer = setInterval(function() {
+          if (document.getElementById(mapId)) {
+            clearInterval(retryTimer);
+            showMap();
+          }
+        }, 50);
+        setTimeout(function() { clearInterval(retryTimer); }, 5000);
+      }
+    }
     else {
       var lcss = document.createElement('link');
       lcss.rel = 'stylesheet'; lcss.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';

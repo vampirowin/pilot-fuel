@@ -164,9 +164,9 @@ def _render_vehicle_group(vehicle_id: int, entries: list, vmap: dict, page: int 
         diff_style = ""
         if e.difference is not None:
             if e.difference < 0:
-                diff_style = ' style="color:var(--warning);font-weight:600"'
-            elif e.difference > 0:
                 diff_style = ' style="color:#e74c3c;font-weight:600"'
+            elif e.difference > 0:
+                diff_style = ' style="color:var(--warning);font-weight:600"'
         ds = format_dt(e.event_date, "%d.%m.%Y %H:%M", user) if e.event_date else "—"
         title_attr = ""
         created_at_str = format_dt(e.created_at, "%d.%m.%Y %H:%M", user) if e.created_at else ""
@@ -205,8 +205,8 @@ def _render_vehicle_group(vehicle_id: int, entries: list, vmap: dict, page: int 
 
     total_pilot = sum(e.pilot_amount or 0 for e in stats_entries)
     total_actual = sum(e.actual_amount or 0 for e in stats_entries)
-    df_total = total_actual - total_pilot
-    err_pct = abs(df_total) / total_pilot * 100 if total_pilot > 0 else None
+    df_total = total_pilot - total_actual
+    err_pct = df_total / total_pilot * 100 if total_pilot > 0 else None
 
     false_count = sum(1 for e in entries if e.is_false)
     excluded_count = sum(1 for e in entries if e.exclude_from_stats and not e.is_false)
@@ -735,6 +735,7 @@ async def sync_refuels_preview(
     vehicle_id: str | None = Form(default=None),
     conflict_actions: str = Form(default="{}"),
     confirmed: str = Form(default="0"),
+    force: str = Form(default="0"),
 ):
     if user.role not in ("superadmin", "company_admin"):
         raise HTTPException(status_code=403)
@@ -875,7 +876,7 @@ async def sync_refuels_preview(
 
             if existing_manual:
                 check_value = existing_manual.actual_amount
-                if actions.get(sidx, "skip") == "skip":
+                if force != "1" and actions.get(sidx, "skip") == "skip":
                     skipped_count += 1
                     event_log.append({"plate": plate, "event_date": ev_date_str, "amount": amount, "old_amount": None, "check_value": check_value, "status": "manual_skipped", "name": ev_name})
                     continue
@@ -948,7 +949,7 @@ async def sync_refuels_preview(
 
         if orphan_manual:
             check_value = orphan_manual.actual_amount
-            if actions.get(sidx, "skip") == "skip":
+            if force != "1" and actions.get(sidx, "skip") == "skip":
                 skipped_count += 1
                 event_log.append({"plate": plate, "event_date": ev_date_str, "amount": amount, "old_amount": old_amount, "check_value": check_value, "status": "orphan_skipped", "name": ev_name})
                 continue
@@ -966,7 +967,7 @@ async def sync_refuels_preview(
             event_log.append({"plate": plate, "event_date": ev_date_str, "amount": amount, "old_amount": old_amount, "check_value": check_value, "status": "orphan_linked", "name": ev_name})
             continue
 
-        if abs((old_amount or 0) - amount) < 0.001:
+        if force != "1" and abs((old_amount or 0) - amount) < 0.001:
             identical_count += 1
             skipped_count += 1
             event_log.append({"plate": plate, "event_date": ev_date_str, "amount": amount, "old_amount": old_amount, "check_value": check_value, "status": "identical", "name": ev_name})
@@ -1009,6 +1010,10 @@ async def sync_refuels_preview(
                     existing_entry.difference = None
                     existing_entry.error_percent = None
                     existing_entry.comparison_status = "pilot_missing"
+                elif pilot_amt and pilot_amt > 0:
+                    existing_entry.difference = None
+                    existing_entry.error_percent = None
+                    existing_entry.comparison_status = "check_missing"
 
         replaced_count += 1
         event_log.append({"plate": plate, "event_date": ev_date_str, "amount": amount, "old_amount": old_amount, "check_value": check_value, "status": "replaced", "name": ev_name})
@@ -1024,6 +1029,7 @@ async def sync_refuels_preview(
             "date_from": date_from or df.strftime("%Y-%m-%d"),
             "date_to": date_to or dt.strftime("%Y-%m-%d"),
             "vehicle_id": vehicle_id or "",
+            "force": force,
         })
 
     log = SyncLog(
@@ -1091,24 +1097,30 @@ def _calc_comparison(pilot_amount: float | None, actual_amount: float | None, n_
     Если нет pilot_amount — статус pilot_missing.
     """
     if pilot_amount is not None and actual_amount is not None and pilot_amount > 0:
-        diff = actual_amount - pilot_amount
-        err = abs(diff) / pilot_amount * 100
+        diff = pilot_amount - actual_amount
+        err = diff / pilot_amount * 100
         abs_diff = abs(diff)
+        abs_err = abs(err)
 
         if enable_abs and abs_diff <= n_abs:
             status = "normal"
         elif enable_abs and abs_diff <= w_abs:
             status = "small_deviation"
-        elif err <= n_pct:
+        elif abs_err <= n_pct:
             status = "normal"
-        elif err <= w_pct:
+        elif abs_err <= w_pct:
             status = "small_deviation"
         else:
             status = "unacceptable"
     else:
         diff = None
         err = None
-        status = "pilot_missing" if actual_amount else None
+        if actual_amount is not None and (pilot_amount is None or pilot_amount == 0):
+            status = "pilot_missing"
+        elif pilot_amount is not None and pilot_amount > 0 and actual_amount is None:
+            status = "check_missing"
+        else:
+            status = None
     return diff, err, status
 
 
@@ -1920,6 +1932,7 @@ STATUS_MAP = {
     "small_deviation": "status-small-deviation",
     "unacceptable": "status-unacceptable",
     "pilot_missing": "status-pilot-missing",
+    "check_missing": "status-check-missing",
     "false_reading": "status-false-reading",
 }
 
@@ -1928,6 +1941,7 @@ STATUS_LABELS = {
     "small_deviation": "Расхождение",
     "unacceptable": "Недопустимо",
     "pilot_missing": "Нет в Pilot",
+    "check_missing": "Нет чека",
     "false_reading": "Ложная",
 }
 
