@@ -1,4 +1,5 @@
 from datetime import datetime
+import sqlalchemy as sa
 from sqlalchemy import Integer, Float, DateTime, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
@@ -6,6 +7,10 @@ from app.database import Base
 
 class TripSummary(Base):
     __tablename__ = "trip_summaries"
+
+    __table_args__ = (
+        sa.Index("ix_trip_summaries_vehicle_date", "vehicle_id", "date"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     vehicle_id: Mapped[int] = mapped_column(Integer, ForeignKey("vehicles.id", ondelete="CASCADE"), nullable=False, index=True)

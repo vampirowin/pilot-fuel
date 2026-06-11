@@ -1,4 +1,5 @@
 from datetime import datetime
+import sqlalchemy as sa
 from sqlalchemy import Integer, String, DateTime, Float, ForeignKey, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -7,6 +8,10 @@ from app.database import Base
 
 class PilotRefuel(Base):
     __tablename__ = "pilot_refuels"
+
+    __table_args__ = (
+        sa.Index("ix_pilot_refuels_vehicle_date", "vehicle_id", "event_date"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     vehicle_id: Mapped[int] = mapped_column(Integer, ForeignKey("vehicles.id", ondelete="CASCADE"), nullable=False, index=True)

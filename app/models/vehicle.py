@@ -33,7 +33,7 @@ class Vehicle(Base):
     warning_threshold_abs: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     client_account_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("client_accounts.id", ondelete="SET NULL"), nullable=True, index=True)
-    site_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("sites.id", ondelete="SET NULL"), nullable=True)
+    site_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("sites.id", ondelete="SET NULL"), nullable=True, index=True)
 
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     synced_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

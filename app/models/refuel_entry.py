@@ -1,4 +1,5 @@
 from datetime import datetime
+import sqlalchemy as sa
 from sqlalchemy import Integer, String, DateTime, Float, Boolean, Text, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
@@ -7,9 +8,13 @@ from app.database import Base
 class RefuelEntry(Base):
     __tablename__ = "refuel_entries"
 
+    __table_args__ = (
+        sa.Index("ix_refuel_entries_vehicle_date", "vehicle_id", "event_date"),
+    )
+
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     vehicle_id: Mapped[int] = mapped_column(Integer, ForeignKey("vehicles.id", ondelete="CASCADE"), nullable=False, index=True)
-    pilot_refuel_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("pilot_refuels.id", ondelete="SET NULL"), nullable=True)
+    pilot_refuel_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("pilot_refuels.id", ondelete="SET NULL"), nullable=True, index=True)
 
     event_date: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
     pilot_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
