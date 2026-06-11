@@ -99,6 +99,45 @@ async def get_effective_thresholds(db: AsyncSession, vehicle_id: int | None = No
     return n_pct, w_pct, n_abs, w_abs, enable_abs
 
 
+async def get_thresholds_batch(db: AsyncSession, vehicle_ids: list) -> dict:
+    rows = (await db.execute(
+        select(Setting).where(Setting.key.in_(["normal_threshold", "warning_threshold"]))
+    )).scalars().all()
+    g_n_pct, g_w_pct = 3.0, 10.0
+    for s in rows:
+        if s.key == "normal_threshold":
+            g_n_pct = float(s.value)
+        elif s.key == "warning_threshold":
+            g_w_pct = float(s.value)
+
+    vmap = {}
+    if vehicle_ids:
+        vehicles = (await db.execute(
+            select(Vehicle).where(Vehicle.id.in_(vehicle_ids))
+        )).scalars().all()
+        vmap = {v.id: v for v in vehicles}
+
+    result = {}
+    for vid in vehicle_ids:
+        v = vmap.get(vid)
+        n_pct, w_pct = g_n_pct, g_w_pct
+        n_abs, w_abs = 0.0, 0.0
+        enable_abs = False
+        if v:
+            if v.normal_threshold_pct is not None:
+                n_pct = v.normal_threshold_pct
+            if v.warning_threshold_pct is not None:
+                w_pct = v.warning_threshold_pct
+            if v.enable_abs_threshold:
+                enable_abs = True
+                if v.normal_threshold_abs is not None:
+                    n_abs = v.normal_threshold_abs
+                if v.warning_threshold_abs is not None:
+                    w_abs = v.warning_threshold_abs
+        result[vid] = (n_pct, w_pct, n_abs, w_abs, enable_abs)
+    return result
+
+
 def parse_timestamp(val) -> datetime | None:
     if not val:
         return None

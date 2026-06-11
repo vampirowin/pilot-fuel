@@ -14,7 +14,7 @@ from app.models.sync_log import SyncLog
 from app.models.setting import Setting
 from app.models.trip_summary import TripSummary
 from app.services.pilot_service import PilotService
-from app.services.refuel_utils import match_vehicle as _match_vehicle, parse_timestamp as _parse_timestamp, get_effective_thresholds as _get_effective_thresholds, calc_comparison as _calc_comparison
+from app.services.refuel_utils import match_vehicle as _match_vehicle, parse_timestamp as _parse_timestamp, get_effective_thresholds as _get_effective_thresholds, calc_comparison as _calc_comparison, get_thresholds_batch
 
 logger = logging.getLogger(__name__)
 
@@ -129,7 +129,7 @@ async def _sync_company(admin: User) -> dict:
         updated_count = 0
         errors = []
         vehicle_updates = []
-        thresh_cache = {}
+        thresh_cache = await get_thresholds_batch(db, [v.id for v in vehicles])
         event_log = []
 
         for ev in all_events:
@@ -139,9 +139,7 @@ async def _sync_company(admin: User) -> dict:
                 event_log.append({"plate": "—", "event_date": "", "old_amount": None, "new_amount": ev.get("refuel_amount"), "check_value": None, "action": "unmatched", "name": ev.get("name", "?")})
                 continue
 
-            if v.id not in thresh_cache:
-                thresh_cache[v.id] = await _get_effective_thresholds(db, v.id)
-            n_pct, w_pct, n_abs, w_abs, enable_abs = thresh_cache[v.id]
+            n_pct, w_pct, n_abs, w_abs, enable_abs = thresh_cache.get(v.id, (3.0, 10.0, 0.0, 0.0, False))
 
             ev_ts = _parse_timestamp(ev.get("ts"))
             if not ev_ts:

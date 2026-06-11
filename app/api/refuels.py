@@ -26,6 +26,7 @@ from app.services.refuel_utils import (
     resolve_pilot_credentials as _resolve_pilot_credentials,
     calc_comparison as _calc_comparison,
     get_effective_thresholds as _get_effective_thresholds,
+    get_thresholds_batch,
     parse_timestamp as _parse_timestamp,
     match_vehicle as _match_vehicle,
     group_by_vehicle as _group_by_vehicle,
@@ -507,7 +508,7 @@ async def sync_refuels(
 
     total_new = 0
     errors = []
-    thresh_cache = {}
+    thresh_cache = await get_thresholds_batch(db, [v.id for v in vehicles])
     event_log = []
 
     for ev in raw_events:
@@ -519,9 +520,7 @@ async def sync_refuels(
             event_log.append({"name": ev_name, "plate": "—", "event_date": "", "amount": ev_amount, "status": "unmatched"})
             continue
 
-        if v.id not in thresh_cache:
-            thresh_cache[v.id] = await _get_effective_thresholds(db, v.id)
-        n_pct, w_pct, n_abs, w_abs, enable_abs = thresh_cache[v.id]
+        n_pct, w_pct, n_abs, w_abs, enable_abs = thresh_cache.get(v.id, (3.0, 10.0, 0.0, 0.0, False))
 
         ev_ts = _parse_timestamp(ev.get("ts"))
         if not ev_ts:
@@ -784,7 +783,7 @@ async def sync_refuels_preview(
     item_idx = 0
     new_entries = []
     unmatched = 0
-    thresh_cache = {}
+    thresh_cache = await get_thresholds_batch(db, [v.id for v in vehicles])
     event_log = []
     conflicts = []
 
@@ -797,9 +796,7 @@ async def sync_refuels_preview(
             event_log.append({"plate": "—", "event_date": "", "amount": ev_amount, "status": "unmatched", "name": ev_name})
             continue
 
-        if v.id not in thresh_cache:
-            thresh_cache[v.id] = await _get_effective_thresholds(db, v.id)
-        n_pct, w_pct, n_abs, w_abs, enable_abs = thresh_cache[v.id]
+        n_pct, w_pct, n_abs, w_abs, enable_abs = thresh_cache.get(v.id, (3.0, 10.0, 0.0, 0.0, False))
 
         ev_ts = _parse_timestamp(ev.get("ts"))
         if not ev_ts:
@@ -1669,7 +1666,8 @@ async def import_checks_apply(
     updated_count = 0
     skipped_count = 0
     errors = []
-    thresh_cache = {}
+    unique_vids = list(set(it["vehicle_id"] for it in items))
+    thresh_cache = await get_thresholds_batch(db, unique_vids)
 
     for item in items:
         itype = item["type"]
@@ -1678,9 +1676,7 @@ async def import_checks_apply(
         vehicle_id = item["vehicle_id"]
         utc_dt = datetime.fromisoformat(item["utc_dt"])
 
-        if vehicle_id not in thresh_cache:
-            thresh_cache[vehicle_id] = await _get_effective_thresholds(db, vehicle_id)
-        n_pct, w_pct, n_abs, w_abs, enable_abs = thresh_cache[vehicle_id]
+        n_pct, w_pct, n_abs, w_abs, enable_abs = thresh_cache.get(vehicle_id, (3.0, 10.0, 0.0, 0.0, False))
 
         if itype == "conflict":
             if actions.get(sidx, "skip") == "skip":
@@ -1738,9 +1734,7 @@ async def import_checks_apply(
                 skipped_count += 1
                 continue
             # Get thresholds for this entry's vehicle
-            if entry.vehicle_id not in thresh_cache:
-                thresh_cache[entry.vehicle_id] = await _get_effective_thresholds(db, entry.vehicle_id)
-            n_pct, w_pct, n_abs, w_abs, enable_abs = thresh_cache[entry.vehicle_id]
+            n_pct, w_pct, n_abs, w_abs, enable_abs = thresh_cache.get(entry.vehicle_id, (3.0, 10.0, 0.0, 0.0, False))
             entry.actual_amount = amount
             # Recalc comparison
             if entry.pilot_refuel_id and entry.pilot_amount is not None:
