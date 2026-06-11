@@ -69,6 +69,73 @@ async def sync_all_companies():
     return results
 
 
+async def _sync_trip_summaries(db, pilot, token, node_id, admin, start_str, stop_str) -> int:
+    ts_from = int(datetime.strptime(start_str, "%d.%m.%Y %H:%M").timestamp())
+    ts_to = int(datetime.strptime(stop_str, "%d.%m.%Y %H:%M").timestamp())
+    start_dt = datetime.strptime(start_str, "%d.%m.%Y %H:%M")
+
+    trip_vehicles = await db.execute(
+        select(Vehicle).where(
+            Vehicle.is_active == True,
+            Vehicle.client_account_id == admin.client_account_id,
+            Vehicle.imei.isnot(None),
+            Vehicle.pilot_agent_id.isnot(None),
+        )
+    )
+    trip_vehicles = trip_vehicles.scalars().all()
+
+    trip_count = 0
+    sem = asyncio.Semaphore(10)
+
+    async def _fetch_one(tv):
+        async with sem:
+            return tv, await pilot.get_trip_summary(token, node_id, tv.imei, tv.pilot_agent_id, ts_from, ts_to)
+
+    gathered = await asyncio.gather(*[_fetch_one(tv) for tv in trip_vehicles], return_exceptions=True)
+
+    for item in gathered:
+        if isinstance(item, BaseException):
+            logger.error(f"Trip summary sync failed: {item}")
+            continue
+        tv, result = item
+        if result is None:
+            continue
+
+        existing = await db.execute(
+            select(TripSummary).where(
+                TripSummary.vehicle_id == tv.id,
+                TripSummary.date == start_dt,
+            )
+        )
+        existing_ts = existing.scalar_one_or_none()
+
+        if existing_ts:
+            existing_ts.duration_seconds = result["duration"]
+            existing_ts.motion_seconds = result["motion_duration"]
+            existing_ts.gps_km = result["gps_km"]
+            existing_ts.can_km = result["can_km"]
+            existing_ts.max_speed = result["maxspeed"]
+            existing_ts.avg_speed = result["avgspeed"]
+            existing_ts.parking_count = result["parking_count"]
+            existing_ts.segment_count = result["segment_count"]
+        else:
+            db.add(TripSummary(
+                vehicle_id=tv.id,
+                date=start_dt,
+                duration_seconds=result["duration"],
+                motion_seconds=result["motion_duration"],
+                gps_km=result["gps_km"],
+                can_km=result["can_km"],
+                max_speed=result["maxspeed"],
+                avg_speed=result["avgspeed"],
+                parking_count=result["parking_count"],
+                segment_count=result["segment_count"],
+            ))
+        trip_count += 1
+
+    return trip_count
+
+
 async def _sync_company(admin: User) -> dict:
     async with async_session() as db:
         pilot = PilotService()
@@ -244,68 +311,7 @@ async def _sync_company(admin: User) -> dict:
                     "check_value": None, "action": "new", "name": ev.get("name", "?"),
                 })
 
-        ts_from = int(datetime.strptime(start_str, "%d.%m.%Y %H:%M").timestamp())
-        ts_to = int(datetime.strptime(stop_str, "%d.%m.%Y %H:%M").timestamp())
-        start_dt = datetime.strptime(start_str, "%d.%m.%Y %H:%M")
-
-        trip_vehicles = await db.execute(
-            select(Vehicle).where(
-                Vehicle.is_active == True,
-                Vehicle.client_account_id == admin.client_account_id,
-                Vehicle.imei.isnot(None),
-                Vehicle.pilot_agent_id.isnot(None),
-            )
-        )
-        trip_vehicles = trip_vehicles.scalars().all()
-
-        trip_count = 0
-        sem = asyncio.Semaphore(10)
-
-        async def _fetch_one(tv):
-            async with sem:
-                return tv, await pilot.get_trip_summary(token, node_id, tv.imei, tv.pilot_agent_id, ts_from, ts_to)
-
-        gathered = await asyncio.gather(*[_fetch_one(tv) for tv in trip_vehicles], return_exceptions=True)
-
-        for item in gathered:
-            if isinstance(item, BaseException):
-                logger.error(f"Trip summary sync failed: {item}")
-                continue
-            tv, result = item
-            if result is None:
-                continue
-
-            existing = await db.execute(
-                select(TripSummary).where(
-                    TripSummary.vehicle_id == tv.id,
-                    TripSummary.date == start_dt,
-                )
-            )
-            existing_ts = existing.scalar_one_or_none()
-
-            if existing_ts:
-                existing_ts.duration_seconds = result["duration"]
-                existing_ts.motion_seconds = result["motion_duration"]
-                existing_ts.gps_km = result["gps_km"]
-                existing_ts.can_km = result["can_km"]
-                existing_ts.max_speed = result["maxspeed"]
-                existing_ts.avg_speed = result["avgspeed"]
-                existing_ts.parking_count = result["parking_count"]
-                existing_ts.segment_count = result["segment_count"]
-            else:
-                db.add(TripSummary(
-                    vehicle_id=tv.id,
-                    date=start_dt,
-                    duration_seconds=result["duration"],
-                    motion_seconds=result["motion_duration"],
-                    gps_km=result["gps_km"],
-                    can_km=result["can_km"],
-                    max_speed=result["maxspeed"],
-                    avg_speed=result["avgspeed"],
-                    parking_count=result["parking_count"],
-                    segment_count=result["segment_count"],
-                ))
-            trip_count += 1
+        trip_count = await _sync_trip_summaries(db, pilot, token, node_id, admin, start_str, stop_str)
 
         details = f"new={new_count}, updated={updated_count}, pilot_events={total_events}"
         if errors:
