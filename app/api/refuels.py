@@ -877,7 +877,7 @@ async def sync_refuels_preview(
 
             if existing_manual:
                 check_value = existing_manual.actual_amount
-                if force != "1" and actions.get(sidx, "skip") == "skip":
+                if force != "1" and actions.get(sidx, "replace") == "skip":
                     skipped_count += 1
                     event_log.append({"plate": plate, "event_date": ev_date_str, "amount": amount, "old_amount": None, "check_value": check_value, "status": "manual_skipped", "name": ev_name})
                     continue
@@ -950,7 +950,7 @@ async def sync_refuels_preview(
 
         if orphan_manual:
             check_value = orphan_manual.actual_amount
-            if force != "1" and actions.get(sidx, "skip") == "skip":
+            if force != "1" and actions.get(sidx, "replace") == "skip":
                 skipped_count += 1
                 event_log.append({"plate": plate, "event_date": ev_date_str, "amount": amount, "old_amount": old_amount, "check_value": check_value, "status": "orphan_skipped", "name": ev_name})
                 continue
