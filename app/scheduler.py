@@ -93,44 +93,36 @@ async def _sync_company(admin: User) -> dict:
         if not veh_ids:
             return {"status": "skipped", "reason": "no agent_ids"}
 
-        BATCH_SIZE = 20
         token = admin.pilot_token
         node_id = admin.pilot_node_id or 0
-        all_events = []
         login_attempted = False
 
-        for i in range(0, len(veh_ids), BATCH_SIZE):
-            batch = veh_ids[i:i + BATCH_SIZE]
-            max_attempts = 3
-            attempt = 0
-            while attempt < max_attempts:
-                try:
-                    batch_events = await pilot.get_refuel_report(token, node_id, batch, start_str, stop_str)
-                    break
-                except Exception as e:
-                    err_msg = str(e)
-                    is_auth_err = "401" in err_msg or "Unauthorized" in err_msg
-                    if is_auth_err and not login_attempted:
-                        if admin.pilot_password:
-                            try:
-                                result = await pilot.login(admin.username, admin.pilot_password)
-                                token = result.get("token") or admin.pilot_token
-                                node_id = result.get("node_id", 0) or admin.pilot_node_id
-                                admin.pilot_token = token
-                                admin.pilot_node_id = node_id
-                                await db.commit()
-                                login_attempted = True
-                                continue
-                            except Exception as login_err:
-                                logger.error(f"Re-login failed for {admin.username}: {login_err}")
-                        else:
-                            logger.warning(f"No saved password for {admin.username} — re-login needed")
-                    attempt += 1
-                    if attempt >= max_attempts or is_auth_err:
-                        raise
-                    await asyncio.sleep(1)
-            all_events.extend(batch_events)
-            await asyncio.sleep(0.5)
+        async def _on_retry(e: Exception, attempt: int):
+            nonlocal token, node_id, login_attempted
+            err_msg = str(e)
+            if "401" in err_msg or "Unauthorized" in err_msg:
+                if not login_attempted and admin.pilot_password:
+                    try:
+                        result = await pilot.login(admin.username, admin.pilot_password)
+                        new_token = result.get("token") or admin.pilot_token
+                        new_node_id = result.get("node_id", 0) or admin.pilot_node_id
+                        admin.pilot_token = new_token
+                        admin.pilot_node_id = new_node_id
+                        await db.commit()
+                        token = new_token
+                        node_id = new_node_id
+                        login_attempted = True
+                        return token, node_id
+                    except Exception as login_err:
+                        logger.error(f"Re-login failed for {admin.username}: {login_err}")
+                elif not login_attempted:
+                    logger.warning(f"No saved password for {admin.username} — re-login needed")
+            return None
+
+        all_events = await pilot.fetch_refuel_reports_batch(
+            token, node_id, veh_ids, start_str, stop_str,
+            on_retry=_on_retry,
+        )
 
         total_events = len(all_events)
         new_count = 0

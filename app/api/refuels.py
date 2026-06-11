@@ -499,21 +499,8 @@ async def sync_refuels(
     if not veh_ids:
         return HTMLResponse('<div class="card"><div class="empty-state"><p>Нет ТС с agent_id.</p></div></div>')
 
-    BATCH_SIZE = 20
-    all_events = []
     try:
-        for i in range(0, len(veh_ids), BATCH_SIZE):
-            batch = veh_ids[i:i + BATCH_SIZE]
-            for attempt in range(3):
-                try:
-                    batch_events = await pilot.get_refuel_report(token, node_id, batch, start_str, stop_str)
-                    break
-                except Exception:
-                    if attempt == 2:
-                        raise
-                    await asyncio.sleep(1)
-            all_events.extend(batch_events)
-            await asyncio.sleep(0.5)
+        all_events = await pilot.fetch_refuel_reports_batch(token, node_id, veh_ids, start_str, stop_str)
     except Exception as e:
         return HTMLResponse(f'<div class="card"><div class="empty-state"><p>Ошибка Pilot API: {str(e)[:200]}</p></div></div>')
     raw_events = all_events
@@ -776,21 +763,8 @@ async def sync_refuels_preview(
     if not veh_ids:
         return HTMLResponse('<div class="modal-overlay" onclick="if(event.target===this)this.remove()"><div class="modal"><div class="modal-body"><div class="empty-state"><p>Нет ТС с agent_id.</p></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="this.closest(\'.modal-overlay\').remove()">Закрыть</button></div></div></div>')
 
-    BATCH_SIZE = 20
-    all_events = []
     try:
-        for i in range(0, len(veh_ids), BATCH_SIZE):
-            batch = veh_ids[i:i + BATCH_SIZE]
-            for attempt in range(3):
-                try:
-                    batch_events = await pilot.get_refuel_report(token, node_id, batch, start_str, stop_str)
-                    break
-                except Exception:
-                    if attempt == 2:
-                        raise
-                    await asyncio.sleep(1)
-            all_events.extend(batch_events)
-            await asyncio.sleep(0.5)
+        all_events = await pilot.fetch_refuel_reports_batch(token, node_id, veh_ids, start_str, stop_str)
     except Exception as e:
         return HTMLResponse(f'<div class="modal-overlay" onclick="if(event.target===this)this.remove()"><div class="modal"><div class="modal-body"><div class="empty-state"><p>Ошибка Pilot API: {html.escape(str(e)[:200])}</p></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="this.closest(\'.modal-overlay\').remove()">Закрыть</button></div></div></div>')
 

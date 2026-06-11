@@ -113,6 +113,36 @@ class PilotService:
         results = await asyncio.gather(*[_fetch(i) for i in imeis if i])
         return {imei: data for imei, data in results if data}
 
+    async def fetch_refuel_reports_batch(
+        self, token: str, node_id: int,
+        veh_ids: list[int],
+        start_str: str, stop_str: str,
+        batch_size: int = 20,
+        max_attempts: int = 3,
+        on_retry=None,
+    ) -> list[dict]:
+        all_events = []
+        for i in range(0, len(veh_ids), batch_size):
+            batch = veh_ids[i:i + batch_size]
+            attempt = 0
+            while attempt < max_attempts:
+                try:
+                    batch_events = await self.get_refuel_report(token, node_id, batch, start_str, stop_str)
+                    break
+                except Exception as e:
+                    attempt += 1
+                    if on_retry:
+                        result = await on_retry(e, attempt)
+                        if result:
+                            token, node_id = result
+                            continue
+                    if attempt >= max_attempts:
+                        raise
+                    await asyncio.sleep(1)
+            all_events.extend(batch_events)
+            await asyncio.sleep(0.5)
+        return all_events
+
     async def get_refuel_report(
         self,
         token: str,
