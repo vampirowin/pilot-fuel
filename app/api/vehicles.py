@@ -16,7 +16,7 @@ from app.models.refuel_entry import RefuelEntry
 from app.services.pilot_service import PilotService
 from app.dependencies import get_current_user, apply_vehicle_filter
 from app.models.vehicle import SENSOR_STATUSES
-from app.api.refuels import _get_effective_thresholds, _calc_comparison, _resolve_pilot_credentials
+from app.services.refuel_utils import get_effective_thresholds as _get_effective_thresholds, calc_comparison as _calc_comparison, resolve_pilot_credentials as _resolve_pilot_credentials
 from app.models.setting import Setting
 from app.models.trip_summary import TripSummary
 from app.timezone_utils import get_user_timezone

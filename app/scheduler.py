@@ -14,7 +14,7 @@ from app.models.sync_log import SyncLog
 from app.models.setting import Setting
 from app.models.trip_summary import TripSummary
 from app.services.pilot_service import PilotService
-from app.api.refuels import _match_vehicle, _parse_timestamp, _get_effective_thresholds, _calc_comparison
+from app.services.refuel_utils import match_vehicle as _match_vehicle, parse_timestamp as _parse_timestamp, get_effective_thresholds as _get_effective_thresholds, calc_comparison as _calc_comparison
 
 logger = logging.getLogger(__name__)
 

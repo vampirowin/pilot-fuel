@@ -12,7 +12,7 @@ from app.models.setting import Setting
 from app.models.refuel_entry import RefuelEntry
 from app.dependencies import get_current_username, get_current_user, require_superadmin
 from app.services.pilot_service import PilotService
-from app.api.refuels import _get_effective_thresholds, _calc_comparison
+from app.services.refuel_utils import get_effective_thresholds as _get_effective_thresholds, calc_comparison as _calc_comparison
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
