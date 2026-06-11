@@ -259,49 +259,53 @@ async def _sync_company(admin: User) -> dict:
         trip_vehicles = trip_vehicles.scalars().all()
 
         trip_count = 0
-        for tv in trip_vehicles:
-            try:
-                result = await pilot.get_trip_summary(
-                    token, node_id,
-                    tv.imei, tv.pilot_agent_id,
-                    ts_from, ts_to,
-                )
-                if result is None:
-                    continue
+        sem = asyncio.Semaphore(10)
 
-                existing = await db.execute(
-                    select(TripSummary).where(
-                        TripSummary.vehicle_id == tv.id,
-                        TripSummary.date == start_dt,
-                    )
-                )
-                existing_ts = existing.scalar_one_or_none()
+        async def _fetch_one(tv):
+            async with sem:
+                return tv, await pilot.get_trip_summary(token, node_id, tv.imei, tv.pilot_agent_id, ts_from, ts_to)
 
-                if existing_ts:
-                    existing_ts.duration_seconds = result["duration"]
-                    existing_ts.motion_seconds = result["motion_duration"]
-                    existing_ts.gps_km = result["gps_km"]
-                    existing_ts.can_km = result["can_km"]
-                    existing_ts.max_speed = result["maxspeed"]
-                    existing_ts.avg_speed = result["avgspeed"]
-                    existing_ts.parking_count = result["parking_count"]
-                    existing_ts.segment_count = result["segment_count"]
-                else:
-                    db.add(TripSummary(
-                        vehicle_id=tv.id,
-                        date=start_dt,
-                        duration_seconds=result["duration"],
-                        motion_seconds=result["motion_duration"],
-                        gps_km=result["gps_km"],
-                        can_km=result["can_km"],
-                        max_speed=result["maxspeed"],
-                        avg_speed=result["avgspeed"],
-                        parking_count=result["parking_count"],
-                        segment_count=result["segment_count"],
-                    ))
-                trip_count += 1
-            except Exception as e:
-                logger.error(f"Trip summary sync failed for {tv.imei}: {e}")
+        gathered = await asyncio.gather(*[_fetch_one(tv) for tv in trip_vehicles], return_exceptions=True)
+
+        for item in gathered:
+            if isinstance(item, BaseException):
+                logger.error(f"Trip summary sync failed: {item}")
+                continue
+            tv, result = item
+            if result is None:
+                continue
+
+            existing = await db.execute(
+                select(TripSummary).where(
+                    TripSummary.vehicle_id == tv.id,
+                    TripSummary.date == start_dt,
+                )
+            )
+            existing_ts = existing.scalar_one_or_none()
+
+            if existing_ts:
+                existing_ts.duration_seconds = result["duration"]
+                existing_ts.motion_seconds = result["motion_duration"]
+                existing_ts.gps_km = result["gps_km"]
+                existing_ts.can_km = result["can_km"]
+                existing_ts.max_speed = result["maxspeed"]
+                existing_ts.avg_speed = result["avgspeed"]
+                existing_ts.parking_count = result["parking_count"]
+                existing_ts.segment_count = result["segment_count"]
+            else:
+                db.add(TripSummary(
+                    vehicle_id=tv.id,
+                    date=start_dt,
+                    duration_seconds=result["duration"],
+                    motion_seconds=result["motion_duration"],
+                    gps_km=result["gps_km"],
+                    can_km=result["can_km"],
+                    max_speed=result["maxspeed"],
+                    avg_speed=result["avgspeed"],
+                    parking_count=result["parking_count"],
+                    segment_count=result["segment_count"],
+                ))
+            trip_count += 1
 
         details = f"new={new_count}, updated={updated_count}, pilot_events={total_events}"
         if errors:

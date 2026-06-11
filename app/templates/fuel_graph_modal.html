@@ -61,6 +61,14 @@
 @keyframes fg-spin { to { transform: rotate(360deg); }}
 </style>
 <script>
+(function() {
+var ensureChart = function(cb) {
+  if (typeof Chart !== 'undefined') { cb(); return; }
+  var s = document.createElement('script');
+  s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js';
+  s.onload = cb;
+  document.head.appendChild(s);
+};
 var fg = (function() {
   var chart = null;
   var canvas = document.getElementById('fuel-graph-canvas');
@@ -646,12 +654,13 @@ var fg = (function() {
     el.innerHTML = html;
   }
 
-  setTimeout(build, 100);
+  setTimeout(function() { ensureChart(build); }, 100);
 
   return {
     setPeriod: setPeriod, build: build, todayStr: todayStr,
     zoomIn: zoomIn, zoomOut: zoomOut, resetZoom: resetZoom,
     closeMap: closeMap,
   };
+})();
 })();
 </script>

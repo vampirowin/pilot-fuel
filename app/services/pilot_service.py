@@ -117,7 +117,7 @@ class PilotService:
         self, token: str, node_id: int,
         veh_ids: list[int],
         start_str: str, stop_str: str,
-        batch_size: int = 20,
+        batch_size: int = 50,
         max_attempts: int = 3,
         on_retry=None,
     ) -> list[dict]:

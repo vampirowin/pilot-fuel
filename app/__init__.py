@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.gzip import GZipMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from app.config import get_settings
 from app.database import engine
@@ -45,6 +46,8 @@ def create_app() -> FastAPI:
         secret_key=settings.secret_key,
         max_age=settings.session_lifetime_hours * 3600,
     )
+
+    app.add_middleware(GZipMiddleware, minimum_size=500)
 
     app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
