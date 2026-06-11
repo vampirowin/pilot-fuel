@@ -575,7 +575,7 @@ async def sync_refuels(
                     RefuelEntry.event_date <= ev_ts + timedelta(hours=1),
                 )
             )
-            orphan_entry = orphan.scalar_one_or_none()
+            orphan_entry = orphan.scalars().first()
             if orphan_entry:
                 orphan_entry.pilot_refuel_id = existing_pr.id
                 orphan_entry.pilot_amount = existing_pr.amount
@@ -624,7 +624,7 @@ async def sync_refuels(
                 RefuelEntry.event_date <= ev_ts + timedelta(hours=1),
             )
         )
-        existing_manual_entry = existing_manual.scalar_one_or_none()
+        existing_manual_entry = existing_manual.scalars().first()
 
         pr = PilotRefuel(
             vehicle_id=v.id,
@@ -873,7 +873,7 @@ async def sync_refuels_preview(
                     RefuelEntry.event_date >= ev_ts - timedelta(hours=1),
                     RefuelEntry.event_date <= ev_ts + timedelta(hours=1),
                 )
-            )).scalar_one_or_none()
+            )).scalars().first()
 
             if existing_manual:
                 check_value = existing_manual.actual_amount
@@ -946,7 +946,7 @@ async def sync_refuels_preview(
                 RefuelEntry.event_date >= ev_ts - timedelta(hours=1),
                 RefuelEntry.event_date <= ev_ts + timedelta(hours=1),
             )
-        )).scalar_one_or_none()
+        )).scalars().first()
 
         if orphan_manual:
             check_value = orphan_manual.actual_amount

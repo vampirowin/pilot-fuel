@@ -256,7 +256,7 @@ async def _sync_company(admin: User) -> dict:
                             RefuelEntry.event_date <= ev_ts + timedelta(hours=1),
                         )
                     )
-                    existing_entry = orphan.scalar_one_or_none()
+                    existing_entry = orphan.scalars().first()
                     if existing_entry:
                         existing_entry.pilot_refuel_id = existing_pr.id
                         check_value = existing_entry.actual_amount
@@ -301,7 +301,7 @@ async def _sync_company(admin: User) -> dict:
                         RefuelEntry.event_date <= ev_ts + timedelta(hours=1),
                     )
                 )
-                existing_manual = existing_manual.scalar_one_or_none()
+                existing_manual = existing_manual.scalars().first()
 
                 pr = PilotRefuel(
                     vehicle_id=v.id,
