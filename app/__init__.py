@@ -1,7 +1,7 @@
 import os
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, Request
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from app.config import get_settings
@@ -26,6 +26,20 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     app = FastAPI(title="UI fuel", lifespan=lifespan)
+
+    @app.middleware("http")
+    async def csrf_check(request: Request, call_next):
+        if request.method in ("POST", "PUT", "DELETE"):
+            path = request.url.path
+            if path not in ("/login", "/admin/login"):
+                hx = request.headers.get("HX-Request")
+                if hx != "true":
+                    return JSONResponse(
+                        {"detail": "CSRF validation failed"},
+                        status_code=403,
+                    )
+        return await call_next(request)
+
     app.add_middleware(
         SessionMiddleware,
         secret_key=settings.secret_key,

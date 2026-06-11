@@ -366,6 +366,7 @@
 </div>
 <div id="modal-container"></div>
 <script>
+function escHtml(s) { var d = document.createElement('div'); d.appendChild(document.createTextNode(s)); return d.innerHTML; }
 var STATUS_LABELS = {online:'Онлайн',warning:'>20 мин',offline:'Офлайн'};
 var STATUS_CLASSES = {online:'status-dot-on',warning:'status-dot-warn',offline:'status-dot-off'};
 function refreshStatuses() {
@@ -431,7 +432,7 @@ function openLocationMap(el) {
   overlay.innerHTML =
     '<div class="modal" style="width:600px;max-width:95vw;text-align:center">' +
       '<div class="modal-header">' +
-        '<h2>' + plate + ' — текущее местоположение</h2>' +
+        '<h2>' + escHtml(plate) + ' — текущее местоположение</h2>' +
         '<button type="button" class="modal-close" onclick="this.closest(\'.modal-overlay\').remove()">&times;</button>' +
       '</div>' +
       '<div class="modal-body" id="loc-body-' + id + '">' +
@@ -504,7 +505,7 @@ function openLocationMap(el) {
     function showMap() {
       var map = L.map(mapId).setView([latNum, lonNum], 15);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
-      var popupHtml = '<b>' + plate + '</b><br>' + statusText + '<br>' + (agoText ? agoText : '') + '<br>' + data.lat + ', ' + data.lon;
+      var popupHtml = '<b>' + escHtml(plate) + '</b><br>' + statusText + '<br>' + (agoText ? agoText : '') + '<br>' + data.lat + ', ' + data.lon;
       L.marker([latNum, lonNum]).addTo(map).bindPopup(popupHtml).openPopup();
     }
     if (typeof L !== 'undefined') {
