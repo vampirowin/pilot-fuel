@@ -557,6 +557,38 @@ async def settings_page(
     })
 
 
+@router.post("/admin/settings/sync-time")
+async def update_sync_time(
+    request: Request,
+    _=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    sync_time: str = Form(...),
+):
+    if request.session.get("role") != "superadmin":
+        raise HTTPException(302, headers={"Location": "/"})
+    try:
+        parts = sync_time.split(":")
+        hour = int(parts[0])
+        minute = int(parts[1]) if len(parts) > 1 else 0
+        if not (0 <= hour <= 23 and 0 <= minute <= 59):
+            raise ValueError
+    except (ValueError, IndexError):
+        raise HTTPException(400, detail="Invalid time format. Use HH:MM")
+
+    stmt = select(Setting).where(Setting.key == "sync_time")
+    s = (await db.execute(stmt)).scalar_one_or_none()
+    if s:
+        s.value = sync_time
+    else:
+        db.add(Setting(key="sync_time", value=sync_time, description="Время автоматической синхронизации (HH:MM MSK)"))
+    await db.commit()
+
+    from app.scheduler import reschedule_sync
+    reschedule_sync(hour, minute)
+
+    return RedirectResponse(url="/admin/settings?synced=1", status_code=302)
+
+
 @router.post("/admin/settings")
 async def update_settings(
     request: Request,

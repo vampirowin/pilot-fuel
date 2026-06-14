@@ -555,14 +555,13 @@ async def sync_refuels(
         start_lvl = ev.get("start_level")
         end_lvl = ev.get("end_level")
 
-        existing = await db.execute(
+        existing_pr = (await db.execute(
             select(PilotRefuel).where(
                 PilotRefuel.vehicle_id == v.id,
                 PilotRefuel.event_date >= ev_ts - timedelta(hours=1),
                 PilotRefuel.event_date <= ev_ts + timedelta(hours=1),
-            )
-        )
-        existing_pr = existing.order_by(func.abs(func.extract('epoch', PilotRefuel.event_date - ev_ts))).scalars().first()
+            ).order_by(func.abs(func.extract('epoch', PilotRefuel.event_date - ev_ts)))
+        )).scalars().first()
         if existing_pr:
             # Link orphan manual entry if any
             orphan = await db.execute(

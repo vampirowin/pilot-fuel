@@ -21,13 +21,26 @@ logger = logging.getLogger(__name__)
 _scheduler: AsyncIOScheduler | None = None
 
 
-def start_scheduler():
+async def start_scheduler():
     global _scheduler
     if _scheduler is not None:
         return
     _scheduler = AsyncIOScheduler(timezone="Europe/Moscow")
+
+    hour = 3
+    minute = 0
+    try:
+        async with async_session() as db:
+            s = (await db.execute(select(Setting).where(Setting.key == "sync_time"))).scalar_one_or_none()
+            if s and s.value:
+                parts = s.value.split(":")
+                hour = int(parts[0])
+                minute = int(parts[1]) if len(parts) > 1 else 0
+    except Exception as e:
+        logger.warning(f"Failed to read sync_time, using default 03:00: {e}")
+
     _scheduler.add_job(
-        sync_all_companies, "cron", hour=3, minute=0,
+        sync_all_companies, "cron", hour=hour, minute=minute,
         id="daily_sync", replace_existing=True, misfire_grace_time=3600,
     )
     _scheduler.add_job(
@@ -35,7 +48,7 @@ def start_scheduler():
         id="status_refresh", replace_existing=True,
     )
     _scheduler.start()
-    logger.info("Scheduler started: daily sync at 03:00 MSK, status refresh every 5 min")
+    logger.info(f"Scheduler started: daily sync at {hour:02d}:{minute:02d} MSK, status refresh every 5 min")
 
 
 async def stop_scheduler():
@@ -43,6 +56,14 @@ async def stop_scheduler():
     if _scheduler:
         _scheduler.shutdown(wait=False)
         _scheduler = None
+
+
+def reschedule_sync(hour: int, minute: int):
+    global _scheduler
+    if _scheduler is None:
+        return
+    _scheduler.reschedule_job("daily_sync", trigger="cron", hour=hour, minute=minute)
+    logger.info(f"Daily sync rescheduled to {hour:02d}:{minute:02d} MSK")
 
 
 async def sync_all_companies():
@@ -53,17 +74,31 @@ async def sync_all_companies():
                 User.role == "company_admin",
                 User.is_active == True,
                 User.pilot_token.isnot(None),
-            )
+            ).order_by(User.id)
         )).scalars().all()
 
     results = []
     for admin in admins:
         try:
-            r = await _sync_company(admin)
+            r = await asyncio.wait_for(_sync_company(admin), timeout=300)
             results.append({"username": admin.username, **r})
         except Exception as e:
             logger.error(f"Sync failed for {admin.username}: {e}", exc_info=True)
             results.append({"username": admin.username, "status": "error", "error": str(e)[:200]})
+            try:
+                async with async_session() as err_db:
+                    err_log = SyncLog(
+                        sync_type="auto_refuels",
+                        status="error",
+                        records_affected=0,
+                        details=f"error: {str(e)[:200]}",
+                        details_json={"error": str(e)[:500]},
+                        created_by=admin.username,
+                    )
+                    err_db.add(err_log)
+                    await err_db.commit()
+            except Exception as log_e:
+                logger.error(f"Failed to create error SyncLog for {admin.username}: {log_e}")
 
     logger.info(f"Daily auto-sync completed: {len(results)} companies")
     return results
@@ -223,14 +258,13 @@ async def _sync_company(admin: User) -> dict:
             ev_date_str = ev_ts.strftime("%d.%m.%Y %H:%M")
             plate = v.plate_number or v.name or "—"
 
-            existing = await db.execute(
+            existing_pr = (await db.execute(
                 select(PilotRefuel).where(
                     PilotRefuel.vehicle_id == v.id,
                     PilotRefuel.event_date >= ev_ts - timedelta(hours=1),
                     PilotRefuel.event_date <= ev_ts + timedelta(hours=1),
-                )
-            )
-            existing_pr = existing.order_by(func.abs(func.extract('epoch', PilotRefuel.event_date - ev_ts))).scalars().first()
+                ).order_by(func.abs(func.extract('epoch', PilotRefuel.event_date - ev_ts)))
+            )).scalars().first()
 
             if existing_pr:
                 old_amount = existing_pr.amount

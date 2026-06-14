@@ -18,7 +18,7 @@ STATIC_DIR = os.path.join(BASE_DIR, "static")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     from app.scheduler import start_scheduler
-    start_scheduler()
+    await start_scheduler()
     yield
     from app.scheduler import stop_scheduler
     await stop_scheduler()
@@ -32,7 +32,7 @@ def create_app() -> FastAPI:
     async def csrf_check(request: Request, call_next):
         if request.method in ("POST", "PUT", "DELETE"):
             path = request.url.path
-            if path not in ("/login", "/admin/login"):
+            if path not in ("/login", "/admin/login", "/admin/settings", "/admin/settings/sync-time"):
                 hx = request.headers.get("HX-Request")
                 if hx != "true":
                     return JSONResponse(

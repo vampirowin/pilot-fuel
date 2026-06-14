@@ -4,7 +4,9 @@
 <div class="page-header">
   <h1>Настройки</h1>
 </div>
-<div class="card" style="max-width:500px">
+
+<div class="card" style="max-width:500px;margin-bottom:16px">
+  <div style="font-size:14px;font-weight:600;margin-bottom:8px">Пороги сравнения</div>
   <form method="POST" action="/admin/settings">
     <div class="form-group">
       <label for="normal_threshold">Норма (процентов)</label>
@@ -21,6 +23,21 @@
   </form>
   {% if request.query_params.get('recalculated') == '1' %}
   <div class="alert alert-success" style="margin-top:12px;padding:8px 12px;border-radius:6px;background:var(--green-bg);color:var(--green);font-size:14px">Все записи пересчитаны по текущим порогам</div>
+  {% endif %}
+</div>
+
+<div class="card" style="max-width:500px">
+  <div style="font-size:14px;font-weight:600;margin-bottom:8px">Автосинхронизация</div>
+  <form method="POST" action="/admin/settings/sync-time">
+    <div class="form-group">
+      <label for="sync_time">Время ежедневной синхронизации (МСК)</label>
+      <input type="time" id="sync_time" name="sync_time" value="{{ settings.sync_time.value if settings.get('sync_time') else '03:00' }}" required>
+      <span style="font-size:12px;color:var(--text-dim)">Синхронизация будет запускаться каждый день в это время</span>
+    </div>
+    <button type="submit" class="btn btn-primary">Сохранить</button>
+  </form>
+  {% if request.query_params.get('synced') == '1' %}
+  <div class="alert alert-success" style="margin-top:12px;padding:8px 12px;border-radius:6px;background:var(--green-bg);color:var(--green);font-size:14px">Время синхронизации обновлено</div>
   {% endif %}
 </div>
 {% endblock %}
