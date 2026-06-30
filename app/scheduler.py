@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, date
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy import select, func
@@ -13,6 +13,7 @@ from app.models.refuel_entry import RefuelEntry
 from app.models.sync_log import SyncLog
 from app.models.setting import Setting
 from app.models.trip_summary import TripSummary
+from app.models.sync_failure import SyncFailure
 from app.services.pilot_service import PilotService
 from app.services.refuel_utils import match_vehicle as _match_vehicle, parse_timestamp as _parse_timestamp, get_effective_thresholds as _get_effective_thresholds, calc_comparison as _calc_comparison, get_thresholds_batch
 
@@ -80,8 +81,9 @@ async def sync_all_companies():
     results = []
     for admin in admins:
         try:
-            r = await asyncio.wait_for(_sync_company(admin), timeout=300)
+            r = await asyncio.wait_for(_sync_company(admin), timeout=600)
             results.append({"username": admin.username, **r})
+            await _clear_sync_failure(admin)
         except Exception as e:
             logger.error(f"Sync failed for {admin.username}: {e}", exc_info=True)
             results.append({"username": admin.username, "status": "error", "error": str(e)[:200]})
@@ -99,6 +101,7 @@ async def sync_all_companies():
                     await err_db.commit()
             except Exception as log_e:
                 logger.error(f"Failed to create error SyncLog for {admin.username}: {log_e}")
+            await _handle_sync_failure(admin, e)
 
     logger.info(f"Daily auto-sync completed: {len(results)} companies")
     return results
@@ -462,3 +465,82 @@ async def trigger_sync_all(admin_user_ids: list[int] | None = None) -> list[dict
                 results.append({"username": admin.username, "status": "error", "error": str(e)[:200]})
         return results
     return await sync_all_companies()
+
+
+async def _clear_sync_failure(admin: User):
+    try:
+        async with async_session() as db:
+            existing = await db.execute(
+                select(SyncFailure).where(
+                    SyncFailure.client_account_id == admin.client_account_id,
+                    SyncFailure.sync_date == date.today(),
+                )
+            )
+            sf = existing.scalar_one_or_none()
+            if sf:
+                await db.delete(sf)
+                await db.commit()
+    except Exception as e:
+        logger.warning(f"Failed to clear sync failure for {admin.username}: {e}")
+
+
+async def _handle_sync_failure(admin: User, error: Exception):
+    global _scheduler
+    today = date.today()
+    try:
+        async with async_session() as db:
+            existing = await db.execute(
+                select(SyncFailure).where(
+                    SyncFailure.client_account_id == admin.client_account_id,
+                    SyncFailure.sync_date == today,
+                )
+            )
+            sf = existing.scalar_one_or_none()
+            attempt = (sf.attempt + 1) if sf else 1
+            err_text = str(error)[:500]
+
+            if sf:
+                sf.attempt = attempt
+                sf.last_error = err_text
+                sf.dismissed = False
+            else:
+                sf = SyncFailure(
+                    client_account_id=admin.client_account_id,
+                    sync_date=today,
+                    attempt=attempt,
+                    last_error=err_text,
+                )
+                db.add(sf)
+            await db.commit()
+
+        if attempt < 3:
+            run_at = datetime.now(timezone.utc) + timedelta(hours=1)
+            _scheduler.add_job(
+                retry_company_sync, "date",
+                run_date=run_at,
+                args=[admin.id],
+                id=f"retry_sync_{admin.id}_{today}",
+                replace_existing=True,
+                misfire_grace_time=600,
+            )
+            logger.info(f"Scheduled retry #{attempt} for {admin.username} at {run_at}")
+        else:
+            logger.warning(f"Sync failed for {admin.username} after 3 attempts. Notification pending.")
+    except Exception as e:
+        logger.error(f"Failed to handle sync failure for {admin.username}: {e}")
+
+
+async def retry_company_sync(admin_id: int):
+    logger.info(f"Retry sync for admin_id={admin_id}")
+    async with async_session() as db:
+        admin = (await db.execute(select(User).where(User.id == admin_id))).scalars().first()
+        if not admin:
+            logger.error(f"Retry failed: admin {admin_id} not found")
+            return
+    try:
+        r = await _sync_company(admin)
+        logger.info(f"Retry sync succeeded for {admin.username}: {r.get('status')}")
+        await _clear_sync_failure(admin)
+    except Exception as e:
+        logger.error(f"Retry sync failed for {admin.username}: {e}", exc_info=True)
+        await _handle_sync_failure(admin, e)

@@ -30,12 +30,16 @@
 
 9. **Database safety** — use the `pilot_fuel` database. Never modify `ural_monitor` or `lapa59_db`.
 
+10. **VPS**: `ssh -i ~/.ssh/lapa-vps root@80.78.247.177`. Приложение в Docker-стеке lapa-gps (`/opt/lapa-gps/infra/docker-compose.prod.yml`). nginx → `pilot-fuel:9001`.
+
 ## Tech Stack
 - FastAPI (async) + SQLAlchemy 2.0 (async) + Alembic
-- PostgreSQL 16 on localhost:5432
+- PostgreSQL 18 (на VPS хосте, не Docker)
 - Jinja2 + HTMX + Chart.js
 - httpx (async HTTP client for Pilot API)
-- Port: 9000
+- Port: 9001 (internal, Docker)
+- Домен: fuel.ural-i.ru (Let's Encrypt SSL)
+- VPS: 80.78.247.177, Ubuntu 26.04
 
 ## Key Files
 - `MEMORY.md` — full plan, schema, decisions, project structure
@@ -44,6 +48,7 @@
 - `app/services/pilot_service.py` — async Pilot API client
 - `v3.en.yaml` — Pilot GPS API v3 OpenAPI spec (reference for endpoint params/responses)
 - `REUSE_GUIDE.md` — reusable code patterns (Pilot API calls, sensor matching, etc.)
+- `Dockerfile` — container image (python:3.13-slim)
 
 ## Pilot API v3 — Sensor Endpoints (used in track map)
 - `GET /api/v3/vehicles/status` — current position + all sensor values (`sensors[]` with `name, dig_value, hum_value`)

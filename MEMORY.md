@@ -323,6 +323,34 @@ pilot-fuel/
 - **Поиск на Критических** — заменён на `.search-bar-compact` с иконкой (как на ТС), убрана белая тема
 - **Дата → график на Критических** — клик по дате открывает график топлива за этот день (как в Заправках)
 
+### 2026-06-30 — VPS Migration + Retry logic + CSRF fixes
+
+**VPS Migration (pilot-fuel → 80.78.247.177):**
+- Полный перенос: PostgreSQL 18, код, 18 users, 484 ТС, 10k+ заправок
+- Docker-контейнер в стеке lapa-gps (`docker-compose.prod.yml`)
+- nginx: `proxy_pass http://pilot-fuel:9001` (по имени контейнера в сети `infra_default`)
+- Let's Encrypt SSL для `fuel.ural-i.ru` (автообновление через certbot)
+- PostgreSQL настроен для Docker: `listen_addresses = '*'`, Docker сети в pg_hba.conf
+- systemd-сервис удалён после переезда на Docker
+
+**Sync failure retry + notification:**
+- Новая модель `SyncFailure` (client_account_id, sync_date, attempt 1-3, last_error, dismissed)
+- `_handle_sync_failure` — создаёт/обновляет запись, шедулит `retry_company_sync` через 1ч (до 3 попыток)
+- `_clear_sync_failure` — удаляет запись при успехе
+- `GET /api/sync-failures/banner` — HTMX-баннер с ошибками (attempt=3, неdismissed)
+- `POST /api/sync-failures/dismiss` — помечает dismissed=True
+- Баннер в base.html: `<div hx-get="/api/sync-failures/banner" hx-trigger="load">`
+- Миграция `a1e0aa49d41a_add_sync_failures_table_for_retry_`
+
+**CSRF middleware:**
+- Заменён точный `path not in (...)`, на префиксное сравнение `not any(path.startswith(p) for p in CSRF_EXEMPT_PREFIXES)`
+- Исключены префиксы: `/login`, `/admin/login`, `/admin/settings`, `/admin/users`, `/profile`
+- Исправлено: форма редактирования пользователя (`POST /admin/users/{id}/edit`) — обычный POST без HTMX
+
+**Bugfixes:**
+- `vehicles_no_sensor` — добавлен `from datetime import datetime` (был NameError)
+- Все изменения закоммичены до VPS migration
+
 ### 2026-06-01 — Full_name field + display in tooltips
 
 - Добавлено поле `full_name` (String 200, nullable) в модель `User`
@@ -332,6 +360,61 @@ pilot-fuel/
 - В таблице заправок тултип «Добавил:» теперь показывает ФИО (если есть), иначе логин
 - Для этого в `refuels_page` и `sync_refuels` строится `user_names = {username: full_name or username}`, пробрасывается через `_render_refuel_hierarchy` / `_list_html` → `_render_vehicle_group`
 
+## Deployment
+
+### VPS (Production)
+- **IP**: `80.78.247.177`
+- **OS**: Ubuntu 26.04 LTS
+- **Hostname**: `cv7570725.novalocal`
+- **SSH**: `ssh -i ~/.ssh/lapa-vps root@80.78.247.177`
+
+### Infrastructure
+- **pilot-fuel**: Docker-контейнер в стеке lapa-gps (`/opt/lapa-gps/infra/docker-compose.prod.yml`)
+- **БД**: PostgreSQL 18 на хосте (`pilot_fuel` database, user `postgres`)
+- **nginx**: Docker-контейнер `infra-nginx-1` (общий с gps.lapa59.ru)
+- **Домен**: `fuel.ural-i.ru` → Let's Encrypt SSL (автообновление через certbot)
+- **Прокси**: nginx → `pilot-fuel:9001` (внутри Docker сети `infra_default`)
+
+### Команды управления
+```bash
+# Статус/логи
+docker logs infra-pilot-fuel-1 --tail 50 -f
+docker compose -f /opt/lapa-gps/infra/docker-compose.prod.yml logs pilot-fuel
+
+# Перезапуск
+docker compose -f /opt/lapa-gps/infra/docker-compose.prod.yml restart pilot-fuel
+
+# Пересобрать
+docker compose -f /opt/lapa-gps/infra/docker-compose.prod.yml build pilot-fuel
+docker compose -f /opt/lapa-gps/infra/docker-compose.prod.yml up -d pilot-fuel
+
+# PostgreSQL на хосте
+systemctl status postgresql
+sudo -u postgres psql -d pilot_fuel
+
+# nginx
+docker exec infra-nginx-1 nginx -s reload
+```
+
+### Соседние проекты на VPS
+| Проект | Тип | Порты |
+|--------|-----|-------|
+| lapa-gps (gps.lapa59.ru) | Docker compose | 80, 443, 9000 |
+| pilot-fuel (fuel.ural-i.ru) | Docker compose | 9001 (internal) |
+
+### Миграция локально → VPS (выполнена 2026-06-30)
+1. Установлен PostgreSQL 18 на хост (новый, не трогает Docker PG lapa-gps)
+2. `pg_dump` с локальной машины → `scp` → `psql restore` на VPS (18 users, 484 vehicles, 10k+ refuels)
+3. Код скопирован в `/opt/pilot-fuel/`, dependencies через pip
+4. Изначально — systemd-сервис на порту 9001
+5. Проблема: Docker nginx не мог проксировать на host:9001 (разные сети Docker)
+6. Решение: pilot-fuel добавлен как Docker-сервис в `docker-compose.prod.yml`
+7. Dockerfile: `python:3.13-slim`, uvicorn на порту 9001
+8. nginx: `proxy_pass http://pilot-fuel:9001` (по имени контейнера)
+9. SSL: Let's Encrypt cert для `fuel.ural-i.ru` (автообновление)
+10. PostgreSQL настроен: `listen_addresses = '*'`, Docker сети добавлены в pg_hba.conf
+11. ufw: открыты порты 5432, 9001 для Docker сетей (172.17.0.0/16, 172.18.0.0/16)
+
 ## Ports
-- UI fuel: **9001** (9000 занят zombie PID 32440)
+- pilot-fuel: **9001** (внутри Docker, не торчит наружу)
 - PostgreSQL: 5432 (shared)

@@ -135,6 +135,7 @@
     </a>
   </nav>
   <main class="main-content">
+    <div hx-get="/api/sync-failures/banner" hx-trigger="load" hx-swap="outerHTML"></div>
     {% block content %}{% endblock %}
   </main>
 </div>

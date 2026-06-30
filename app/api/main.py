@@ -1,5 +1,7 @@
+from datetime import date as _date
+
 from fastapi import APIRouter, Request, Depends, Query
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from app.dependencies import get_current_user, apply_vehicle_filter, apply_refuel_filter
 from app.database import get_db
@@ -10,6 +12,7 @@ from app.models.vehicle import Vehicle
 from app.models.sync_log import SyncLog
 from app.models.user import User
 from app.models.client_account import ClientAccount
+from app.models.sync_failure import SyncFailure
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
@@ -224,3 +227,73 @@ async def trigger_sync(
     return templates.TemplateResponse(request, "sync_trigger_modal.html", {
         "results": results,
     })
+
+
+@router.get("/api/sync-failures/banner", response_class=HTMLResponse)
+async def sync_failure_banner(
+    request: Request,
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if user.role == "superadmin":
+        results = (await db.execute(
+            select(SyncFailure).where(
+                SyncFailure.attempt == 3,
+                SyncFailure.dismissed == False,
+            ).order_by(desc(SyncFailure.updated_at)).limit(20)
+        )).scalars().all()
+        rows = []
+        for sf in results:
+            badge = f"Попытка {sf.attempt}/3"
+            rows.append(f'<div class="toast toast-error" style="margin:4px 0">Компания #{sf.client_account_id}: {sf.last_error[:100]} <small>({badge})</small></div>')
+        if not rows:
+            return HTMLResponse("")
+        banner = '<div class="card" style="border:2px solid var(--danger);margin-bottom:12px"><div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0;color:var(--danger)">⚠ Ошибки синхронизации</h3><button class="btn btn-sm btn-secondary" hx-post="/api/sync-failures/dismiss" hx-target="closest .card" hx-swap="outerHTML">Скрыть</button></div>' + "".join(rows) + "</div>"
+        return HTMLResponse(banner)
+
+    sf = (await db.execute(
+        select(SyncFailure).where(
+            SyncFailure.client_account_id == user.client_account_id,
+            SyncFailure.sync_date == _date.today(),
+            SyncFailure.attempt == 3,
+            SyncFailure.dismissed == False,
+        )
+    )).scalar_one_or_none()
+    if not sf:
+        return HTMLResponse("")
+    return HTMLResponse(
+        f'<div class="toast toast-error" style="margin:8px 0" id="sync-fail-banner"><strong>⚠ Синхронизация не удалась</strong>: {sf.last_error[:150]} <small>(попытка {sf.attempt}/3)</small> '
+        f'<button class="btn btn-sm btn-secondary" style="margin-left:8px" hx-post="/api/sync-failures/dismiss" hx-target="#sync-fail-banner" hx-swap="outerHTML">OK</button></div>'
+    )
+
+
+@router.post("/api/sync-failures/dismiss")
+async def dismiss_sync_failure(
+    request: Request,
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if user.role == "superadmin":
+        results = (await db.execute(
+            select(SyncFailure).where(
+                SyncFailure.attempt == 3,
+                SyncFailure.dismissed == False,
+            )
+        )).scalars().all()
+        for sf in results:
+            sf.dismissed = True
+        await db.commit()
+        return HTMLResponse("")
+
+    sf = (await db.execute(
+        select(SyncFailure).where(
+            SyncFailure.client_account_id == user.client_account_id,
+            SyncFailure.sync_date == _date.today(),
+            SyncFailure.attempt == 3,
+            SyncFailure.dismissed == False,
+        )
+    )).scalar_one_or_none()
+    if sf:
+        sf.dismissed = True
+        await db.commit()
+    return HTMLResponse("")

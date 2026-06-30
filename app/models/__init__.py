@@ -8,6 +8,7 @@ from app.models.sync_log import SyncLog
 from app.models.client_account import ClientAccount
 from app.models.site import Site
 from app.models.trip_summary import TripSummary
+from app.models.sync_failure import SyncFailure
 
 __all__ = [
     "User",
@@ -20,4 +21,5 @@ __all__ = [
     "ClientAccount",
     "Site",
     "TripSummary",
+    "SyncFailure",
 ]
